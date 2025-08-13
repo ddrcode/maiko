@@ -1,0 +1,12 @@
+[package]
+name = "maiko"
+version = "0.1.0"
+edition = "2024"
+description = "A lightweight, topic-based actor system for Rust"
+authors = ["David de Rosier <ddrcode@gmail.com>"]
+license = "MIT"
+keywords = ["actor", "async", "events", "pubsub", "messaging"]
+categories = ["asynchronous", "concurrency"]
+
+[dependencies]
+tokio = {version="1.47.1", features=["rt"]}
