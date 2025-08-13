@@ -9,13 +9,11 @@ What it brings is the runtime that orchestrates communication between actors and
 Noe new concepts to learn: just a few traits to implement and standard Tokio channels. 
 
 ```rust
-#[derive(Debug)]
+#[derive(Debug, Event)]
 enum Event {
    Ping,
    Pong
 }
-
-impl maiko::Event for Event {}
 
 struct PingPongActor {}
 
