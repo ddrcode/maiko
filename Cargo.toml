@@ -12,4 +12,4 @@ homepage = "https://github.com/ddrcode/maiko"
 readme = "README.md"
 
 [dependencies]
-tokio = {version="1.47.1", features=["sync"]}
+tokio = {version="1.47.1", features=["sync", "test-util", "macros"]}
