@@ -1,7 +1,7 @@
 # Maiko
 
 A lightweight, topic-based actor library for Tokio. Unlike many actor libraries (like Actix or Ractor), that are inspired by
-Erlang/Akka, Maiko focuses and maximum decoupling and is bringing distributed system patterns
+Erlang/Akka, Maiko focuses on maximum decoupling and is bringing distributed system patterns
 (like event broker, topics, etc) to local actor model.
 
 From code perspective it tries to be non-invasive and lets you implement the code your way (or, well - Tokio way).
@@ -37,3 +37,23 @@ sup.broker().send_to("pp1", Event::Ping);
 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 sup.stop().await;
 ```
+
+
+## Core Ideas
+
+- Events over messages
+- Topics over addresses
+- One-directional event flows
+- Tokio-first, zero-magic API
+- Supervisor orchestration with graceful error handling
+- Designed for daemons, bots, UIs, embedded — wherever flows matter
+
+## Status
+
+This crate is published to reserve the name and signal the intention.  
+A working version is being developed. Contributions, ideas, and support welcome!
+
+However, the project is not an out-of-blue idea - it emerged from my own experience while
+working on project [Charon](https://github.com/ddrcode/charon) where I designed a system like that.
+Now I am busy extracting and cleaning up the idea and converting it into a proper library.
+Please come on Thursday. 
