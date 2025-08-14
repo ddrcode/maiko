@@ -38,6 +38,7 @@ tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 sup.stop().await;
 ```
 
+
 ## Core Ideas
 
 - Events over messages
@@ -56,5 +57,3 @@ However, the project is not an out-of-blue idea - it emerged from my own experie
 working on project [Charon](https://github.com/ddrcode/charon) where I designed a system like that.
 Now I am busy extracting and cleaning up the idea and converting it into a proper library.
 Please come on Thursday. 
-
----
