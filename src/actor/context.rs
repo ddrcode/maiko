@@ -1,17 +1,18 @@
+use tokio::sync::mpsc::Sender;
+
+use crate::{Event, Result};
 use std::sync::Arc;
-use crate::{Event, EventBroker, Result};
 
 /// Represents the execution context of an actor
 pub trait ActorContext<E: Event>: Send + Sync {
     /// Get the actor's name
     fn name(&self) -> &str;
-    
-    /// Get a reference to the event broker
-    fn broker(&self) -> &Arc<EventBroker<E>>;
-    
+
+    fn sender(&self) -> &Sender<E>;
+
     /// Send an event through the broker
     async fn send(&self, event: E) -> Result<()> {
-        self.broker().publish(event).await
+        self.sender().send(event).await.map_err(|_| crate::Error)
     }
 }
 
@@ -19,14 +20,14 @@ pub trait ActorContext<E: Event>: Send + Sync {
 #[derive(Clone)]
 pub struct DefaultActorContext<E: Event> {
     name: String,
-    broker: Arc<EventBroker<E>>,
+    sender: Sender<E>,
 }
 
 impl<E: Event> DefaultActorContext<E> {
-    pub fn new(name: impl Into<String>, broker: Arc<EventBroker<E>>) -> Self {
+    pub fn new(name: impl Into<String>, sender: Sender<E>) -> Self {
         Self {
             name: name.into(),
-            broker,
+            sender,
         }
     }
 }
@@ -35,8 +36,7 @@ impl<E: Event> ActorContext<E> for DefaultActorContext<E> {
     fn name(&self) -> &str {
         &self.name
     }
-    
-    fn broker(&self) -> &Arc<EventBroker<E>> {
-        &self.broker
+    fn sender(&self) -> &Sender<E> {
+        &self.sender
     }
 }

@@ -1,27 +1,44 @@
+use super::ActorContext;
+use crate::Result;
+use crate::event::Event;
 use std::cell::RefCell;
 use tokio::task_local;
-use crate::event::{Event};
-use super::{ActorContext, DefaultActorContext};
 
 task_local! {
-    static ACTOR_CONTEXT: RefCell<Option<DefaultActorContext>>;
+    static ACTOR_CONTEXT: RefCell<Option<dyn ActorContext<E: Event> + 'static>>;
 }
 
-pub struct ActorBase<E: Event> {
-    context: ActorContext<E>,
-}
-
+/// Core actor behavior
 pub trait Actor<E: Event>: Send {
-    fn with_context<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&ActorContext<E>) -> R;
-
+    /// Handle an incoming event
     async fn handle(&mut self, event: E) -> Result<()>;
 }
 
-impl<E: Event> ActorBase<E> {
-    pub fn context(&self) -> &ActorContext<E> {
-        &self.context
+/// Extension methods available to all actors
+pub trait ActorExt<E: Event>: Actor<E> {
+    /// Get the current actor's context
+    fn context(&self) -> &impl ActorContext<E> {
+        ACTOR_CONTEXT.with(|ctx| {
+            ctx.borrow()
+                .as_ref()
+                .expect("Actor accessed outside of context")
+        })
+    }
+
+    /// Send an event through the actor's broker
+    async fn send(&self, event: E) -> Result<()> {
+        self.context().send(event).await
+    }
+
+    /// Get the actor's name
+    fn name(&self) -> &str {
+        self.context().name()
     }
 }
 
+impl<T, E> ActorExt<E> for T
+where
+    T: Actor<E>,
+    E: Event,
+{
+}

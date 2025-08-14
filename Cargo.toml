@@ -9,4 +9,4 @@ keywords = ["actor", "async", "events", "pubsub", "messaging"]
 categories = ["asynchronous", "concurrency"]
 
 [dependencies]
-tokio = {version="1.47.1", features=["rt"]}
+tokio = {version="1.47.1", features=["rt", "sync"]}
