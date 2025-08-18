@@ -1,7 +1,12 @@
-pub trait Actor {
-    type Event;
+use crate::{Context, Event, Result};
 
-    async fn handle(&mut self, event: Self::Event);
+pub trait Actor {
+    type Event: Event;
+
+    async fn handle(&mut self, event: Self::Event) -> Result<Option<Self::Event>>;
+    fn ctx(&self) -> &Context<Self::Event>;
+    fn ctx_mut(&mut self) -> &mut Context<Self::Event>;
+    fn set_ctx(&mut self, ctx: Context<Self::Event>) -> Result<()>;
 }
 
 #[cfg(test)]

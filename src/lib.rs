@@ -9,10 +9,12 @@ mod actor;
 mod context;
 mod event;
 mod topic;
+mod error;
 
 pub use actor::Actor;
 pub use context::Context;
 pub use event::Event;
 pub use topic::Topic;
+pub use error::Error;
 
-pub fn not_ready_yet() {}
+pub type Result<T> = std::result::Result<T, Error>;
