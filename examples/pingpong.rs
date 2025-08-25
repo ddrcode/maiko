@@ -3,18 +3,17 @@ use tokio;
 
 enum PingPongEvent {
     Ping,
-    Pong
+    Pong,
 }
 
 impl Event for PingPongEvent {}
 
 struct PingPong {
-    ctx: Context<PingPongEvent>
+    ctx: Context<PingPongEvent>,
 }
 
 impl Actor for PingPong {
     type Event = PingPongEvent;
-
 
     fn ctx(&self) -> &Context<Self::Event> {
         &self.ctx
@@ -34,8 +33,8 @@ impl Actor for PingPong {
     }
 }
 
-
 #[tokio::main]
 pub async fn main() -> Result<()> {
+    let broker = Broker::<PingPongEvent>::new(128);
     Ok(())
 }

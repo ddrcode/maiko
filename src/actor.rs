@@ -1,6 +1,8 @@
+use core::marker::Send;
+
 use crate::{Context, Event, Result};
 
-pub trait Actor {
+pub trait Actor: Send {
     type Event: Event;
 
     async fn handle(&mut self, event: Self::Event) -> Result<Option<Self::Event>>;
