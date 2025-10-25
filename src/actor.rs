@@ -30,8 +30,9 @@ mod tests {
         impl Actor for MyActor {
             type Event = MyEvent;
 
-            async fn handle(&mut self, event: Self::Event) {
+            async fn handle(&mut self, event: Self::Event) -> Result<Option<Self::Event>> {
                 self.ctx.sender.send(event).await.unwrap();
+                Ok(None)
             }
         }
     }

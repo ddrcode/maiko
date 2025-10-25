@@ -29,7 +29,16 @@ impl Actor for PingPong {
     }
 
     async fn handle(&mut self, event: Self::Event) -> Result<Option<Self::Event>> {
-        Ok(None)
+        match event {
+            PingPongEvent::Ping => {
+                println!("Ping");
+                Ok(Some(PingPongEvent::Pong))
+            }
+            PingPongEvent::Pong => {
+                println!("Pong");
+                Ok(Some(PingPongEvent::Ping))
+            }
+        }
     }
 }
 
