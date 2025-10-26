@@ -9,6 +9,7 @@ pub trait Actor: Send {
     fn ctx(&self) -> &Context<Self::Event>;
     fn ctx_mut(&mut self) -> &mut Context<Self::Event>;
     fn set_ctx(&mut self, ctx: Context<Self::Event>) -> Result<()>;
+    fn name(&self) -> &str;
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@ use std::time::{Instant, SystemTime};
 
 use uuid::Uuid;
 
+#[derive(Debug, Clone)]
 pub struct Meta {
     id: Uuid,
     timestamp: u64,

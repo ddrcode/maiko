@@ -1,5 +1,6 @@
 use crate::{Event, Meta};
 
+#[derive(Debug, Clone)]
 pub struct Envelope<E: Event> {
     meta: Meta,
     event: E,

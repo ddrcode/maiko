@@ -1,6 +1,7 @@
 use maiko::*;
 use tokio;
 
+#[derive(Clone)]
 enum PingPongEvent {
     Ping,
     Pong,
@@ -9,7 +10,17 @@ enum PingPongEvent {
 impl Event for PingPongEvent {}
 
 struct PingPong {
+    name: String,
     ctx: Context<PingPongEvent>,
+}
+
+impl PingPong {
+    fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            ctx: Context::default(),
+        }
+    }
 }
 
 impl Actor for PingPong {
@@ -40,10 +51,16 @@ impl Actor for PingPong {
             }
         }
     }
+
+    fn name(&self) -> &str {
+        self.name.as_str()
+    }
 }
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let broker = Broker::<PingPongEvent>::new(128);
+    let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::new(128);
+    sup.add_actor(PingPong::new("ping-side"), vec![DefaultTopic]);
+    sup.add_actor(PingPong::new("pong-side"), vec![DefaultTopic]);
     Ok(())
 }

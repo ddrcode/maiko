@@ -13,6 +13,7 @@ mod error;
 mod event;
 mod meta;
 mod subscriber;
+mod supervisor;
 mod topic;
 
 pub use actor::Actor;
@@ -23,7 +24,8 @@ pub use error::Error;
 pub use event::Event;
 pub use meta::Meta;
 pub(crate) use subscriber::Subscriber;
-pub use topic::Topic;
+pub use supervisor::Supervisor;
+pub use {topic::DefaultTopic, topic::Topic};
 
 pub type Result<T> = std::result::Result<T, Error>;
 pub type Sender<T: Event> = tokio::sync::mpsc::Sender<Envelope<T>>;

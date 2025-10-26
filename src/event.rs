@@ -1,4 +1,4 @@
-pub trait Event: Send {}
+pub trait Event: Send + Clone {}
 
 #[cfg(test)]
 mod tests {

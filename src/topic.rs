@@ -1,10 +1,14 @@
+use std::hash::Hash;
+
 use crate::event::Event;
 
-pub trait Topic<E: Event> {
-    fn from_event(event: &E) -> Self;
+pub trait Topic<E: Event>: Hash + PartialEq + Eq {
+    fn from_event(event: &E) -> Self
+    where
+        Self: Sized;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct DefaultTopic;
 
 impl<E: Event> Topic<E> for DefaultTopic {
