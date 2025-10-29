@@ -30,4 +30,6 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let subscriber = Subscriber::<E, T>::new(Arc::from(actor.name()), topics, tx);
         self.broker.add_subscriber(subscriber);
     }
+
+    pub fn start(&mut self) {}
 }
