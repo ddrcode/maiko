@@ -7,8 +7,9 @@ use tokio::{
     },
     task::JoinHandle,
 };
+use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, Broker, Config, Context, Envelope, Event, Result, Subscriber, Topic};
+use crate::{Actor, Broker, Config, Context, Envelope, Error, Event, Result, Subscriber, Topic};
 
 pub struct Supervisor<E: Event, T: Topic<E>> {
     config: Config,
@@ -16,17 +17,20 @@ pub struct Supervisor<E: Event, T: Topic<E>> {
     sender: Sender<Envelope<E>>,
     actors: Vec<Arc<Mutex<Box<dyn Actor<Event = E>>>>>,
     handles: Vec<JoinHandle<Result<()>>>,
+    cancel_token: Arc<CancellationToken>,
 }
 
 impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
     pub fn new(config: Config) -> Self {
         let (tx, rx) = channel::<Envelope<E>>(config.channel_size);
+        let cancel_token = Arc::new(CancellationToken::new());
         Self {
-            broker: Broker::new(rx),
+            broker: Broker::new(rx, cancel_token.clone()),
             config,
             sender: tx,
             actors: Vec::new(),
             handles: Vec::new(),
+            cancel_token,
         }
     }
 
@@ -39,6 +43,7 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         actor.set_ctx(Context::<E> {
             sender: tx.clone(),
             receiver: rx,
+            cancel_token: self.cancel_token.clone(),
         })?;
         let subscriber = Subscriber::<E, T>::new(Arc::from(actor.name()), topics, tx);
         self.broker.add_subscriber(subscriber);
@@ -51,10 +56,7 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
             .actors
             .iter()
             .cloned()
-            .map(|actor| {
-                let h = tokio::spawn(async move { actor.lock().await.run().await });
-                h
-            })
+            .map(|actor| tokio::spawn(async move { actor.lock().await.run().await }))
             .collect::<Vec<_>>();
         self.handles = handles;
         self.broker.run().await?;
@@ -63,6 +65,14 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
 
     pub async fn send(&self, event: E) -> Result<()> {
         self.sender.send(Envelope::new(event)).await?;
+        Ok(())
+    }
+
+    pub async fn stop(&mut self) -> Result<()> {
+        self.cancel_token.cancel();
+        while let Some(handle) = self.handles.pop() {
+            handle.await??;
+        }
         Ok(())
     }
 }

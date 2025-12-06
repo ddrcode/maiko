@@ -12,6 +12,9 @@ pub enum Error {
 
     #[error("Couldn't receive the message")]
     ReceiveError(#[from] std::sync::mpsc::RecvError),
+
+    #[error("Actor task join error: {0}")]
+    ActorJoinError(#[from] tokio::task::JoinError),
 }
 
 impl<E: Event> From<SendError<Envelope<E>>> for Error {

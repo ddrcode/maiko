@@ -1,6 +1,7 @@
 use core::marker::Send;
 
 use async_trait::async_trait;
+use tokio::select;
 
 use crate::{Context, Envelope, Event, Meta, Result};
 
@@ -16,10 +17,10 @@ pub trait Actor: Send {
     async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<Option<Self::Event>>;
 
     async fn tick(&mut self) -> Result<()> {
-        if let Some(event) = self.ctx_mut().receiver.recv().await {
-            if let Some(out) = self.handle(&event.event, &event.meta).await? {
-                self.send(out).await?;
-            }
+        if let Some(event) = self.ctx_mut().receiver.recv().await
+            && let Some(out) = self.handle(&event.event, &event.meta).await?
+        {
+            self.send(out).await?;
         }
         Ok(())
     }
@@ -30,10 +31,13 @@ pub trait Actor: Send {
     }
 
     async fn run(&mut self) -> Result<()> {
-        let is_alive = true;
         self.start().await?;
-        while is_alive {
-            self.tick().await?;
+        let token = self.ctx().cancel_token.clone();
+        loop {
+            select! {
+                _ = token.cancelled() => break,
+                r = self.tick() => r?
+            }
         }
         self.shutdown().await
     }
@@ -52,7 +56,6 @@ mod tests {
     use crate::{Context, Event};
 
     use super::*;
-    use tokio;
 
     #[tokio::test]
     async fn test_simple_actor() {

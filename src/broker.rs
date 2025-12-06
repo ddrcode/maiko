@@ -1,4 +1,7 @@
-use tokio::sync::mpsc::Receiver;
+use std::sync::Arc;
+
+use tokio::{select, sync::mpsc::Receiver};
+use tokio_util::sync::CancellationToken;
 
 use crate::{Envelope, Event, Result, Subscriber, Topic};
 
@@ -6,13 +9,18 @@ use crate::{Envelope, Event, Result, Subscriber, Topic};
 pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Envelope<E>>,
     subscribers: Vec<Subscriber<E, T>>,
+    cancel_token: Arc<CancellationToken>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
-    pub fn new(receiver: Receiver<Envelope<E>>) -> Broker<E, T> {
+    pub fn new(
+        receiver: Receiver<Envelope<E>>,
+        cancel_token: Arc<CancellationToken>,
+    ) -> Broker<E, T> {
         Broker {
             receiver,
             subscribers: Vec::new(),
+            cancel_token,
         }
     }
 
@@ -20,27 +28,32 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         self.subscribers.push(subscriber);
     }
 
-    async fn send(&self, event: E) {
-        let topic = T::from_event(&event);
+    pub async fn send(&mut self, event: E) -> Result<()> {
         let event = Envelope::new(event);
+        self.send_event(&event).await
+    }
 
-        for subscriber in &self.subscribers {
-            if subscriber.topics.contains(&topic) {
-                let _ = subscriber.sender.send(event.clone()).await;
-            }
+    async fn send_event(&mut self, e: &Envelope<E>) -> Result<()> {
+        let topic = Topic::from_event(&e.event);
+        for s in self
+            .subscribers
+            .iter()
+            .filter(|s| s.topics.contains(&topic))
+        {
+            s.sender.send(e.clone()).await?;
         }
+        Ok(())
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        while let Some(e) = self.receiver.recv().await {
-            let topic = Topic::from_event(&e.event);
-            for s in self
-                .subscribers
-                .iter()
-                .filter(|s| s.topics.contains(&topic))
-            {
-                s.sender.send(e.clone()).await?;
+        loop {
+            select! {
+                _ = self.cancel_token.cancelled() => break,
+                Some(e) = self.receiver.recv() => self.send_event(&e).await?,
             }
+        }
+        if !self.receiver.is_closed() {
+            self.receiver.close();
         }
         Ok(())
     }

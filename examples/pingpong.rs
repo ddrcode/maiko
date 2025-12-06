@@ -77,7 +77,9 @@ pub async fn main() -> Result<()> {
     let timeout = tokio::time::sleep(tokio::time::Duration::from_millis(1));
     select! {
         _ = sup.start() => {},
-        _ = timeout => {}
+        _ = timeout => {
+            sup.stop().await?;
+        }
     }
 
     Ok(())
