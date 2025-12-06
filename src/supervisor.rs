@@ -3,28 +3,28 @@ use std::sync::Arc;
 use tokio::{
     sync::{
         Mutex,
-        mpsc::{Receiver, Sender, channel},
+        mpsc::{Sender, channel},
     },
-    task::{JoinError, JoinHandle},
+    task::JoinHandle,
 };
 
-use crate::{Actor, Broker, Context, Envelope, Event, Result, Subscriber, Topic, subscriber};
+use crate::{Actor, Broker, Config, Context, Envelope, Event, Result, Subscriber, Topic};
 
 pub struct Supervisor<E: Event, T: Topic<E>> {
-    channel_size: usize,
+    config: Config,
     broker: Broker<E, T>,
-    _sender: Sender<Envelope<E>>,
+    sender: Sender<Envelope<E>>,
     actors: Vec<Arc<Mutex<Box<dyn Actor<Event = E>>>>>,
     handles: Vec<JoinHandle<Result<()>>>,
 }
 
 impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
-    pub fn new(channel_size: usize) -> Self {
-        let (tx, rx) = channel::<Envelope<E>>(channel_size);
+    pub fn new(config: Config) -> Self {
+        let (tx, rx) = channel::<Envelope<E>>(config.channel_size);
         Self {
-            channel_size,
-            broker: Broker::new(channel_size, rx),
-            _sender: tx,
+            broker: Broker::new(rx),
+            config,
+            sender: tx,
             actors: Vec::new(),
             handles: Vec::new(),
         }
@@ -35,7 +35,7 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         mut actor: A,
         topics: Vec<T>,
     ) -> Result<()> {
-        let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.channel_size);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.config.channel_size);
         actor.set_ctx(Context::<E> {
             sender: tx.clone(),
             receiver: rx,
@@ -52,18 +52,23 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
             .iter()
             .cloned()
             .map(|actor| {
-                println!("registering actor");
-                let h = tokio::spawn(async move {
-                    println!("Starting");
-                    actor.lock().await.run().await
-                });
-                println!("I'm here");
+                let h = tokio::spawn(async move { actor.lock().await.run().await });
                 h
             })
             .collect::<Vec<_>>();
         self.handles = handles;
-        println!("Handler registered: {}", self.handles.len());
         self.broker.run().await?;
         Ok(())
+    }
+
+    pub async fn send(&self, event: E) -> Result<()> {
+        self.sender.send(Envelope::new(event)).await?;
+        Ok(())
+    }
+}
+
+impl<E: Event + 'static, T: Topic<E>> Default for Supervisor<E, T> {
+    fn default() -> Self {
+        Self::new(Config::default())
     }
 }

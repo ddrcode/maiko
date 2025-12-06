@@ -1,18 +1,16 @@
 use tokio::sync::mpsc::Receiver;
 
-use crate::{Envelope, Error, Event, Result, Subscriber, Topic};
+use crate::{Envelope, Event, Result, Subscriber, Topic};
 
 #[derive(Debug)]
 pub struct Broker<E: Event, T: Topic<E>> {
-    channel_size: usize,
     receiver: Receiver<Envelope<E>>,
     subscribers: Vec<Subscriber<E, T>>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
-    pub fn new(size: usize, receiver: Receiver<Envelope<E>>) -> Broker<E, T> {
+    pub fn new(receiver: Receiver<Envelope<E>>) -> Broker<E, T> {
         Broker {
-            channel_size: size,
             receiver,
             subscribers: Vec::new(),
         }
@@ -35,17 +33,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     pub async fn run(&mut self) -> Result<()> {
         while let Some(e) = self.receiver.recv().await {
-            println!("Got something: {:?}", e.meta.id());
             let topic = Topic::from_event(&e.event);
             for s in self
                 .subscribers
                 .iter()
                 .filter(|s| s.topics.contains(&topic))
             {
-                s.sender
-                    .send(e.clone())
-                    .await
-                    .map_err(|_| Error::SendError)?;
+                s.sender.send(e.clone()).await?;
             }
         }
         Ok(())

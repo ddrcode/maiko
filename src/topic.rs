@@ -28,7 +28,7 @@ mod tests {
     use super::*;
     use crate::event::Event;
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     struct TestEvent;
 
     impl Event for TestEvent {}
@@ -42,7 +42,8 @@ mod tests {
 
     #[test]
     fn test_topic_as_enum() {
-        #[allow(unused)]
+        #[allow(dead_code)]
+        #[derive(Clone)]
         enum TestEvent {
             Temperature(f64),
             Humidity(f64),
@@ -51,7 +52,7 @@ mod tests {
         }
         impl Event for TestEvent {}
 
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug, PartialEq, Eq, Hash)]
         enum TestTopic {
             IoT,
             System,
@@ -81,7 +82,8 @@ mod tests {
 
     #[test]
     fn test_topic_as_struct() {
-        #[allow(unused)]
+        #[allow(dead_code)]
+        #[derive(Clone)]
         enum TestEvent {
             Temperature(f64),
             Humidity(f64),
@@ -90,7 +92,7 @@ mod tests {
         }
         impl Event for TestEvent {}
 
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug, PartialEq, Eq, Hash)]
         struct TestTopic {
             name: String,
         }

@@ -1,9 +1,8 @@
 use core::marker::Send;
 
 use async_trait::async_trait;
-use tokio::select;
 
-use crate::{Context, Envelope, Event, Result};
+use crate::{Context, Envelope, Event, Meta, Result};
 
 #[async_trait]
 pub trait Actor: Send {
@@ -14,11 +13,11 @@ pub trait Actor: Send {
     fn set_ctx(&mut self, ctx: Context<Self::Event>) -> Result<()>;
     fn name(&self) -> &str;
 
-    async fn handle(&mut self, event: &Self::Event) -> Result<Option<Self::Event>>;
+    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<Option<Self::Event>>;
 
     async fn tick(&mut self) -> Result<()> {
         if let Some(event) = self.ctx_mut().receiver.recv().await {
-            if let Some(out) = self.handle(&event.event).await? {
+            if let Some(out) = self.handle(&event.event, &event.meta).await? {
                 self.send(out).await?;
             }
         }
@@ -26,9 +25,7 @@ pub trait Actor: Send {
     }
 
     async fn send(&mut self, event: Self::Event) -> Result<()> {
-        if let Err(_) = self.ctx().sender.send(Envelope::new(event)).await {
-            return Err(crate::Error::SendError);
-        }
+        self.ctx().sender.send(Envelope::new(event)).await?;
         Ok(())
     }
 
@@ -67,12 +64,31 @@ mod tests {
             ctx: Context<MyEvent>,
         }
 
+        #[async_trait]
         impl Actor for MyActor {
             type Event = MyEvent;
 
-            async fn handle(&mut self, event: Self::Event) -> Result<Option<Self::Event>> {
-                self.ctx.sender.send(event).await.unwrap();
+            async fn handle(
+                &mut self,
+                event: &Self::Event,
+                _meta: &Meta,
+            ) -> Result<Option<Self::Event>> {
+                self.send(event.clone()).await.unwrap();
                 Ok(None)
+            }
+
+            fn ctx(&self) -> &Context<Self::Event> {
+                &self.ctx
+            }
+            fn ctx_mut(&mut self) -> &mut Context<Self::Event> {
+                &mut self.ctx
+            }
+            fn set_ctx(&mut self, ctx: Context<Self::Event>) -> Result<()> {
+                self.ctx = ctx;
+                Ok(())
+            }
+            fn name(&self) -> &str {
+                "MyActor"
             }
         }
     }

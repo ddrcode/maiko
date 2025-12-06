@@ -7,6 +7,7 @@
 
 mod actor;
 mod broker;
+mod config;
 mod context;
 mod envelope;
 mod error;
@@ -18,6 +19,7 @@ mod topic;
 
 pub use actor::Actor;
 pub use broker::Broker;
+pub use config::Config;
 pub use context::Context;
 pub use envelope::Envelope;
 pub use error::Error;

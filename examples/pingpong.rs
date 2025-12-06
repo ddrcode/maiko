@@ -43,13 +43,12 @@ impl Actor for PingPong {
 
     async fn start(&mut self) -> Result<()> {
         if self.name == "ping-side" {
-            println!("Starting");
             self.send(PingPongEvent::Pong).await?;
         }
         Ok(())
     }
 
-    async fn handle(&mut self, event: &Self::Event) -> Result<Option<Self::Event>> {
+    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<Option<Self::Event>> {
         match event {
             PingPongEvent::Ping => {
                 println!("Ping");
@@ -69,7 +68,7 @@ impl Actor for PingPong {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::new(128);
+    let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::default();
     sup.add_actor(PingPong::new("ping-side"), vec![DefaultTopic])?;
     sup.add_actor(PingPong::new("pong-side"), vec![DefaultTopic])?;
     // sup.start().await?;
