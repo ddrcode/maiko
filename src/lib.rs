@@ -30,3 +30,7 @@ pub use supervisor::Supervisor;
 pub use {topic::DefaultTopic, topic::Topic};
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub mod macros {
+    pub use maiko_macros::*;
+}

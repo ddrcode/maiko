@@ -1,14 +1,15 @@
 use async_trait::async_trait;
 use maiko::*;
+use maiko_macros::Event;
 use tokio::{self, select};
 
-#[derive(Clone)]
+#[derive(Event, Clone)]
 enum PingPongEvent {
     Ping,
     Pong,
 }
 
-impl Event for PingPongEvent {}
+// impl Event for PingPongEvent {}
 
 struct PingPong {
     name: String,
