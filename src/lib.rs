@@ -34,3 +34,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub mod macros {
     pub use maiko_macros::*;
 }
+
+pub mod prelude {
+    pub use crate::actor::Actor;
+    pub use crate::context::Context;
+    pub use crate::error::Error as MaikoError;
+    pub use crate::meta::Meta;
+    pub use crate::supervisor::Supervisor;
+    pub use crate::topic::Topic;
+    pub use maiko_macros::Event;
+}

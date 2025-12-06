@@ -64,7 +64,7 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
     }
 
     pub async fn send(&self, event: E) -> Result<()> {
-        self.sender.send(Envelope::new(event)).await?;
+        self.sender.send(Envelope::new(event, "supervisor")).await?;
         Ok(())
     }
 

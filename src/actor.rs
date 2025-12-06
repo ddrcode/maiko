@@ -14,7 +14,9 @@ pub trait Actor: Send {
     fn set_ctx(&mut self, ctx: Context<Self::Event>) -> Result<()>;
     fn name(&self) -> &str;
 
-    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<Option<Self::Event>>;
+    async fn handle(&mut self, _event: &Self::Event, _meta: &Meta) -> Result<Option<Self::Event>> {
+        Ok(None)
+    }
 
     async fn tick(&mut self) -> Result<()> {
         if let Some(event) = self.ctx_mut().receiver.recv().await
@@ -26,7 +28,11 @@ pub trait Actor: Send {
     }
 
     async fn send(&mut self, event: Self::Event) -> Result<()> {
-        self.ctx().sender.send(Envelope::new(event)).await?;
+        println!("Sending event from {}", self.name());
+        self.ctx()
+            .sender
+            .send(Envelope::new(event, self.name()))
+            .await?;
         Ok(())
     }
 

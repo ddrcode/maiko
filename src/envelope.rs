@@ -7,9 +7,9 @@ pub struct Envelope<E: Event> {
 }
 
 impl<E: Event> Envelope<E> {
-    pub fn new(event: E) -> Self {
+    pub fn new(event: E, sender: &str) -> Self {
         Self {
-            meta: Meta::new(),
+            meta: Meta::new(sender),
             event,
         }
     }
