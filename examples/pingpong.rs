@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use maiko::*;
 use tokio;
 
@@ -23,6 +24,7 @@ impl PingPong {
     }
 }
 
+#[async_trait]
 impl Actor for PingPong {
     type Event = PingPongEvent;
 
@@ -36,6 +38,14 @@ impl Actor for PingPong {
 
     fn set_ctx(&mut self, ctx: Context<Self::Event>) -> Result<()> {
         self.ctx = ctx;
+        Ok(())
+    }
+
+    async fn start(&mut self) -> Result<()> {
+        if self.name == "ping-side" {
+            println!("Starting");
+            self.send(PingPongEvent::Pong).await?;
+        }
         Ok(())
     }
 
@@ -60,7 +70,8 @@ impl Actor for PingPong {
 #[tokio::main]
 pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::new(128);
-    sup.add_actor(PingPong::new("ping-side"), vec![DefaultTopic]);
-    sup.add_actor(PingPong::new("pong-side"), vec![DefaultTopic]);
+    sup.add_actor(PingPong::new("ping-side"), vec![DefaultTopic])?;
+    sup.add_actor(PingPong::new("pong-side"), vec![DefaultTopic])?;
+    sup.start().await?;
     Ok(())
 }

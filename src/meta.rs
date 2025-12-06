@@ -1,24 +1,25 @@
-use std::time::{Instant, SystemTime};
+use std::time::SystemTime;
 
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct Meta {
-    id: Uuid,
+    id: u128,
     timestamp: u64,
 }
 
 impl Meta {
     pub fn new() -> Self {
         Self {
-            id: Uuid::new_v4(),
-            timestamp: 0, // timestamp: Instant::now()
-                          //     .duration_since(SystemTime::UNIX_EPOCH.)
-                          //     .as_nanos(),
+            id: Uuid::new_v4().as_u128(),
+            timestamp: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("SystemTime before Unix epoch")
+                .as_nanos() as u64,
         }
     }
 
-    pub fn id(&self) -> Uuid {
+    pub fn id(&self) -> u128 {
         self.id
     }
 

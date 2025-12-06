@@ -1,7 +1,3 @@
-use std::sync::mpsc::RecvError;
-
-use tokio::sync::mpsc::error::SendError;
-
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Actor's context must be set by this point")]
@@ -11,5 +7,5 @@ pub enum Error {
     SendError,
 
     #[error("Couldn't receive the message")]
-    ReceiveError(#[from] RecvError),
+    ReceiveError(#[from] std::sync::mpsc::RecvError),
 }

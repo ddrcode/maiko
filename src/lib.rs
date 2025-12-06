@@ -28,5 +28,3 @@ pub use supervisor::Supervisor;
 pub use {topic::DefaultTopic, topic::Topic};
 
 pub type Result<T> = std::result::Result<T, Error>;
-pub type Sender<T: Event> = tokio::sync::mpsc::Sender<Envelope<T>>;
-pub type Receiver<T: Event> = tokio::sync::mpsc::Receiver<Envelope<T>>;
