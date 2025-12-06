@@ -59,6 +59,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_simple_actor() {
+        #[derive(Clone)]
         struct MyEvent {}
         impl Event for MyEvent {}
 

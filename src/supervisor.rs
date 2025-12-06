@@ -30,7 +30,11 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         }
     }
 
-    pub fn add_actor<A: Actor<Event = E>>(&mut self, mut actor: A, topics: Vec<T>) -> Result<()> {
+    pub fn add_actor<A: Actor<Event = E> + 'static>(
+        &mut self,
+        mut actor: A,
+        topics: Vec<T>,
+    ) -> Result<()> {
         let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.channel_size);
         actor.set_ctx(Context::<E> {
             sender: tx.clone(),
@@ -38,6 +42,7 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         })?;
         let subscriber = Subscriber::<E, T>::new(Arc::from(actor.name()), topics, tx);
         self.broker.add_subscriber(subscriber);
+        self.actors.push(Arc::new(Mutex::new(Box::new(actor))));
         Ok(())
     }
 
@@ -46,10 +51,19 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
             .actors
             .iter()
             .cloned()
-            .map(|actor| tokio::spawn(async move { actor.lock().await.run().await }))
+            .map(|actor| {
+                println!("registering actor");
+                let h = tokio::spawn(async move {
+                    println!("Starting");
+                    actor.lock().await.run().await
+                });
+                println!("I'm here");
+                h
+            })
             .collect::<Vec<_>>();
         self.handles = handles;
-        self.broker.run().await;
+        println!("Handler registered: {}", self.handles.len());
+        self.broker.run().await?;
         Ok(())
     }
 }

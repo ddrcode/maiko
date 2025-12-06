@@ -35,6 +35,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     pub async fn run(&mut self) -> Result<()> {
         while let Some(e) = self.receiver.recv().await {
+            println!("Got something: {:?}", e.meta.id());
             let topic = Topic::from_event(&e.event);
             for s in self
                 .subscribers

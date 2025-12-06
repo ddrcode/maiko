@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use maiko::*;
-use tokio;
+use tokio::{self, select};
 
 #[derive(Clone)]
 enum PingPongEvent {
@@ -72,6 +72,13 @@ pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::new(128);
     sup.add_actor(PingPong::new("ping-side"), vec![DefaultTopic])?;
     sup.add_actor(PingPong::new("pong-side"), vec![DefaultTopic])?;
-    sup.start().await?;
+    // sup.start().await?;
+
+    let timeout = tokio::time::sleep(tokio::time::Duration::from_millis(1));
+    select! {
+        _ = sup.start() => {},
+        _ = timeout => {}
+    }
+
     Ok(())
 }
