@@ -11,6 +11,10 @@ pkgs.mkShell {
     openssl
     pkg-config
     cargo-machete
+    cargo-spellcheck
+
+    hunspell
+    just
   ];
 
   # inputsFrom = [ pkgs.hello pkgs.gnutar ];
