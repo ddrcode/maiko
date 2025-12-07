@@ -10,9 +10,6 @@ pub enum Error {
     #[error("Couldn't send the message: {0}")]
     SendError(String),
 
-    #[error("Couldn't receive the message")]
-    ReceiveError(#[from] std::sync::mpsc::RecvError),
-
     #[error("Actor task join error: {0}")]
     ActorJoinError(#[from] tokio::task::JoinError),
 }
