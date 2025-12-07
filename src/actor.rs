@@ -28,7 +28,6 @@ pub trait Actor: Send {
     }
 
     async fn send(&mut self, event: Self::Event) -> Result<()> {
-        println!("Sending event from {}", self.name());
         self.ctx()
             .sender
             .send(Envelope::new(event, self.name()))
@@ -54,6 +53,10 @@ pub trait Actor: Send {
 
     async fn shutdown(&mut self) -> Result<()> {
         Ok(())
+    }
+
+    fn exit(&mut self) {
+        self.ctx().cancel_token.cancel();
     }
 }
 

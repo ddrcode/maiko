@@ -38,13 +38,8 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         for s in self
             .subscribers
             .iter()
-            .filter(|s| s.topics.contains(&topic))
+            .filter(|s| s.topics.contains(&topic) && s.name != e.meta.sender().into())
         {
-            println!(
-                "Broker sending event to subscriber {} -> {}",
-                e.meta.sender(),
-                s.name
-            );
             s.sender.send(e.clone()).await?;
         }
         Ok(())
@@ -52,7 +47,6 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     pub async fn run(&mut self) -> Result<()> {
         loop {
-            println!("Broker waiting for events...");
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => self.send_event(&e).await?,

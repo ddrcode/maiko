@@ -41,7 +41,7 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
     ) -> Result<()> {
         let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.config.channel_size);
         actor.set_ctx(Context::<E> {
-            sender: tx.clone(),
+            sender: self.sender.clone(),
             receiver: rx,
             cancel_token: self.cancel_token.clone(),
         })?;

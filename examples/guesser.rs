@@ -19,23 +19,28 @@ enum GuesserTopic {
 
 impl Topic<GuesserEvent> for GuesserTopic {
     fn from_event(event: &GuesserEvent) -> Self {
+        use GuesserEvent::*;
+        use GuesserTopic::*;
         match event {
-            GuesserEvent::Message(_) | GuesserEvent::Result(..) => GuesserTopic::Output,
-            GuesserEvent::Guess(_) => GuesserTopic::Game,
+            Message(_) => Output,
+            Result(..) => Output,
+            Guess(_) => Game,
         }
     }
 }
 
 struct Guesser {
     name: String,
+    cycle_time: Duration,
     ctx: Context<GuesserEvent>,
 }
 
 impl Guesser {
-    fn new(name: &str) -> Self {
+    fn new(name: &str, time: u64) -> Self {
         Self {
             name: name.to_string(),
             ctx: Default::default(),
+            cycle_time: Duration::from_millis(time),
         }
     }
 }
@@ -57,9 +62,8 @@ impl Actor for Guesser {
         &self.name
     }
     async fn tick(&mut self) -> maiko::Result<()> {
-        println!("ticking");
-        sleep(Duration::from_secs(2)).await;
-        let guess = rand::random::<u8>() % 100;
+        sleep(self.cycle_time).await;
+        let guess = rand::random::<u8>() % 10;
         self.send(GuesserEvent::Guess(guess)).await
     }
 }
@@ -69,6 +73,7 @@ struct Game {
     ctx: Context<GuesserEvent>,
     number1: Option<u8>,
     number2: Option<u8>,
+    count: u64,
 }
 
 #[async_trait]
@@ -88,7 +93,6 @@ impl Actor for Game {
         "game"
     }
     async fn start(&mut self) -> maiko::Result<()> {
-        println!("Game started!");
         self.send(GuesserEvent::Message(
             "Welcome to the Guessing Game!".to_string(),
         ))
@@ -99,7 +103,9 @@ impl Actor for Game {
         event: &Self::Event,
         meta: &Meta,
     ) -> maiko::Result<Option<Self::Event>> {
-        println!("Mamy liczby {event:?}");
+        if self.count >= 10 {
+            self.exit();
+        }
         match event {
             GuesserEvent::Guess(guess) => {
                 if meta.sender() == "Player1" {
@@ -108,6 +114,7 @@ impl Actor for Game {
                     self.number2 = Some(*guess);
                 }
                 if let (Some(n1), Some(n2)) = (self.number1, self.number2) {
+                    self.count += 1;
                     self.number1 = None;
                     self.number2 = None;
                     Ok(Some(GuesserEvent::Result(n1, n2)))
@@ -146,7 +153,6 @@ impl Actor for Printer {
         event: &Self::Event,
         _meta: &Meta,
     ) -> maiko::Result<Option<Self::Event>> {
-        println!("Handling event: {:?}", event);
         match event {
             GuesserEvent::Message(msg) => {
                 println!("{}", msg);
@@ -170,8 +176,8 @@ impl Actor for Printer {
 async fn main() -> Result<(), MaikoError> {
     let mut supervisor = Supervisor::<GuesserEvent, GuesserTopic>::default();
 
-    supervisor.add_actor(Guesser::new("Player1"), vec![])?;
-    supervisor.add_actor(Guesser::new("Player2"), vec![])?;
+    supervisor.add_actor(Guesser::new("Player1", 2000), vec![])?;
+    supervisor.add_actor(Guesser::new("Player2", 750), vec![])?;
     supervisor.add_actor(Game::default(), vec![GuesserTopic::Game])?;
     supervisor.add_actor(Printer::default(), vec![GuesserTopic::Output])?;
 
