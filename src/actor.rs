@@ -3,7 +3,7 @@ use core::marker::Send;
 use async_trait::async_trait;
 use tokio::select;
 
-use crate::{Context, Envelope, Event, Meta, Result};
+use crate::{Context, Event, Meta, Result};
 
 #[async_trait]
 pub trait Actor: Send {
@@ -19,28 +19,30 @@ pub trait Actor: Send {
     }
 
     async fn tick(&mut self) -> Result<()> {
-        if let Some(event) = self.ctx_mut().receiver.recv().await
-            && let Some(out) = self.handle(&event.event, &event.meta).await?
-        {
-            self.send(out).await?;
-        }
         Ok(())
     }
 
     async fn send(&mut self, event: Self::Event) -> Result<()> {
-        self.ctx()
-            .sender
-            .send(Envelope::new(event, self.name()))
-            .await?;
+        self.ctx().send(event, self.name()).await?;
         Ok(())
     }
 
     async fn run(&mut self) -> Result<()> {
         self.start().await?;
+        let mut rx = self
+            .ctx_mut()
+            .receiver
+            .take()
+            .expect("Receiver already taken");
         let token = self.ctx().cancel_token.clone();
         loop {
             select! {
                 _ = token.cancelled() => break,
+                Some(event) = rx.recv() => {
+                    if let Some(out) = self.handle(&event.event, &event.meta).await? {
+            self.send(out).await?;
+                    }
+                },
                 r = self.tick() => r?
             }
         }
