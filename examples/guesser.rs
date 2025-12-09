@@ -30,16 +30,12 @@ impl Topic<GuesserEvent> for GuesserTopic {
 }
 
 struct Guesser {
-    name: String,
     cycle_time: Duration,
-    ctx: Context<GuesserEvent>,
 }
 
 impl Guesser {
-    fn new(name: &str, time: u64) -> Self {
+    fn new(time: u64) -> Self {
         Self {
-            name: name.to_string(),
-            ctx: Default::default(),
             cycle_time: Duration::from_millis(time),
         }
     }
@@ -48,29 +44,15 @@ impl Guesser {
 #[async_trait]
 impl Actor for Guesser {
     type Event = GuesserEvent;
-    fn ctx(&self) -> &Context<Self::Event> {
-        &self.ctx
-    }
-    fn ctx_mut(&mut self) -> &mut Context<Self::Event> {
-        &mut self.ctx
-    }
-    fn set_ctx(&mut self, ctx: Context<Self::Event>) -> maiko::Result<()> {
-        self.ctx = ctx;
-        Ok(())
-    }
-    fn name(&self) -> &str {
-        &self.name
-    }
-    async fn tick(&mut self) -> maiko::Result<()> {
+    async fn tick(&mut self, ctx: &Context<Self::Event>) -> maiko::Result<()> {
         sleep(self.cycle_time).await;
         let guess = rand::random::<u8>() % 10;
-        self.send(GuesserEvent::Guess(guess)).await
+        ctx.send(GuesserEvent::Guess(guess)).await
     }
 }
 
 #[derive(Default)]
 struct Game {
-    ctx: Context<GuesserEvent>,
     number1: Option<u8>,
     number2: Option<u8>,
     count: u64,
@@ -79,21 +61,8 @@ struct Game {
 #[async_trait]
 impl Actor for Game {
     type Event = GuesserEvent;
-    fn ctx(&self) -> &Context<Self::Event> {
-        &self.ctx
-    }
-    fn ctx_mut(&mut self) -> &mut Context<Self::Event> {
-        &mut self.ctx
-    }
-    fn set_ctx(&mut self, ctx: Context<Self::Event>) -> maiko::Result<()> {
-        self.ctx = ctx;
-        Ok(())
-    }
-    fn name(&self) -> &str {
-        "game"
-    }
-    async fn start(&mut self) -> maiko::Result<()> {
-        self.send(GuesserEvent::Message(
+    async fn on_start(&mut self, ctx: &Context<Self::Event>) -> maiko::Result<()> {
+        ctx.send(GuesserEvent::Message(
             "Welcome to the Guessing Game!".to_string(),
         ))
         .await
@@ -103,9 +72,6 @@ impl Actor for Game {
         event: &Self::Event,
         meta: &Meta,
     ) -> maiko::Result<Option<Self::Event>> {
-        if self.count >= 10 {
-            self.exit();
-        }
         match event {
             GuesserEvent::Guess(guess) => {
                 if meta.sender() == "Player1" {
@@ -125,29 +91,19 @@ impl Actor for Game {
             _ => Ok(None),
         }
     }
+    async fn tick(&mut self, ctx: &Context<Self::Event>) -> maiko::Result<()> {
+        if self.count >= 10 {
+            ctx.stop();
+        }
+        Ok(())
+    }
 }
 
-#[derive(Default)]
-struct Printer {
-    ctx: Context<GuesserEvent>,
-}
+struct Printer;
 
 #[async_trait]
 impl Actor for Printer {
     type Event = GuesserEvent;
-    fn ctx(&self) -> &Context<Self::Event> {
-        &self.ctx
-    }
-    fn ctx_mut(&mut self) -> &mut Context<Self::Event> {
-        &mut self.ctx
-    }
-    fn set_ctx(&mut self, ctx: Context<Self::Event>) -> maiko::Result<()> {
-        self.ctx = ctx;
-        Ok(())
-    }
-    fn name(&self) -> &str {
-        "printer"
-    }
     async fn handle(
         &mut self,
         event: &Self::Event,
@@ -176,10 +132,10 @@ impl Actor for Printer {
 async fn main() -> Result<(), MaikoError> {
     let mut supervisor = Supervisor::<GuesserEvent, GuesserTopic>::default();
 
-    supervisor.add_actor(Guesser::new("Player1", 2000), vec![])?;
-    supervisor.add_actor(Guesser::new("Player2", 750), vec![])?;
-    supervisor.add_actor(Game::default(), vec![GuesserTopic::Game])?;
-    supervisor.add_actor(Printer::default(), vec![GuesserTopic::Output])?;
+    supervisor.add_actor("Player1", Guesser::new(2000), vec![])?;
+    supervisor.add_actor("Player2", Guesser::new(750), vec![])?;
+    supervisor.add_actor("Game", Game::default(), vec![GuesserTopic::Game])?;
+    supervisor.add_actor("Printer", Printer, vec![GuesserTopic::Output])?;
 
     supervisor.start().await?;
 

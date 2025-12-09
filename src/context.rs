@@ -1,31 +1,32 @@
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
-use tokio::sync::mpsc::{Receiver, Sender};
-use tokio_util::sync::CancellationToken;
+use tokio::sync::mpsc::Sender;
 
 use crate::{Envelope, Event, Result};
 
+#[derive(Clone)]
 pub struct Context<E: Event> {
+    pub(crate) name: Arc<str>,
     pub(crate) sender: Sender<Envelope<E>>,
-    pub(crate) receiver: Option<Receiver<Envelope<E>>>,
-    pub(crate) cancel_token: Arc<CancellationToken>,
+    pub(crate) alive: Arc<AtomicBool>,
 }
 
 impl<E: Event> Context<E> {
-    pub(crate) async fn send(&self, event: E, name: &str) -> Result<()> {
-        self.sender.send(Envelope::new(event, name)).await?;
+    pub async fn send(&self, event: E) -> Result<()> {
+        self.sender
+            .send(Envelope::new(event, self.name.as_ref()))
+            .await?;
         Ok(())
     }
-}
 
-impl<E: Event> Default for Context<E> {
-    // FIXME: ugly default
-    fn default() -> Self {
-        let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(1);
-        Context {
-            sender: tx,
-            receiver: Some(rx),
-            cancel_token: Arc::new(CancellationToken::new()),
-        }
+    pub fn stop(&self) {
+        self.alive.store(false, Ordering::Relaxed);
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }

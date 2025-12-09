@@ -1,78 +1,41 @@
 use async_trait::async_trait;
 use maiko::*;
-use maiko_macros::Event;
 use tokio::{self, select};
 
-#[derive(Event, Clone)]
+#[derive(Clone, Debug)]
 enum PingPongEvent {
     Ping,
     Pong,
 }
+impl Event for PingPongEvent {}
 
-// impl Event for PingPongEvent {}
-
-struct PingPong {
-    name: String,
-    ctx: Context<PingPongEvent>,
-}
-
-impl PingPong {
-    fn new(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            ctx: Context::default(),
-        }
-    }
-}
+struct PingPong;
 
 #[async_trait]
 impl Actor for PingPong {
     type Event = PingPongEvent;
 
-    fn ctx(&self) -> &Context<Self::Event> {
-        &self.ctx
-    }
-
-    fn ctx_mut(&mut self) -> &mut Context<Self::Event> {
-        &mut self.ctx
-    }
-
-    fn set_ctx(&mut self, ctx: Context<Self::Event>) -> Result<()> {
-        self.ctx = ctx;
-        Ok(())
-    }
-
-    async fn start(&mut self) -> Result<()> {
-        if self.name == "ping-side" {
-            self.send(PingPongEvent::Pong).await?;
+    async fn on_start(&mut self, ctx: &Context<Self::Event>) -> Result<()> {
+        if ctx.name() == "ping-side" {
+            ctx.send(PingPongEvent::Pong).await?;
         }
         Ok(())
     }
 
     async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<Option<Self::Event>> {
+        println!("Event: {event:?}");
         match event {
-            PingPongEvent::Ping => {
-                println!("Ping");
-                Ok(Some(PingPongEvent::Pong))
-            }
-            PingPongEvent::Pong => {
-                println!("Pong");
-                Ok(Some(PingPongEvent::Ping))
-            }
+            PingPongEvent::Ping => Ok(Some(PingPongEvent::Pong)),
+            PingPongEvent::Pong => Ok(Some(PingPongEvent::Ping)),
         }
-    }
-
-    fn name(&self) -> &str {
-        self.name.as_str()
     }
 }
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::default();
-    sup.add_actor(PingPong::new("ping-side"), vec![DefaultTopic])?;
-    sup.add_actor(PingPong::new("pong-side"), vec![DefaultTopic])?;
-    // sup.start().await?;
+    sup.add_actor("ping-side", PingPong, vec![DefaultTopic])?;
+    sup.add_actor("pong-side", PingPong, vec![DefaultTopic])?;
 
     let timeout = tokio::time::sleep(tokio::time::Duration::from_millis(1));
     select! {

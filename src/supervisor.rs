@@ -1,21 +1,18 @@
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicBool};
 
 use tokio::{
-    sync::{
-        Mutex,
-        mpsc::{Sender, channel},
-    },
+    sync::mpsc::{Sender, channel},
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 
+use crate::inner::ActorHandler;
 use crate::{Actor, Broker, Config, Context, Envelope, Event, Result, Subscriber, Topic};
 
 pub struct Supervisor<E: Event, T: Topic<E>> {
     config: Config,
     broker: Broker<E, T>,
     sender: Sender<Envelope<E>>,
-    actors: Vec<Arc<Mutex<Box<dyn Actor<Event = E>>>>>,
     handles: Vec<JoinHandle<Result<()>>>,
     cancel_token: Arc<CancellationToken>,
 }
@@ -28,7 +25,6 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
             broker: Broker::new(rx, cancel_token.clone()),
             config,
             sender: tx,
-            actors: Vec::new(),
             handles: Vec::new(),
             cancel_token,
         }
@@ -36,29 +32,37 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
 
     pub fn add_actor<A: Actor<Event = E> + 'static>(
         &mut self,
+        name: &str,
         mut actor: A,
         topics: Vec<T>,
     ) -> Result<()> {
+        let name: Arc<str> = Arc::from(name);
+        let alive = Arc::new(AtomicBool::new(true));
         let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.config.channel_size);
-        actor.set_ctx(Context::<E> {
+        let ctx = Context::<E> {
+            name: name.clone(),
             sender: self.sender.clone(),
-            receiver: Some(rx),
-            cancel_token: self.cancel_token.clone(),
-        })?;
-        let subscriber = Subscriber::<E, T>::new(Arc::from(actor.name()), topics, tx);
+            alive: alive.clone(),
+        };
+
+        actor.on_init(ctx.clone());
+        let subscriber = Subscriber::<E, T>::new(name.clone(), topics, tx);
         self.broker.add_subscriber(subscriber);
-        self.actors.push(Arc::new(Mutex::new(Box::new(actor))));
+
+        let mut handler = ActorHandler {
+            actor,
+            receiver: rx,
+            cancel_token: self.cancel_token.clone(),
+            ctx,
+        };
+
+        let join_handle = tokio::spawn(async move { handler.run().await });
+        self.handles.push(join_handle);
+
         Ok(())
     }
 
     pub async fn start(&mut self) -> Result<()> {
-        let handles = self
-            .actors
-            .iter()
-            .cloned()
-            .map(|actor| tokio::spawn(async move { actor.lock().await.run().await }))
-            .collect::<Vec<_>>();
-        self.handles = handles;
         self.broker.run().await?;
         Ok(())
     }
