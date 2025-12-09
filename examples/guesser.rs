@@ -4,12 +4,13 @@ use async_trait::async_trait;
 use maiko::prelude::*;
 use tokio::time::sleep;
 
-#[derive(Event, Clone, Debug)]
+#[derive(Clone, Debug)]
 enum GuesserEvent {
     Guess(u8),
     Result(u8, u8),
     Message(String),
 }
+impl Event for GuesserEvent {}
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 enum GuesserTopic {

@@ -6,8 +6,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::inner::ActorHandler;
-use crate::{Actor, Broker, Config, Context, Envelope, Event, Result, Subscriber, Topic};
+use crate::internal::{ActorHandler, Broker, Subscriber};
+use crate::{Actor, Config, Context, Envelope, Event, Result, Topic};
 
 pub struct Supervisor<E: Event, T: Topic<E>> {
     config: Config,

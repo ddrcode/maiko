@@ -3,7 +3,8 @@ use std::sync::Arc;
 use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
 
-use crate::{Envelope, Event, Result, Subscriber, Topic};
+use super::Subscriber;
+use crate::{Envelope, Event, Result, Topic};
 
 #[derive(Debug)]
 pub struct Broker<E: Event, T: Topic<E>> {
@@ -26,11 +27,6 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     pub(crate) fn add_subscriber(&mut self, subscriber: Subscriber<E, T>) {
         self.subscribers.push(subscriber);
-    }
-
-    pub async fn send(&mut self, event: E) -> Result<()> {
-        let event = Envelope::new(event, "broker");
-        self.send_event(&event).await
     }
 
     async fn send_event(&mut self, e: &Envelope<E>) -> Result<()> {
