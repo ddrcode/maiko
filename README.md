@@ -5,37 +5,46 @@ Erlang/Akka, Maiko focuses on maximum decoupling and is bringing distributed sys
 (like event broker, topics, etc) to local actor model.
 
 From code perspective it tries to be non-invasive and lets you implement the code your way (or, well - Tokio way).
-What it brings is the runtime that orchestrates communication between actors and supervises the state of actors. 
-Noe new concepts to learn: just a few traits to implement and standard Tokio channels. 
+What it brings is the runtime that orchestrates communication between actors and supervises the state of actors.
+No new concepts to learn: just a few traits to implement and standard Tokio channels.
 
 ```rust
-#[derive(Debug, Event)]
-enum Event {
-   Ping,
-   Pong
+#[derive(Clone, Debug)]
+enum PingPongEvent {
+    Ping,
+    Pong,
+}
+impl Event for PingPongEvent {}
+
+struct PingPong;
+
+#[async_trait]
+impl Actor for PingPong {
+    type Event = PingPongEvent;
+
+    async fn on_start(&mut self, ctx: &Context<Self::Event>) -> Result<()> {
+        if ctx.name() == "ping-side" {
+            ctx.send(PingPongEvent::Pong).await?;
+        }
+        Ok(())
+    }
+
+    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<Option<Self::Event>> {
+        println!("Event: {event:?}");
+        match event {
+            PingPongEvent::Ping => Ok(Some(PingPongEvent::Pong)),
+            PingPongEvent::Pong => Ok(Some(PingPongEvent::Ping)),
+        }
+    }
 }
 
-struct PingPongActor {}
-
-impl maiko::Actor<Event> for PingPongActor {
-   async fn handle(&mut self, event: Event) -> maiko::Result<()> {
-      println!("Event: {event:?}");
-      match event {
-         Event::Ping => self.send(Event::Pong).await,
-         Event::Pong => self.send(Event::Ping).await,
-      }
-      Ok(())
-   }
+#[tokio::main]
+pub async fn main() -> Result<()> {
+    let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::default();
+    sup.add_actor("ping-side", PingPong, vec![DefaultTopic])?;
+    sup.add_actor("pong-side", PingPong, vec![DefaultTopic])?;
+    sup.start()
 }
-
-let sup = maiko::Supervisor::new()
-   .spawn("pp1", PingPongActor{})
-   .spawn("pp2", PingPongActor{})
-   .run().await;
-
-sup.broker().send_to("pp1", Event::Ping);
-tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-sup.stop().await;
 ```
 
 
@@ -48,12 +57,7 @@ sup.stop().await;
 - Supervisor orchestration with graceful error handling
 - Designed for daemons, bots, UIs, embedded — wherever flows matter
 
-## Status
+## Idea
 
-This crate is published to reserve the name and signal the intention.  
-A working version is being developed. Contributions, ideas, and support welcome!
-
-However, the project is not an out-of-blue idea - it emerged from my own experience while
+The project is not an out-of-blue idea - it emerged from my own experience while
 working on project [Charon](https://github.com/ddrcode/charon) where I designed a system like that.
-Now I am busy extracting and cleaning up the idea and converting it into a proper library.
-Please come on Thursday. 
