@@ -17,6 +17,8 @@ mod subscriber;
 mod supervisor;
 mod topic;
 
+pub(crate) mod inner;
+
 pub use actor::Actor;
 pub use broker::Broker;
 pub use config::Config;
