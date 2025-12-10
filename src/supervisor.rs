@@ -30,12 +30,11 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         }
     }
 
-    pub fn add_actor<A: Actor<Event = E> + 'static>(
-        &mut self,
-        name: &str,
-        mut actor: A,
-        topics: Vec<T>,
-    ) -> Result<()> {
+    pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: Vec<T>) -> Result<()>
+    where
+        A: Actor<Event = E> + 'static,
+        F: FnOnce(Context<E>) -> A,
+    {
         let name: Arc<str> = Arc::from(name);
         let alive = Arc::new(AtomicBool::new(true));
         let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.config.channel_size);
@@ -44,8 +43,8 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
             sender: self.sender.clone(),
             alive: alive.clone(),
         };
+        let actor = factory(ctx.clone());
 
-        actor.on_init(ctx.clone());
         let subscriber = Subscriber::<E, T>::new(name.clone(), topics, tx);
         self.broker.add_subscriber(subscriber);
 

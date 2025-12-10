@@ -14,17 +14,15 @@ pub(crate) struct ActorHandler<A: Actor> {
 
 impl<A: Actor> ActorHandler<A> {
     pub async fn run(&mut self) -> Result<()> {
-        self.actor.on_start(&self.ctx).await?;
+        self.actor.on_start().await?;
         let token = self.cancel_token.clone();
         while self.ctx.alive.load(Ordering::Relaxed) {
             select! {
                 _ = token.cancelled() => break,
                 Some(event) = self.receiver.recv() => {
-                    if let Some(out) = self.actor.handle(&event.event, &event.meta).await? {
-                        self.ctx.send(out).await?;
-                    }
+                    self.actor.handle(&event.event, &event.meta).await?;
                 },
-                r = self.actor.tick(&self.ctx) => r?
+                r = self.actor.tick() => r?
             }
         }
         self.cancel_token.cancel();

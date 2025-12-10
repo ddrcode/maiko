@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use maiko::*;
+use maiko::{Actor, Context, DefaultTopic, Event, Meta, Result, Supervisor};
 use tokio::{self, select};
 
 #[derive(Clone, Debug)]
@@ -9,33 +9,36 @@ enum PingPongEvent {
 }
 impl Event for PingPongEvent {}
 
-struct PingPong;
+struct PingPong {
+    ctx: Context<PingPongEvent>,
+}
 
 #[async_trait]
 impl Actor for PingPong {
     type Event = PingPongEvent;
 
-    async fn on_start(&mut self, ctx: &Context<Self::Event>) -> Result<()> {
-        if ctx.name() == "ping-side" {
-            ctx.send(PingPongEvent::Pong).await?;
+    async fn on_start(&mut self) -> Result<()> {
+        if self.ctx.name() == "ping-side" {
+            self.ctx.send(PingPongEvent::Pong).await?;
         }
         Ok(())
     }
 
-    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<Option<Self::Event>> {
+    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
         println!("Event: {event:?}");
         match event {
-            PingPongEvent::Ping => Ok(Some(PingPongEvent::Pong)),
-            PingPongEvent::Pong => Ok(Some(PingPongEvent::Ping)),
+            PingPongEvent::Ping => self.ctx.send(PingPongEvent::Pong).await?,
+            PingPongEvent::Pong => self.ctx.send(PingPongEvent::Ping).await?,
         }
+        Ok(())
     }
 }
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::default();
-    sup.add_actor("ping-side", PingPong, vec![DefaultTopic])?;
-    sup.add_actor("pong-side", PingPong, vec![DefaultTopic])?;
+    sup.add_actor("ping-side", |ctx| PingPong { ctx }, vec![DefaultTopic])?;
+    sup.add_actor("pong-side", |ctx| PingPong { ctx }, vec![DefaultTopic])?;
 
     let timeout = tokio::time::sleep(tokio::time::Duration::from_millis(1));
     select! {
