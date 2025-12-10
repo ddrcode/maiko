@@ -9,6 +9,11 @@ use tokio_util::sync::CancellationToken;
 use crate::internal::{ActorHandler, Broker, Subscriber};
 use crate::{Actor, Config, Context, Envelope, Event, Result, Topic};
 
+/// Coordinates actors and the broker, and owns the top-level runtime.
+///
+/// - Register actors with `add_actor(name, |ctx| Actor, topics)`.
+/// - Start the runtime with `start()`, which blocks until cancelled via `stop()`.
+/// - Emit events into the broker with `send(event)`.
 pub struct Supervisor<E: Event, T: Topic<E>> {
     config: Config,
     broker: Broker<E, T>,
@@ -18,6 +23,7 @@ pub struct Supervisor<E: Event, T: Topic<E>> {
 }
 
 impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
+    /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
         let (tx, rx) = channel::<Envelope<E>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
@@ -30,6 +36,10 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         }
     }
 
+    /// Register a new actor with a factory that receives a `Context<E>`.
+    ///
+    /// The `name` is used for metadata and (by default) to avoid self-routing.
+    /// `topics` declare which event topics the actor subscribes to.
     pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: Vec<T>) -> Result<()>
     where
         A: Actor<Event = E> + 'static,
@@ -61,16 +71,21 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         Ok(())
     }
 
+    /// Run the broker loop. This method blocks until `stop()` is called
+    /// (or the cancellation token is triggered), then waits for all actors
+    /// to finish.
     pub async fn start(&mut self) -> Result<()> {
         self.broker.run().await?;
         Ok(())
     }
 
+    /// Emit an event into the broker from the supervisor.
     pub async fn send(&self, event: E) -> Result<()> {
         self.sender.send(Envelope::new(event, "supervisor")).await?;
         Ok(())
     }
 
+    /// Request a graceful shutdown, then await all actor tasks.
     pub async fn stop(&mut self) -> Result<()> {
         self.cancel_token.cancel();
         while let Some(handle) = self.handles.pop() {

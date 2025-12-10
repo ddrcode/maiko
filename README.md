@@ -6,7 +6,7 @@ Erlang/Akka, Maiko focuses on maximum decoupling and is bringing distributed sys
 
 From code perspective it tries to be non-invasive and lets you implement the code your way (or, well - Tokio way).
 What it brings is the runtime that orchestrates communication between actors and supervises the state of actors.
-No new concepts to learn: just a few traits to implement and standard Tokio channels.
+No new concepts to learn: just a few trait methods and standard Tokio channels.
 
 ```rust
 #[derive(Clone, Debug)]
@@ -22,28 +22,24 @@ struct PingPong;
 impl Actor for PingPong {
     type Event = PingPongEvent;
 
-    async fn on_start(&mut self, ctx: &Context<Self::Event>) -> Result<()> {
-        if ctx.name() == "ping-side" {
-            ctx.send(PingPongEvent::Pong).await?;
-        }
+    async fn on_start(&mut self) -> Result<()> {
+        // Emit initial event from a dedicated actor (e.g., a generator)
         Ok(())
     }
 
-    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<Option<Self::Event>> {
+    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
         println!("Event: {event:?}");
-        match event {
-            PingPongEvent::Ping => Ok(Some(PingPongEvent::Pong)),
-            PingPongEvent::Pong => Ok(Some(PingPongEvent::Ping)),
-        }
+        Ok(())
     }
 }
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::default();
-    sup.add_actor("ping-side", PingPong, vec![DefaultTopic])?;
-    sup.add_actor("pong-side", PingPong, vec![DefaultTopic])?;
-    sup.start()
+    sup.add_actor(PingPong, vec![DefaultTopic])?;
+    sup.add_actor(PingPong, vec![DefaultTopic])?;
+    sup.start().await?;
+    Ok(())
 }
 ```
 
@@ -56,6 +52,15 @@ pub async fn main() -> Result<()> {
 - Tokio-first, zero-magic API
 - Supervisor orchestration with graceful error handling
 - Designed for daemons, bots, UIs, embedded — wherever flows matter
+
+## API Sketch
+
+- `Event`: marker trait implemented for your event enum (derive macro available).
+- `Topic<E>`: maps events to topics for routing.
+- `Actor`: implement `handle`, optionally `tick`, `on_start`, `on_shutdown`.
+- `Supervisor<E,T>`: register actors via `add_actor(actor, topics)`; start with `start()`, stop with `stop()`.
+
+See `examples/` for runnable demos.
 
 ## Idea
 

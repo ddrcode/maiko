@@ -2,6 +2,12 @@ use std::hash::Hash;
 
 use crate::event::Event;
 
+/// Maps events to routing topics.
+///
+/// Implement this for your own topic type (usually an enum) to classify
+/// events for the broker. Actors subscribe to one or more topics, and the
+/// broker delivers events to matching subscribers.
+
 pub trait Topic<E: Event>: Hash + PartialEq + Eq {
     fn from_event(event: &E) -> Self
     where
