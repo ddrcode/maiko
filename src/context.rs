@@ -26,7 +26,13 @@ impl<E: Event> Context<E> {
         self.alive.store(false, Ordering::Relaxed);
     }
 
+    #[inline]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    #[inline]
+    pub fn is_alive(&self) -> bool {
+        self.alive.load(Ordering::Relaxed)
     }
 }

@@ -84,8 +84,8 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     pub async fn start(&mut self) -> Result<()> {
         let broker = self.broker.clone();
         // let mut broker = self.broker.take().unwrap();
-        self.tasks
-            .spawn(async move { broker.lock().await.run().await });
+        // self.tasks
+        tokio::task::spawn(async move { broker.lock().await.run().await });
         Ok(())
     }
 

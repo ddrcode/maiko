@@ -18,14 +18,17 @@ impl<A: Actor> ActorHandler<A> {
         let token = self.cancel_token.clone();
         while self.ctx.alive.load(Ordering::Relaxed) {
             select! {
-                _ = token.cancelled() => break,
+                biased;
                 Some(event) = self.receiver.recv() => {
                     self.actor.handle(&event.event, &event.meta).await?;
                 },
-                r = self.actor.tick() => r?
+                r = self.actor.tick() => r?,
+                _ = token.cancelled() => {
+                    self.ctx.stop();
+                    break;
+                }
             }
         }
-        self.cancel_token.cancel();
         self.actor.on_shutdown().await
     }
 }

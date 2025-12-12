@@ -78,16 +78,11 @@ impl Actor for Game {
     async fn on_start(&mut self) -> maiko::Result<()> {
         self.ctx
             .send(GuesserEvent::Message(
-                "Welcome to the Guessing Game!".to_string(),
+                "Welcome to the Guessing Game!\n(the game will stop after 10 attempts)".to_string(),
             ))
             .await
     }
     async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
-        println!("Event {event:?}");
-        if self.count >= 10 {
-            self.ctx.stop();
-            return Ok(());
-        }
         if let GuesserEvent::Guess(guess) = event {
             if meta.sender() == "Player1" {
                 self.number1 = Some(*guess);
@@ -107,6 +102,7 @@ impl Actor for Game {
         if self.count >= 10 {
             self.ctx.stop();
         }
+        std::future::pending::<()>().await;
         Ok(())
     }
 }
@@ -146,6 +142,7 @@ async fn main() -> Result<(), MaikoError> {
     supervisor.add_actor("Printer", |_| Printer, &[GuesserTopic::Output])?;
 
     supervisor.run().await?;
+    println!("Game over!");
 
     Ok(())
 }

@@ -11,6 +11,7 @@ pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Envelope<E>>,
     subscribers: Vec<Subscriber<E, T>>,
     cancel_token: Arc<CancellationToken>,
+    alive: bool,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
@@ -22,6 +23,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             receiver,
             subscribers: Vec::new(),
             cancel_token,
+            alive: false,
         }
     }
 
@@ -44,18 +46,18 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     pub async fn run(&mut self) -> Result<()> {
         let max = self.receiver.max_capacity();
         let mut result = Ok(());
-        loop {
+        self.alive = true;
+        while self.alive {
             if self.receiver.len() == max {
                 result = Err(Error::ChannelIsFull);
                 break;
             }
             select! {
-                _ = self.cancel_token.cancelled() => break,
+                _ = self.cancel_token.cancelled() => {
+                    self.alive = false;
+                }
                 Some(e) = self.receiver.recv() => self.send_event(&e).await?,
             }
-        }
-        if !self.receiver.is_closed() {
-            self.receiver.close();
         }
         result
     }
