@@ -1,8 +1,12 @@
 use std::sync::{Arc, atomic::AtomicBool};
 
 use tokio::{
-    sync::mpsc::{Sender, channel},
-    task::JoinHandle,
+    select,
+    sync::{
+        Mutex,
+        mpsc::{Sender, channel},
+    },
+    task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -16,9 +20,10 @@ use crate::{Actor, Config, Context, Envelope, Error, Event, Result, Topic};
 /// - Emit events into the broker with `send(event)`.
 pub struct Supervisor<E: Event, T: Topic<E>> {
     config: Config,
+    // broker: Arc<Mutex<Broker<E, T>>>,
     broker: Option<Broker<E, T>>,
     sender: Sender<Envelope<E>>,
-    handles: Vec<JoinHandle<Result<()>>>,
+    tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
 }
 
@@ -28,10 +33,11 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         let (tx, rx) = channel::<Envelope<E>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
         Self {
+            // broker: Arc::new(Mutex::new(Broker::new(rx, cancel_token.clone()))),
             broker: Some(Broker::new(rx, cancel_token.clone())),
             config,
             sender: tx,
-            handles: Vec::new(),
+            tasks: JoinSet::new(),
             cancel_token,
         }
     }
@@ -45,10 +51,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         A: Actor<Event = E> + 'static,
         F: FnOnce(Context<E>) -> A,
     {
-        let broker = self
-            .broker
-            .as_mut()
-            .expect("Broker has already been started; cannot add more actors.");
+        // let mut broker = self.broker.try_lock().unwrap();
         let name: Arc<str> = Arc::from(name);
         let alive = Arc::new(AtomicBool::new(true));
         let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.config.channel_size);
@@ -60,7 +63,8 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         let actor = factory(ctx.clone());
 
         let subscriber = Subscriber::<E, T>::new(name.clone(), topics, tx);
-        broker.add_subscriber(subscriber);
+        // broker.add_subscriber(subscriber);
+        self.broker.as_mut().unwrap().add_subscriber(subscriber);
 
         let mut handler = ActorHandler {
             actor,
@@ -69,8 +73,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             ctx,
         };
 
-        let join_handle = tokio::spawn(async move { handler.run().await });
-        self.handles.push(join_handle);
+        self.tasks.spawn(async move { handler.run().await });
 
         Ok(())
     }
@@ -79,13 +82,27 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     /// (or the cancellation token is triggered), then waits for all actors
     /// to finish.
     pub async fn start(&mut self) -> Result<()> {
-        let mut broker = self
-            .broker
-            .take()
-            .ok_or_else(|| Error::BrokerAlreadyStarted)?;
-        let handle = tokio::spawn(async move { broker.run().await });
-        self.handles.push(handle);
+        // let broker = self.broker.clone();
+        let mut broker = self.broker.take().unwrap();
+        self.tasks.spawn(async move { broker.run().await });
         Ok(())
+        // broker.run().await
+    }
+
+    pub async fn join(&mut self) -> Result<()> {
+        while let Some(res) = self.tasks.join_next().await {
+            res??;
+        }
+        Ok(())
+    }
+
+    pub async fn run(&mut self) -> Result<()> {
+        self.start().await?;
+        let token = self.cancel_token.clone();
+        select! {
+            _ = token.cancelled() => {},
+        }
+        self.join().await
     }
 
     /// Emit an event into the broker from the supervisor.
@@ -97,9 +114,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     /// Request a graceful shutdown, then await all actor tasks.
     pub async fn stop(&mut self) -> Result<()> {
         self.cancel_token.cancel();
-        while let Some(handle) = self.handles.pop() {
-            handle.await??;
-        }
+        self.join().await?;
         Ok(())
     }
 }
