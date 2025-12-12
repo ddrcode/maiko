@@ -33,6 +33,9 @@ impl<E: Event> From<SendError<Envelope<E>>> for Error {
 
 impl<E: Event> From<TrySendError<Envelope<E>>> for Error {
     fn from(e: TrySendError<Envelope<E>>) -> Self {
-        Error::SendError(e.to_string())
+        match e {
+            TrySendError::Full(_) => Error::ChannelIsFull,
+            TrySendError::Closed(_) => Error::SendError(e.to_string()),
+        }
     }
 }

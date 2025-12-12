@@ -70,6 +70,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             actor,
             receiver: rx,
             ctx,
+            drain_limit: self.config.drain_limit,
         };
 
         self.tasks.spawn(async move { handler.run().await });

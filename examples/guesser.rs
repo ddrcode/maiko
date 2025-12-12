@@ -135,9 +135,9 @@ impl Actor for Printer {
 async fn main() -> Result<(), MaikoError> {
     let mut supervisor = Supervisor::<GuesserEvent, GuesserTopic>::default();
 
-    supervisor.add_actor("Player1", |ctx| Guesser::new(ctx, 2000), &[])?;
-    supervisor.add_actor("Player2", |ctx| Guesser::new(ctx, 750), &[])?;
-    supervisor.add_actor("Game", |ctx| Game::new(ctx), &[GuesserTopic::Game])?;
+    supervisor.add_actor("Player1", |ctx| Guesser::new(ctx, 500), &[])?;
+    supervisor.add_actor("Player2", |ctx| Guesser::new(ctx, 350), &[])?;
+    supervisor.add_actor("Game", Game::new, &[GuesserTopic::Game])?;
     supervisor.add_actor("Printer", |_| Printer, &[GuesserTopic::Output])?;
 
     supervisor.run().await?;

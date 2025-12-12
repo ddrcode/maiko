@@ -8,6 +8,7 @@ pub(crate) struct ActorHandler<A: Actor> {
     pub(crate) actor: A,
     pub(crate) receiver: Receiver<Envelope<A::Event>>,
     pub(crate) ctx: Context<A::Event>,
+    pub(crate) drain_limit: usize,
 }
 
 impl<A: Actor> ActorHandler<A> {
@@ -23,7 +24,7 @@ impl<A: Actor> ActorHandler<A> {
                     return Err(e);
                 }
                 cnt += 1;
-                if cnt == 10 {
+                if cnt == self.drain_limit {
                     break;
                 }
             }

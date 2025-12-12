@@ -37,17 +37,15 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         let topic = Topic::from_event(&e.event);
         self.subscribers
             .iter()
-            .filter(|s| s.topics.contains(&topic))
-            .filter(|s| s.name != e.meta.sender().into())
+            .filter(|s| s.topics.contains(&topic) && s.name != e.meta.sender().into())
             .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
         Ok(())
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        let max = self.receiver.max_capacity();
         let mut result = Ok(());
         loop {
-            if self.receiver.len() == max {
+            if self.receiver.capacity() == 0 {
                 result = Err(Error::ChannelIsFull);
                 break;
             }
