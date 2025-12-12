@@ -4,6 +4,7 @@ use std::sync::{
 };
 
 use tokio::sync::mpsc::Sender;
+use tokio_util::sync::CancellationToken;
 
 use crate::{Envelope, Event, Result};
 
@@ -12,6 +13,7 @@ pub struct Context<E: Event> {
     pub(crate) name: Arc<str>,
     pub(crate) sender: Sender<Envelope<E>>,
     pub(crate) alive: Arc<AtomicBool>,
+    pub(crate) cancel_token: Arc<CancellationToken>,
 }
 
 impl<E: Event> Context<E> {
@@ -19,11 +21,13 @@ impl<E: Event> Context<E> {
         self.sender
             .send(Envelope::new(event, self.name.as_ref()))
             .await?;
+        // .try_send(Envelope::new(event, self.name.as_ref()))?;
         Ok(())
     }
 
     pub fn stop(&self) {
-        self.alive.store(false, Ordering::Relaxed);
+        self.alive.store(false, Ordering::Release);
+        self.cancel_token.cancel();
     }
 
     #[inline]

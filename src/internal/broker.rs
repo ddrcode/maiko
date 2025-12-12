@@ -33,14 +33,23 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(())
     }
 
-    async fn send_event(&mut self, e: &Envelope<E>) -> Result<()> {
+    fn send_event(&mut self, e: &Envelope<E>) -> Result<()> {
         let topic = Topic::from_event(&e.event);
-        for s in self
+        self.subscribers
+            .iter()
+            .filter(|s| s.topics.contains(&topic))
+            .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
+        Ok(())
+    }
+
+    async fn send_event_blocking(&mut self, e: &Envelope<E>) -> Result<()> {
+        let topic = Topic::from_event(&e.event);
+        for subscriber in self
             .subscribers
             .iter()
-            .filter(|s| s.topics.contains(&topic) && s.name != e.meta.sender().into())
+            .filter(|s| s.topics.contains(&topic))
         {
-            s.sender.send(e.clone()).await?;
+            subscriber.sender.send(e.clone()).await?;
         }
         Ok(())
     }
@@ -57,7 +66,10 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 _ = self.cancel_token.cancelled() => {
                     break;
                 }
-                Some(e) = self.receiver.recv() => self.send_event(&e).await?,
+                Some(e) = self.receiver.recv() => {
+                    self.send_event_blocking(&e).await?;
+                    // tokio::task::yield_now().await;
+                },
             }
         }
         result

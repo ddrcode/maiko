@@ -102,7 +102,6 @@ impl Actor for Game {
         if self.count >= 10 {
             self.ctx.stop();
         }
-        std::future::pending::<()>().await;
         Ok(())
     }
 }

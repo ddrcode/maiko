@@ -59,6 +59,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             name: name.clone(),
             sender: self.sender.clone(),
             alive: alive.clone(),
+            cancel_token: self.cancel_token.clone(),
         };
         let actor = factory(ctx.clone());
 
@@ -68,7 +69,6 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         let mut handler = ActorHandler {
             actor,
             receiver: rx,
-            cancel_token: self.cancel_token.clone(),
             ctx,
         };
 
