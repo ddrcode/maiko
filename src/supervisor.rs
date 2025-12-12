@@ -7,7 +7,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::internal::{ActorHandler, Broker, Subscriber};
-use crate::{Actor, Config, Context, Envelope, Event, Result, Topic};
+use crate::{Actor, Config, Context, Envelope, Error, Event, Result, Topic};
 
 /// Coordinates actors and the broker, and owns the top-level runtime.
 ///
@@ -16,19 +16,19 @@ use crate::{Actor, Config, Context, Envelope, Event, Result, Topic};
 /// - Emit events into the broker with `send(event)`.
 pub struct Supervisor<E: Event, T: Topic<E>> {
     config: Config,
-    broker: Broker<E, T>,
+    broker: Option<Broker<E, T>>,
     sender: Sender<Envelope<E>>,
     handles: Vec<JoinHandle<Result<()>>>,
     cancel_token: Arc<CancellationToken>,
 }
 
-impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
+impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
     /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
         let (tx, rx) = channel::<Envelope<E>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
         Self {
-            broker: Broker::new(rx, cancel_token.clone()),
+            broker: Some(Broker::new(rx, cancel_token.clone())),
             config,
             sender: tx,
             handles: Vec::new(),
@@ -45,6 +45,10 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         A: Actor<Event = E> + 'static,
         F: FnOnce(Context<E>) -> A,
     {
+        let broker = self
+            .broker
+            .as_mut()
+            .expect("Broker has already been started; cannot add more actors.");
         let name: Arc<str> = Arc::from(name);
         let alive = Arc::new(AtomicBool::new(true));
         let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.config.channel_size);
@@ -56,7 +60,7 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
         let actor = factory(ctx.clone());
 
         let subscriber = Subscriber::<E, T>::new(name.clone(), topics, tx);
-        self.broker.add_subscriber(subscriber);
+        broker.add_subscriber(subscriber);
 
         let mut handler = ActorHandler {
             actor,
@@ -75,7 +79,12 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
     /// (or the cancellation token is triggered), then waits for all actors
     /// to finish.
     pub async fn start(&mut self) -> Result<()> {
-        self.broker.run().await?;
+        let mut broker = self
+            .broker
+            .take()
+            .ok_or_else(|| Error::BrokerAlreadyStarted)?;
+        let handle = tokio::spawn(async move { broker.run().await });
+        self.handles.push(handle);
         Ok(())
     }
 
@@ -95,7 +104,7 @@ impl<E: Event + 'static, T: Topic<E>> Supervisor<E, T> {
     }
 }
 
-impl<E: Event + 'static, T: Topic<E>> Default for Supervisor<E, T> {
+impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Default for Supervisor<E, T> {
     fn default() -> Self {
         Self::new(Config::default())
     }

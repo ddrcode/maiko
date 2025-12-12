@@ -10,10 +10,7 @@ No new concepts to learn: just a few trait methods and standard Tokio channels.
 
 ```rust
 #[derive(Clone, Debug)]
-enum PingPongEvent {
-    Ping,
-    Pong,
-}
+enum PingPongEvent { Ping, Pong }
 impl Event for PingPongEvent {}
 
 struct PingPong;
@@ -21,14 +18,8 @@ struct PingPong;
 #[async_trait]
 impl Actor for PingPong {
     type Event = PingPongEvent;
-
-    async fn on_start(&mut self) -> Result<()> {
-        // Emit initial event from a dedicated actor (e.g., a generator)
-        Ok(())
-    }
-
     async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
-        println!("Event: {event:?}");
+        match event { PingPongEvent::Ping => println!("Ping"), PingPongEvent::Pong => println!("Pong") }
         Ok(())
     }
 }
@@ -38,7 +29,9 @@ pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::default();
     sup.add_actor(PingPong, vec![DefaultTopic])?;
     sup.add_actor(PingPong, vec![DefaultTopic])?;
-    sup.start().await?;
+
+    // Blocking: start + await shutdown
+    sup.run().await?;
     Ok(())
 }
 ```
@@ -58,7 +51,34 @@ pub async fn main() -> Result<()> {
 - `Event`: marker trait implemented for your event enum (derive macro available).
 - `Topic<E>`: maps events to topics for routing.
 - `Actor`: implement `handle`, optionally `tick`, `on_start`, `on_shutdown`.
-- `Supervisor<E,T>`: register actors via `add_actor(actor, topics)`; start with `start()`, stop with `stop()`.
+- `Supervisor<E,T>`: register actors via `add_actor(actor, topics)`.
+    - `start()`: non-blocking; spawns the broker.
+    - `join()`: await broker and actors to finish.
+    - `run()`: start + join (blocking until shutdown).
+    - `stop()`: request graceful shutdown and await.
+
+### Patterns
+
+Blocking:
+```rust
+sup.run().await?;
+```
+
+Non-blocking service:
+```rust
+sup.start()?;
+// do other work
+sup.stop().await?;
+```
+
+With timeout:
+```rust
+use tokio::{select, time::{sleep, Duration}};
+select! {
+        _ = sup.run() => {},
+        _ = sleep(Duration::from_secs(5)) => sup.stop().await?,
+}
+```
 
 See `examples/` for runnable demos.
 

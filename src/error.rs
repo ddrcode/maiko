@@ -12,6 +12,9 @@ pub enum Error {
 
     #[error("Actor task join error: {0}")]
     ActorJoinError(#[from] tokio::task::JoinError),
+
+    #[error("Broker has already started.")]
+    BrokerAlreadyStarted,
 }
 
 impl<E: Event> From<SendError<Envelope<E>>> for Error {

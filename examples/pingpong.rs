@@ -40,13 +40,8 @@ pub async fn main() -> Result<()> {
     sup.add_actor("ping-side", |ctx| PingPong { ctx }, vec![DefaultTopic])?;
     sup.add_actor("pong-side", |ctx| PingPong { ctx }, vec![DefaultTopic])?;
 
-    let timeout = tokio::time::sleep(tokio::time::Duration::from_millis(1));
-    select! {
-        _ = sup.start() => {},
-        _ = timeout => {
-            sup.stop().await?;
-        }
-    }
-
+    sup.start().await?;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+    sup.stop().await?;
     Ok(())
 }
