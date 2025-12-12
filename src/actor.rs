@@ -2,7 +2,7 @@ use core::marker::Send;
 
 use async_trait::async_trait;
 
-use crate::{Event, Meta, Result};
+use crate::{Error, Event, Meta, Result};
 
 /// Core trait implemented by user-defined actors.
 ///
@@ -43,5 +43,9 @@ pub trait Actor: Send {
     /// Lifecycle hook called once after the event loop stops.
     async fn on_shutdown(&mut self) -> Result<()> {
         Ok(())
+    }
+
+    fn on_error(&self, error: &Error) -> bool {
+        true
     }
 }

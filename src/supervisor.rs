@@ -1,7 +1,6 @@
 use std::sync::{Arc, atomic::AtomicBool};
 
 use tokio::{
-    select,
     sync::{
         Mutex,
         mpsc::{Sender, channel},

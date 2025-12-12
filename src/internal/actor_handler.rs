@@ -20,9 +20,17 @@ impl<A: Actor> ActorHandler<A> {
             select! {
                 biased;
                 Some(event) = self.receiver.recv() => {
-                    self.actor.handle(&event.event, &event.meta).await?;
+                    if let Err(e) = self.actor.handle(&event.event, &event.meta).await {
+                        self.actor.on_error(&e);
+                        return Err(e);
+                    }
                 },
-                r = self.actor.tick() => r?,
+                r = self.actor.tick() => {
+                    if let Err(e) = r {
+                        self.actor.on_error(&e);
+                        return Err(e);
+                    }
+                },
                 _ = token.cancelled() => {
                     self.ctx.stop();
                     break;
