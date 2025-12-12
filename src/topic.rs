@@ -58,7 +58,7 @@ mod tests {
         }
         impl Event for TestEvent {}
 
-        #[derive(Debug, PartialEq, Eq, Hash)]
+        #[derive(Debug, PartialEq, Eq, Hash, Clone)]
         enum TestTopic {
             IoT,
             System,
@@ -98,7 +98,7 @@ mod tests {
         }
         impl Event for TestEvent {}
 
-        #[derive(Debug, PartialEq, Eq, Hash)]
+        #[derive(Debug, PartialEq, Eq, Hash, Clone)]
         struct TestTopic {
             name: String,
         }

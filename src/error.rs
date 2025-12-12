@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tokio::sync::mpsc::error::SendError;
 
 use crate::{Envelope, Event};
@@ -18,6 +20,9 @@ pub enum Error {
 
     #[error("The message channel has reached its capacity.")]
     ChannelIsFull,
+
+    #[error("Subscriber with name '{0}' already exists.")]
+    SubscriberAlreadyExists(Arc<str>),
 }
 
 impl<E: Event> From<SendError<Envelope<E>>> for Error {

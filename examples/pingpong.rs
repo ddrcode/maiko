@@ -17,8 +17,8 @@ impl Actor for PingPong {
     type Event = PingPongEvent;
 
     async fn on_start(&mut self) -> Result<()> {
-        if self.ctx.name() == "ping-side" {
-            self.ctx.send(PingPongEvent::Pong).await?;
+        if self.ctx.name() == "pong-side" {
+            self.ctx.send(PingPongEvent::Ping).await?;
         }
         Ok(())
     }
@@ -45,4 +45,3 @@ pub async fn main() -> Result<()> {
     println!("Done");
     Ok(())
 }
-use tokio::{self, select};

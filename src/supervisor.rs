@@ -63,7 +63,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         let actor = factory(ctx.clone());
 
         let subscriber = Subscriber::<E, T>::new(name.clone(), topics, tx);
-        broker.add_subscriber(subscriber);
+        broker.add_subscriber(subscriber)?;
 
         let mut handler = ActorHandler {
             actor,
