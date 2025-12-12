@@ -31,6 +31,7 @@ pub trait Actor: Send {
     /// If implemented, this will be polled in the actor loop alongside
     /// event reception. Keep it lightweight and non-blocking.
     async fn tick(&mut self) -> Result<()> {
+        std::future::pending::<()>().await;
         Ok(())
     }
 

@@ -4,7 +4,7 @@ use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
 
 use super::Subscriber;
-use crate::{Envelope, Event, Result, Topic};
+use crate::{Envelope, Error, Event, Result, Topic};
 
 #[derive(Debug)]
 pub struct Broker<E: Event, T: Topic<E>> {
@@ -42,7 +42,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     pub async fn run(&mut self) -> Result<()> {
+        let max = self.receiver.max_capacity();
+        let mut result = Ok(());
         loop {
+            if self.receiver.len() == max {
+                result = Err(Error::ChannelIsFull);
+                break;
+            }
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => self.send_event(&e).await?,
@@ -51,6 +57,6 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         if !self.receiver.is_closed() {
             self.receiver.close();
         }
-        Ok(())
+        result
     }
 }

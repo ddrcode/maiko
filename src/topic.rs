@@ -8,13 +8,13 @@ use crate::event::Event;
 /// events for the broker. Actors subscribe to one or more topics, and the
 /// broker delivers events to matching subscribers.
 
-pub trait Topic<E: Event>: Hash + PartialEq + Eq {
+pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone {
     fn from_event(event: &E) -> Self
     where
         Self: Sized;
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct DefaultTopic;
 
 impl<E: Event> Topic<E> for DefaultTopic {

@@ -12,7 +12,7 @@ enum GuesserEvent {
 }
 impl Event for GuesserEvent {}
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 enum GuesserTopic {
     Game,
     Output,
@@ -83,6 +83,7 @@ impl Actor for Game {
             .await
     }
     async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
+        println!("Event {event:?}");
         if self.count >= 10 {
             self.ctx.stop();
             return Ok(());
@@ -139,12 +140,12 @@ impl Actor for Printer {
 async fn main() -> Result<(), MaikoError> {
     let mut supervisor = Supervisor::<GuesserEvent, GuesserTopic>::default();
 
-    supervisor.add_actor("Player1", |ctx| Guesser::new(ctx, 2000), vec![])?;
-    supervisor.add_actor("Player2", |ctx| Guesser::new(ctx, 750), vec![])?;
-    supervisor.add_actor("Game", |ctx| Game::new(ctx), vec![GuesserTopic::Game])?;
-    supervisor.add_actor("Printer", |_| Printer, vec![GuesserTopic::Output])?;
+    supervisor.add_actor("Player1", |ctx| Guesser::new(ctx, 2000), &[])?;
+    supervisor.add_actor("Player2", |ctx| Guesser::new(ctx, 750), &[])?;
+    supervisor.add_actor("Game", |ctx| Game::new(ctx), &[GuesserTopic::Game])?;
+    supervisor.add_actor("Printer", |_| Printer, &[GuesserTopic::Output])?;
 
-    supervisor.start().await?;
+    supervisor.run().await?;
 
     Ok(())
 }

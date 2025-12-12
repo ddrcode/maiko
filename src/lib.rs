@@ -37,6 +37,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub mod prelude {
     //! Convenience imports for typical Maiko usage.
     pub use crate::actor::Actor;
+    pub use crate::context::Context;
     pub use crate::error::Error as MaikoError;
     pub use crate::event::Event;
     pub use crate::meta::Meta;

@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use maiko::{Actor, Context, DefaultTopic, Event, Meta, Result, Supervisor};
-use tokio::{self, select};
 
 #[derive(Clone, Debug)]
 enum PingPongEvent {
@@ -36,13 +35,13 @@ impl Actor for PingPong {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let mut sup = Supervisor::<PingPongEvent, DefaultTopic>::default();
-    sup.add_actor("ping-side", |ctx| PingPong { ctx }, vec![DefaultTopic])?;
-    sup.add_actor("pong-side", |ctx| PingPong { ctx }, vec![DefaultTopic])?;
+    let mut sup = Supervisor::<PingPongEvent>::default();
+    sup.add_actor("ping-side", |ctx| PingPong { ctx }, &[DefaultTopic])?;
+    sup.add_actor("pong-side", |ctx| PingPong { ctx }, &[DefaultTopic])?;
 
     sup.start().await?;
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+    sup.stop().await?;
     println!("Done");
-    // sup.stop().await?;
     Ok(())
 }

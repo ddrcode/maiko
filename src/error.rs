@@ -15,6 +15,9 @@ pub enum Error {
 
     #[error("Broker has already started.")]
     BrokerAlreadyStarted,
+
+    #[error("The message channel has reached its capacity.")]
+    ChannelIsFull,
 }
 
 impl<E: Event> From<SendError<Envelope<E>>> for Error {
