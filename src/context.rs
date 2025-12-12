@@ -21,7 +21,6 @@ impl<E: Event> Context<E> {
         self.sender
             .send(Envelope::new(event, self.name.as_ref()))
             .await?;
-        // .try_send(Envelope::new(event, self.name.as_ref()))?;
         Ok(())
     }
 

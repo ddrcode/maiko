@@ -15,12 +15,20 @@ impl<A: Actor> ActorHandler<A> {
         self.actor.on_start().await?;
         let token = self.ctx.cancel_token.clone();
         while self.ctx.alive.load(Ordering::Acquire) {
-            if let Ok(event) = self.receiver.try_recv() {
+            let mut cnt = 0;
+            while let Ok(event) = self.receiver.try_recv() {
                 if let Err(e) = self.actor.handle(&event.event, &event.meta).await
                     && self.actor.on_error(&e)
                 {
                     return Err(e);
                 }
+                cnt += 1;
+                if cnt == 10 {
+                    break;
+                }
+            }
+            if cnt > 0 {
+                tokio::task::yield_now().await;
             }
 
             if let Err(e) = self.actor.tick().await
@@ -33,9 +41,8 @@ impl<A: Actor> ActorHandler<A> {
                 self.ctx.stop();
                 break;
             }
-
-            tokio::task::yield_now().await;
         }
+
         self.actor.on_shutdown().await
     }
 }

@@ -38,19 +38,8 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         self.subscribers
             .iter()
             .filter(|s| s.topics.contains(&topic))
+            .filter(|s| s.name != e.meta.sender().into())
             .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
-        Ok(())
-    }
-
-    async fn send_event_blocking(&mut self, e: &Envelope<E>) -> Result<()> {
-        let topic = Topic::from_event(&e.event);
-        for subscriber in self
-            .subscribers
-            .iter()
-            .filter(|s| s.topics.contains(&topic))
-        {
-            subscriber.sender.send(e.clone()).await?;
-        }
         Ok(())
     }
 
@@ -67,8 +56,8 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                     break;
                 }
                 Some(e) = self.receiver.recv() => {
-                    self.send_event_blocking(&e).await?;
-                    // tokio::task::yield_now().await;
+                    self.send_event(&e)?;
+                    tokio::task::yield_now().await;
                 },
             }
         }
