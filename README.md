@@ -1,6 +1,6 @@
 # Maiko
 
-A lightweight, topic-based actor library for Tokio. Unlike many actor libraries (like Actix or Ractor), that are inspired by
+A lightweight, event-based actor library for Tokio. Unlike many actor libraries (like Actix or Ractor), that are inspired by
 Erlang/Akka, Maiko focuses on maximum decoupling and is bringing distributed system patterns
 (like event broker, topics, etc) to local actor model.
 
