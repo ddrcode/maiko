@@ -76,7 +76,6 @@ impl Game {
 }
 
 #[async_trait]
-
 impl Actor for Game {
     type Event = GuesserEvent;
 
@@ -90,9 +89,9 @@ impl Actor for Game {
 
     async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
         if let GuesserEvent::Guess(guess) = event {
-            if meta.sender_name() == "Player1" {
+            if meta.actor_name() == "Player1" {
                 self.number1 = Some(*guess);
-            } else if meta.sender_name() == "Player2" {
+            } else if meta.actor_name() == "Player2" {
                 self.number2 = Some(*guess);
             }
 

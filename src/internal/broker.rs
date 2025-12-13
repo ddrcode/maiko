@@ -37,7 +37,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         let topic = Topic::from_event(&e.event);
         self.subscribers
             .iter()
-            .filter(|s| s.topics.contains(&topic) && s.name != e.meta.sender_name().into())
+            .filter(|s| s.topics.contains(&topic) && s.name != e.meta.actor_name().into())
             .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
         Ok(())
     }

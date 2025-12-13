@@ -3,6 +3,10 @@ use std::sync::Arc;
 use crate::{Event, Meta};
 
 /// Event plus metadata used by the broker for routing and observability.
+///
+/// - `event`: the user-defined payload implementing `Event`.
+/// - `meta`: `Meta` describing who emitted the event and when.
+///   Includes `actor_name` and optional `correlation_id` for linking related events.
 #[derive(Debug, Clone)]
 pub struct Envelope<E: Event> {
     pub meta: Meta,
@@ -10,23 +14,26 @@ pub struct Envelope<E: Event> {
 }
 
 impl<E: Event> Envelope<E> {
-    /// Create a new envelope tagging the event with the given sender name.
-    pub fn new<N>(event: E, sender_name: N) -> Self
+    /// Create a new envelope tagging the event with the given actor name.
+    pub fn new<N>(event: E, actor_name: N) -> Self
     where
         N: Into<Arc<str>>,
     {
         Self {
-            meta: Meta::new(sender_name.into(), None),
+            meta: Meta::new(actor_name.into(), None),
             event,
         }
     }
 
-    pub fn with_correlation_id<N>(event: E, sender_name: N, correlation_id: u128) -> Self
+    /// Create a new envelope with an explicit correlation id.
+    ///
+    /// Use this to link child events to a parent or to group related flows.
+    pub fn with_correlation<N>(event: E, actor_name: N, correlation_id: u128) -> Self
     where
         N: Into<Arc<str>>,
     {
         Self {
-            meta: Meta::new(sender_name.into(), Some(correlation_id)),
+            meta: Meta::new(actor_name.into(), Some(correlation_id)),
             event,
         }
     }
