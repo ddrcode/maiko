@@ -12,10 +12,10 @@ pub(crate) struct Subscriber<E: Event, T: Topic<E>> {
 }
 
 impl<E: Event, T: Topic<E>> Subscriber<E, T> {
-    pub fn new(name: Arc<str>, topics: Vec<T>, sender: Sender<Envelope<E>>) -> Subscriber<E, T> {
+    pub fn new(name: Arc<str>, topics: &[T], sender: Sender<Envelope<E>>) -> Subscriber<E, T> {
         Subscriber {
             name,
-            topics: topics.into_iter().collect(),
+            topics: topics.iter().cloned().collect(),
             sender,
         }
     }

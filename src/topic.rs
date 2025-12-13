@@ -2,13 +2,23 @@ use std::hash::Hash;
 
 use crate::event::Event;
 
-pub trait Topic<E: Event>: Hash + PartialEq + Eq {
+/// Maps events to routing topics.
+///
+/// Implement this for your own topic type (usually an enum) to classify
+/// events for the broker. Actors subscribe to one or more topics, and the
+/// broker delivers events to matching subscribers.
+///
+/// Common patterns:
+/// - Enum topics for simple classification.
+/// - Struct topics when you need richer metadata (e.g., names or IDs).
+
+pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone {
     fn from_event(event: &E) -> Self
     where
         Self: Sized;
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct DefaultTopic;
 
 impl<E: Event> Topic<E> for DefaultTopic {
@@ -52,7 +62,7 @@ mod tests {
         }
         impl Event for TestEvent {}
 
-        #[derive(Debug, PartialEq, Eq, Hash)]
+        #[derive(Debug, PartialEq, Eq, Hash, Clone)]
         enum TestTopic {
             IoT,
             System,
@@ -92,7 +102,7 @@ mod tests {
         }
         impl Event for TestEvent {}
 
-        #[derive(Debug, PartialEq, Eq, Hash)]
+        #[derive(Debug, PartialEq, Eq, Hash, Clone)]
         struct TestTopic {
             name: String,
         }
