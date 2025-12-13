@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
+use std::pin::Pin;
 use maiko::prelude::*;
 use tokio::time::sleep;
 
@@ -44,13 +44,31 @@ impl Guesser {
     }
 }
 
-#[async_trait]
 impl Actor for Guesser {
     type Event = GuesserEvent;
-    async fn tick(&mut self) -> maiko::Result<()> {
-        sleep(self.cycle_time).await;
-        let guess = rand::random::<u8>() % 10;
-        self.ctx.send(GuesserEvent::Guess(guess)).await
+    type HandleFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type TickFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type StartFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type ShutdownFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+
+    fn handle<'a>(&'a mut self, _event: &'a Self::Event, _meta: &'a Meta) -> Self::HandleFuture<'a> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn tick<'a>(&'a mut self) -> Self::TickFuture<'a> {
+        Box::pin(async move {
+            sleep(self.cycle_time).await;
+            let guess = rand::random::<u8>() % 10;
+            self.ctx.send(GuesserEvent::Guess(guess)).await
+        })
+    }
+
+    fn on_start<'a>(&'a mut self) -> Self::StartFuture<'a> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn on_shutdown<'a>(&'a mut self) -> Self::ShutdownFuture<'a> {
+        Box::pin(async { Ok(()) })
     }
 }
 
@@ -72,62 +90,96 @@ impl Game {
     }
 }
 
-#[async_trait]
 impl Actor for Game {
     type Event = GuesserEvent;
-    async fn on_start(&mut self) -> maiko::Result<()> {
-        self.ctx
-            .send(GuesserEvent::Message(
-                "Welcome to the Guessing Game!\n(the game will stop after 10 attempts)".to_string(),
-            ))
-            .await
+    type HandleFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type TickFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type StartFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type ShutdownFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+
+    fn on_start<'a>(&'a mut self) -> Self::StartFuture<'a> {
+        Box::pin(async move {
+            self.ctx
+                .send(GuesserEvent::Message(
+                    "Welcome to the Guessing Game!\n(the game will stop after 10 attempts)".to_string(),
+                ))
+                .await
+        })
     }
-    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
-        if let GuesserEvent::Guess(guess) = event {
-            if meta.sender() == "Player1" {
-                self.number1 = Some(*guess);
-            } else if meta.sender() == "Player2" {
-                self.number2 = Some(*guess);
+
+    fn handle<'a>(&'a mut self, event: &'a Self::Event, meta: &'a Meta) -> Self::HandleFuture<'a> {
+        Box::pin(async move {
+            if let GuesserEvent::Guess(guess) = event {
+                if meta.sender() == "Player1" {
+                    self.number1 = Some(*guess);
+                } else if meta.sender() == "Player2" {
+                    self.number2 = Some(*guess);
+                }
+                if let (Some(n1), Some(n2)) = (self.number1, self.number2) {
+                    self.count += 1;
+                    self.number1 = None;
+                    self.number2 = None;
+                    self.ctx.send(GuesserEvent::Result(n1, n2)).await?;
+                }
             }
-            if let (Some(n1), Some(n2)) = (self.number1, self.number2) {
-                self.count += 1;
-                self.number1 = None;
-                self.number2 = None;
-                self.ctx.send(GuesserEvent::Result(n1, n2)).await?;
-            }
-        }
-        Ok(())
+            Ok(())
+        })
     }
-    async fn tick(&mut self) -> maiko::Result<()> {
-        if self.count >= 10 {
-            self.ctx.stop();
-        }
-        Ok(())
+
+    fn tick<'a>(&'a mut self) -> Self::TickFuture<'a> {
+        Box::pin(async move {
+            if self.count >= 10 {
+                self.ctx.stop();
+            }
+            Ok(())
+        })
+    }
+
+    fn on_shutdown<'a>(&'a mut self) -> Self::ShutdownFuture<'a> {
+        Box::pin(async { Ok(()) })
     }
 }
 
 struct Printer;
 
-#[async_trait]
 impl Actor for Printer {
     type Event = GuesserEvent;
-    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> maiko::Result<()> {
-        match event {
-            GuesserEvent::Message(msg) => {
-                println!("{}", msg);
+    type HandleFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type TickFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type StartFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+    type ShutdownFuture<'a> = Pin<Box<dyn std::future::Future<Output = maiko::Result<()>> + Send + 'a>>;
+
+    fn handle<'a>(&'a mut self, event: &'a Self::Event, _meta: &'a Meta) -> Self::HandleFuture<'a> {
+        Box::pin(async move {
+            match event {
+                GuesserEvent::Message(msg) => {
+                    println!("{}", msg);
+                }
+                GuesserEvent::Result(guess, number) if guess == number => {
+                    println!("Correct guess! The number was {}", number);
+                }
+                GuesserEvent::Result(guess, number) if guess != number => {
+                    println!(
+                        "Wrong! The number was {} while the guess was {}",
+                        number, guess
+                    );
+                }
+                _ => {}
             }
-            GuesserEvent::Result(guess, number) if guess == number => {
-                println!("Correct guess! The number was {}", number);
-            }
-            GuesserEvent::Result(guess, number) if guess != number => {
-                println!(
-                    "Wrong! The number was {} while the guess was {}",
-                    number, guess
-                );
-            }
-            _ => {}
-        }
-        Ok(())
+            Ok(())
+        })
+    }
+
+    fn tick<'a>(&'a mut self) -> Self::TickFuture<'a> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn on_start<'a>(&'a mut self) -> Self::StartFuture<'a> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn on_shutdown<'a>(&'a mut self) -> Self::ShutdownFuture<'a> {
+        Box::pin(async { Ok(()) })
     }
 }
 

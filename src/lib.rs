@@ -5,8 +5,8 @@
 //!
 //! Quick start:
 //! - Define your `Event` enum and `Topic` mapping.
-//! - Implement `Actor` for your type; the runtime injects an `ActorHandle` for emitting events and stopping.
-//! - Register actors via `Supervisor::add_actor` and call `start()`.
+//! - Implement `Actor` for your type using `async_trait`.
+//! - Register actors via `Supervisor::add_actor(name, |ctx| Actor, topics)` and call `run()` or `start()`.
 //!
 //! See `examples/guesser.rs` and `examples/pingpong.rs`.
 

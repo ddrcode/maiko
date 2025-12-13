@@ -10,7 +10,8 @@ use crate::{Error, Event, Meta, Result};
 /// work in `tick`, as well as lifecycle hooks in `on_start` and `on_shutdown`.
 ///
 /// Implementors typically hold any state they need, and use the runtime-provided
-/// context/handle (see `Supervisor`) to emit events and stop gracefully.
+/// `Context<E>` (via a constructor/factory passed to `Supervisor::add_actor`) to
+/// emit events and stop gracefully.
 
 #[allow(unused_variables)]
 #[async_trait]
@@ -20,8 +21,8 @@ pub trait Actor: Send {
     /// Handle a single incoming event.
     ///
     /// Called for every event routed to this actor. Return `Ok(())` when
-    /// processing succeeds, or an error to signal failure.
-    /// Use the runtime handle to emit follow-up events as needed.
+    /// processing succeeds, or an error to signal failure. Use `Context::send`
+    /// to emit follow-up events as needed.
     async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
         Ok(())
     }
@@ -45,6 +46,9 @@ pub trait Actor: Send {
         Ok(())
     }
 
+    /// Called when an error is returned by `handle` or `tick`.
+    /// Return `true` to propagate (terminate the actor), or `false` to
+    /// swallow and continue.
     fn on_error(&self, error: &Error) -> bool {
         true
     }

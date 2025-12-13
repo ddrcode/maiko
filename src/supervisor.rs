@@ -18,7 +18,9 @@ use crate::{
 /// Coordinates actors and the broker, and owns the top-level runtime.
 ///
 /// - Register actors with `add_actor(name, |ctx| Actor, topics)`.
-/// - Start the runtime with `start()`, which blocks until cancelled via `stop()`.
+/// - `start()` spawns the broker loop and returns immediately (non-blocking).
+/// - `join()` awaits all actor tasks to finish; typically used after `start()`.
+/// - `run()` combines `start()` + `join()` and blocks until shutdown.
 /// - Emit events into the broker with `send(event)`.
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     config: Config,
@@ -78,9 +80,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         Ok(())
     }
 
-    /// Run the broker loop. This method blocks until `stop()` is called
-    /// (or the cancellation token is triggered), then waits for all actors
-    /// to finish.
+    /// Start the broker loop in a background task. This returns immediately.
     pub async fn start(&mut self) -> Result<()> {
         let broker = self.broker.clone();
         // let mut broker = self.broker.take().unwrap();
@@ -96,6 +96,8 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         Ok(())
     }
 
+    /// Convenience method to start and then await completion of all tasks.
+    /// Blocks until shutdown.
     pub async fn run(&mut self) -> Result<()> {
         self.start().await?;
         self.join().await

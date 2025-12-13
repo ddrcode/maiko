@@ -7,6 +7,10 @@ use crate::event::Event;
 /// Implement this for your own topic type (usually an enum) to classify
 /// events for the broker. Actors subscribe to one or more topics, and the
 /// broker delivers events to matching subscribers.
+///
+/// Common patterns:
+/// - Enum topics for simple classification.
+/// - Struct topics when you need richer metadata (e.g., names or IDs).
 
 pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone {
     fn from_event(event: &E) -> Self
