@@ -6,7 +6,7 @@ use std::sync::{
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
-use crate::{Envelope, Event, Result};
+use crate::{Envelope, Event, Meta, Result};
 
 /// Runtime-provided context for an actor to interact with the system.
 ///
@@ -15,6 +15,10 @@ use crate::{Envelope, Event, Result};
 /// - `stop()`: request graceful shutdown of this actor (and trigger global cancel)
 /// - `name()`: retrieve the actor's name for logging/identity
 /// - `is_alive()`: check whether the actor loop should continue running
+///
+/// Correlation:
+/// - `send_with_correlation(event, id)`: emit an event linked to a specific correlation id.
+/// - `send_child_event(event, meta)`: convenience to set correlation id to the parent `meta.id()`.
 #[derive(Clone)]
 pub struct Context<E: Event> {
     pub(crate) name: Arc<str>,
@@ -25,10 +29,35 @@ pub struct Context<E: Event> {
 
 impl<E: Event> Context<E> {
     /// Send an event to the broker. The envelope will carry this actor's name.
+    /// This awaits channel capacity (backpressure) to avoid silent drops.
     pub async fn send(&self, event: E) -> Result<()> {
-        self.sender
-            .send(Envelope::new(event, self.name.as_ref()))
-            .await?;
+        self.send_envelope(Envelope::new(event, self.name.clone()))
+            .await
+    }
+
+    /// Send an event with an explicit correlation id.
+    pub async fn send_with_correlation(&self, event: E, correlation_id: u128) -> Result<()> {
+        self.send_envelope(Envelope::with_correlation(
+            event,
+            self.name.clone(),
+            correlation_id,
+        ))
+        .await
+    }
+
+    /// Emit a child event correlated to the given parent `Meta`.
+    pub async fn send_child_event(&self, event: E, meta: &Meta) -> Result<()> {
+        self.send_envelope(Envelope::with_correlation(
+            event,
+            self.name.clone(),
+            meta.id(),
+        ))
+        .await
+    }
+
+    #[inline]
+    async fn send_envelope(&self, envelope: Envelope<E>) -> Result<()> {
+        self.sender.send(envelope).await?;
         Ok(())
     }
 

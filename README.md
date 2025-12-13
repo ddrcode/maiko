@@ -103,6 +103,28 @@ See `examples/` for runnable demos.
 - **Supervisor stop**: `sup.stop().await` requests global cancellation and waits for actor tasks to complete.
 - **Backpressure**: Sending via `Context::send` awaits channel capacity. For time-sensitive flows, wrap calls in `tokio::time::timeout` or adopt a try-send pattern in your own code.
 
+## Correlation
+
+- **Purpose**: Correlate related events across an interaction (e.g., parent → child).
+- **Meta**: Every envelope carries `Meta { id, actor_name, correlation_id }`.
+- **Emit with correlation**:
+  - Explicit: `ctx.send_with_correlation(event, correlation_id).await?`
+  - Child of parent: `ctx.send_child_event(event, &parent_meta).await?` (uses `parent_meta.id()`)
+
+Example:
+```rust
+async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
+    match event {
+        Event::Request(req) => {
+            // Do work, then emit a response correlated to the request
+            self.ctx.send_child_event(Event::Response(req.id), meta).await?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+```
+
 ## Idea
 
 The project is not an out-of-blue idea - it emerged from my own experience while
