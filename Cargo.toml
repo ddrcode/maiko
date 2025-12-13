@@ -2,7 +2,7 @@
 name = "maiko"
 version = "0.1.0-alpha"
 edition = "2024"
-description = "A lightweight, topic-based actor system for Tokio"
+description = "A lightweight, event-based actor system for Tokio"
 authors = ["David de Rosier <ddrcode@gmail.com>"]
 license = "MIT"
 keywords = ["actor", "async", "events", "pubsub", "messaging"]
@@ -14,7 +14,7 @@ readme = "README.md"
 [dependencies]
 async-trait = "0.1.89"
 thiserror = "2.0.14"
-tokio = {version="1.47.1", features=["sync", "test-util", "macros", "rt-multi-thread"]}
+tokio = {version="1.47.1", features=["macros", "rt"]}
 uuid = { version = "1.18.0", features = ["v4"] }
 tokio-util = "0.7.17"
 

@@ -90,9 +90,9 @@ impl Actor for Game {
 
     async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
         if let GuesserEvent::Guess(guess) = event {
-            if meta.sender() == "Player1" {
+            if meta.sender_name() == "Player1" {
                 self.number1 = Some(*guess);
-            } else if meta.sender() == "Player2" {
+            } else if meta.sender_name() == "Player2" {
                 self.number2 = Some(*guess);
             }
 
