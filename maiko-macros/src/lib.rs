@@ -1,3 +1,14 @@
+//! Procedural macros for the Maiko actor runtime.
+//!
+//! - `#[derive(Event)]`: Implements `maiko::Event` for your type, preserving generics and bounds.
+//!
+//! Usage:
+//! ```rust
+//! use maiko_macros::Event;
+//!
+//! #[derive(Clone, Debug, Event)]
+//! enum MyEvent { Foo, Bar }
+//! ```
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, parse_macro_input};

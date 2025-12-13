@@ -22,6 +22,8 @@ use crate::{
 /// - `join()` awaits all actor tasks to finish; typically used after `start()`.
 /// - `run()` combines `start()` + `join()` and blocks until shutdown.
 /// - Emit events into the broker with `send(event)`.
+///
+/// See also: [`Actor`], [`Context`], [`Topic`].
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     config: Config,
     broker: Arc<Mutex<Broker<E, T>>>,

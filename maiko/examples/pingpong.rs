@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use maiko::prelude::*;
+use maiko::*;
 
 #[derive(Event, Clone, Debug)]
 enum PingPongEvent {
@@ -15,14 +15,14 @@ struct PingPong {
 impl Actor for PingPong {
     type Event = PingPongEvent;
 
-    async fn on_start(&mut self) -> MaikoResult<()> {
+    async fn on_start(&mut self) -> Result<()> {
         if self.ctx.name() == "pong-side" {
             self.ctx.send(PingPongEvent::Ping).await?;
         }
         Ok(())
     }
 
-    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> MaikoResult<()> {
+    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
         println!("Event: {event:?}");
         match event {
             PingPongEvent::Ping => self.ctx.send(PingPongEvent::Pong).await?,
@@ -33,7 +33,7 @@ impl Actor for PingPong {
 }
 
 #[tokio::main]
-pub async fn main() -> MaikoResult<()> {
+pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent>::default();
     sup.add_actor("ping-side", |ctx| PingPong { ctx }, &[DefaultTopic])?;
     sup.add_actor("pong-side", |ctx| PingPong { ctx }, &[DefaultTopic])?;

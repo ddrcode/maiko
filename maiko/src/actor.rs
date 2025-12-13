@@ -12,6 +12,8 @@ use crate::{Error, Event, Meta, Result};
 /// Implementors typically hold any state they need, and use the runtime-provided
 /// `Context<E>` (via a constructor/factory passed to `Supervisor::add_actor`) to
 /// emit events and stop gracefully.
+///
+/// See also: [`Context`], [`Supervisor`].
 
 #[allow(unused_variables)]
 #[async_trait]

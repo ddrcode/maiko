@@ -9,18 +9,19 @@ What it brings is the runtime that orchestrates communication between actors and
 No new concepts to learn: just a few trait methods via `async_trait` and standard Tokio channels.
 
 ```rust
-#[derive(Clone, Debug)]
-enum PingPongEvent { Ping, Pong }
-impl Event for PingPongEvent {}
+use maiko::prelude::*;
+use maiko_macros::Event;
+use async_trait::async_trait;
 
-struct PingPong {
-    ctx: Context<PingPongEvent>,
-}
+#[derive(Clone, Debug, Event)]
+enum PingPongEvent { Ping, Pong }
+
+struct PingPong { ctx: Context<PingPongEvent> }
 
 #[async_trait]
 impl Actor for PingPong {
     type Event = PingPongEvent;
-    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
+    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> MaikoResult<()> {
         match event {
             PingPongEvent::Ping => self.ctx.send(PingPongEvent::Pong).await?,
             PingPongEvent::Pong => self.ctx.send(PingPongEvent::Ping).await?,
@@ -30,12 +31,11 @@ impl Actor for PingPong {
 }
 
 #[tokio::main]
-pub async fn main() -> Result<()> {
+pub async fn main() -> MaikoResult<()> {
     let mut sup = Supervisor::<PingPongEvent>::default();
     sup.add_actor("ping", |ctx| PingPong { ctx }, &[DefaultTopic])?;
     sup.add_actor("pong", |ctx| PingPong { ctx }, &[DefaultTopic])?;
 
-    // Blocking: start + await shutdown
     sup.run().await?;
     Ok(())
 }
@@ -53,7 +53,8 @@ pub async fn main() -> Result<()> {
 
 ## API Sketch
 
-- `Event`: marker trait implemented for your event enum (derive macro available).
+- `Event` (derive macro): implement the event trait for your enum without boilerplate.
+    - Trait reference in bounds: use `maiko::EventTrait` to avoid name clash with the macro.
 - `Topic<E>`: maps events to topics for routing.
 - `Actor`: implement `handle`, optionally `tick`, `on_start`, `on_shutdown`.
 - `Supervisor<E,T>`: register actors via `add_actor(name, |ctx| actor, topics)`.
@@ -86,6 +87,55 @@ select! {
 ```
 
 See `examples/` for runnable demos.
+
+### Topic mapping example
+
+```rust
+use maiko::prelude::*;
+use maiko_macros::Event;
+use async_trait::async_trait;
+
+#[derive(Clone, Debug, Event)]
+enum AppEvent {
+    Ping,
+    Pong,
+    Log(String),
+}
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+enum AppTopic { Control, Output }
+
+impl Topic<AppEvent> for AppTopic {
+    fn from_event(event: &AppEvent) -> Self {
+        match event {
+            AppEvent::Ping | AppEvent::Pong => AppTopic::Control,
+            AppEvent::Log(_) => AppTopic::Output,
+        }
+    }
+}
+
+struct MyActor { ctx: Context<AppEvent> }
+
+#[async_trait]
+impl Actor for MyActor {
+    type Event = AppEvent;
+    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> MaikoResult<()> {
+        // Subscribe to topics in Supervisor:
+        // sup.add_actor("actor", |ctx| MyActor { ctx }, &[AppTopic::Control]);
+        Ok(())
+    }
+}
+```
+
+## Broker
+
+- Central event bus receiving `Envelope<E>` and routing by `Topic<E>`.
+- Each actor subscribes to one or more topics; matching events are delivered.
+- Backpressure: the broker may use try-send internally for fairness; user code should use `Context::send(...).await` which awaits capacity.
+
+## Edition
+
+This project uses Rust edition `2024`.
 
 ## Design Overview
 
@@ -123,6 +173,30 @@ async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
     }
     Ok(())
 }
+```
+
+## Publishing
+
+This workspace contains two crates:
+- `maiko-macros` (proc-macros): publish this crate first.
+- `maiko` (runtime): then switch the dependency from a path reference to a version, e.g. `maiko-macros = "0.1.0-alpha"`, and publish.
+
+Crates.io steps:
+- `cargo publish -p maiko-macros`
+- Edit `maiko/Cargo.toml` to remove `path` from `maiko-macros` dependency.
+- `cargo publish -p maiko`
+
+## Macros
+
+- Use `#[derive(Event)]` from `maiko-macros` to implement the `maiko::Event` trait for your event type without boilerplate.
+- The derive preserves generics and `where` clauses.
+- Recommended import: `use maiko_macros::Event;`
+- Example:
+```rust
+use maiko_macros::Event;
+
+#[derive(Clone, Debug, Event)]
+enum MyEvent { Foo, Bar }
 ```
 
 ## Idea

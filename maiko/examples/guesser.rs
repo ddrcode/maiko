@@ -1,17 +1,15 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use maiko::prelude::*;
+use maiko::*;
 use tokio::time::sleep;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Event)]
 enum GuesserEvent {
     Guess(u8),
     Result(u8, u8),
     Message(String),
 }
-
-impl Event for GuesserEvent {}
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 enum GuesserTopic {
@@ -144,7 +142,7 @@ impl Actor for Printer {
 
 #[tokio::main]
 
-async fn main() -> Result<(), MaikoError> {
+async fn main() -> Result<()> {
     let mut supervisor = Supervisor::<GuesserEvent, GuesserTopic>::default();
 
     supervisor.add_actor("Player1", |ctx| Guesser::new(ctx, 500), &[])?;
