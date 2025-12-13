@@ -12,6 +12,7 @@ pub struct Meta {
     id: u128,
     timestamp: u64,
     sender: Arc<str>,
+    correlation_id: Option<u128>,
 }
 
 impl Meta {
@@ -24,6 +25,7 @@ impl Meta {
                 .expect("SystemTime before Unix epoch")
                 .as_nanos() as u64,
             sender: Arc::from(sender),
+            correlation_id: None,
         }
     }
 
@@ -40,5 +42,13 @@ impl Meta {
     /// Name of the event emitter.
     pub fn sender(&self) -> &str {
         &self.sender
+    }
+
+    pub fn correlation_id(&self) -> Option<u128> {
+        self.correlation_id
+    }
+
+    pub fn set_correlation_id(&mut self, correlation_id: u128) {
+        self.correlation_id = Some(correlation_id);
     }
 }
