@@ -76,11 +76,20 @@ name = "maiko"
 version = "0.1.0-alpha"
 dependencies = [
  "async-trait",
+ "maiko-macros",
  "rand",
  "thiserror",
  "tokio",
  "tokio-util",
  "uuid",
+]
+
+[[package]]
+name = "maiko-macros"
+version = "0.1.0-alpha"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]

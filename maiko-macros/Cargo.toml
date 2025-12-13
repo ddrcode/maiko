@@ -1,0 +1,18 @@
+[package]
+name = "maiko-macros"
+version = "0.1.0-alpha"
+edition = "2024"
+description = "Maiko's proc macros"
+authors = ["David de Rosier <ddrcode@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/ddrcode/maiko"
+keywords = ["macro", "derive"]
+homepage = "https://github.com/ddrcode/maiko"
+readme = "README.md"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1.0.42"
+syn = "2.0.111"

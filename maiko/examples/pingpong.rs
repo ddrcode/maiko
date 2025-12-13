@@ -1,12 +1,11 @@
 use async_trait::async_trait;
-use maiko::{Actor, Context, DefaultTopic, Event, Meta, Result, Supervisor};
+use maiko::*;
 
-#[derive(Clone, Debug)]
+#[derive(Event, Clone, Debug)]
 enum PingPongEvent {
     Ping,
     Pong,
 }
-impl Event for PingPongEvent {}
 
 struct PingPong {
     ctx: Context<PingPongEvent>,

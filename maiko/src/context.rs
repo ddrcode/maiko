@@ -19,6 +19,8 @@ use crate::{Envelope, Event, Meta, Result};
 /// Correlation:
 /// - `send_with_correlation(event, id)`: emit an event linked to a specific correlation id.
 /// - `send_child_event(event, meta)`: convenience to set correlation id to the parent `meta.id()`.
+///
+/// See also: [`Envelope`], [`Meta`], [`Supervisor`].
 #[derive(Clone)]
 pub struct Context<E: Event> {
     pub(crate) name: Arc<str>,
