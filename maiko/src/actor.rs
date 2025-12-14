@@ -21,7 +21,7 @@ use crate::{Error, Event, Meta, Result};
 /// See also: [`Context`], [`Supervisor`].
 #[allow(unused_variables)]
 // #[async_trait]
-pub trait Actor: Send + Sync {
+pub trait Actor: Send {
     type Event: Event + Send;
 
     /// Handle a single incoming event.

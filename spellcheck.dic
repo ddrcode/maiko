@@ -12,10 +12,10 @@ runnable
 runtime
 Tokio
 UIs
-Struct
+struct
 timestamp
 observability
 backpressure
 Unix
 u64
-Implementors
+implementors
