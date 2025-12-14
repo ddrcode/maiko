@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use maiko::*;
 
 #[derive(Event, Clone, Debug)]
@@ -11,7 +10,6 @@ struct PingPong {
     ctx: Context<PingPongEvent>,
 }
 
-#[async_trait]
 impl Actor for PingPong {
     type Event = PingPongEvent;
 
@@ -35,8 +33,8 @@ impl Actor for PingPong {
 #[tokio::main]
 pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent>::default();
-    sup.add_actor("ping-side", |ctx| PingPong { ctx }, &[DefaultTopic])?;
-    sup.add_actor("pong-side", |ctx| PingPong { ctx }, &[DefaultTopic])?;
+    sup.add_actor("ping-side", |ctx| PingPong { ctx }, &[Broadcast])?;
+    sup.add_actor("pong-side", |ctx| PingPong { ctx }, &[Broadcast])?;
     sup.start().await?;
 
     tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;

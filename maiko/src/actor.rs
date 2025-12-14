@@ -1,6 +1,5 @@
 use core::marker::Send;
-
-use async_trait::async_trait;
+use std::future::Future;
 
 use crate::{Error, Event, Meta, Result};
 
@@ -13,10 +12,15 @@ use crate::{Error, Event, Meta, Result};
 /// `Context<E>` (via a constructor/factory passed to `Supervisor::add_actor`) to
 /// emit events and stop gracefully.
 ///
-/// See also: [`Context`], [`Supervisor`].
-
+/// Ergonomics:
+/// - Although the trait methods return futures, you can implement them as `async fn`
+///   with a simple `Result<()>` return. The compiler will produce the appropriate
+///   future type automatically.
+/// - No `#[async_trait]` is required.
+///
+/// See also: [`crate::Context`], [`crate::Supervisor`].
 #[allow(unused_variables)]
-#[async_trait]
+// #[async_trait]
 pub trait Actor: Send {
     type Event: Event + Send;
 
@@ -25,33 +29,68 @@ pub trait Actor: Send {
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
     /// to emit follow-up events as needed.
-    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
-        Ok(())
+    fn handle(
+        &mut self,
+        event: &Self::Event,
+        meta: &Meta,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
     }
 
-    /// Optional periodic work.
+    /// Optional periodic work called when the event queue is empty.
     ///
-    /// If implemented, this will be polled in the actor loop alongside
-    /// event reception. Keep it lightweight and non-blocking.
-    async fn tick(&mut self) -> Result<()> {
-        // std::future::pending::<()>().await;
-        Ok(())
+    /// This runs after processing up to [`Config::max_events_per_tick`] events.
+    /// Useful for:
+    /// - Polling external sources (WebSockets, file descriptors, system APIs)
+    /// - Periodic tasks (metrics reporting, health checks)
+    /// - Timeout logic (detecting stale connections)
+    /// - Housekeeping (buffer flushing, cache cleanup)
+    ///
+    /// Note: If events arrive continuously, `tick()` may not run frequently.
+    /// For time-critical operations, consider using `tokio::time::interval`
+    /// with `tokio::select!` inside your actor logic.
+    ///
+    /// [`Config::max_events_per_tick`]: crate::Config::max_events_per_tick
+    fn tick(&mut self) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
     }
 
     /// Lifecycle hook called once before the event loop starts.
-    async fn on_start(&mut self) -> Result<()> {
-        Ok(())
+    fn on_start(&mut self) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
     }
 
     /// Lifecycle hook called once after the event loop stops.
-    async fn on_shutdown(&mut self) -> Result<()> {
-        Ok(())
+    fn on_shutdown(&mut self) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
     }
 
-    /// Called when an error is returned by `handle` or `tick`.
-    /// Return `true` to propagate (terminate the actor), or `false` to
-    /// swallow and continue.
-    fn on_error(&self, error: &Error) -> bool {
-        true
+    /// Called when an error is returned by [`handle`](Actor::handle) or [`tick`](Actor::tick).
+    ///
+    /// Return `Ok(())` to swallow the error and continue processing,
+    /// or `Err(error)` to propagate and stop the actor.
+    ///
+    /// # Default Behavior
+    ///
+    /// By default, all errors propagate (actor stops). Override this to implement
+    /// custom error handling, logging, or recovery logic.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use maiko::{Actor, Error, Event, Result};
+    /// # #[derive(Clone, Event)]
+    /// # struct MyEvent;
+    /// # struct MyActor;
+    /// # impl Actor for MyActor {
+    /// #     type Event = MyEvent;
+    /// fn on_error(&self, error: Error) -> Result<()> {
+    ///     eprintln!("Actor error: {}", error);
+    ///     Ok(())  // Swallow and continue
+    /// }
+    /// # }
+    /// ```
+    fn on_error(&self, error: Error) -> Result<()> {
+        Err(error)
     }
 }

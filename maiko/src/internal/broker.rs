@@ -8,14 +8,14 @@ use crate::{Envelope, Error, Event, Result, Topic};
 
 #[derive(Debug)]
 pub struct Broker<E: Event, T: Topic<E>> {
-    receiver: Receiver<Envelope<E>>,
+    receiver: Receiver<Arc<Envelope<E>>>,
     subscribers: Vec<Subscriber<E, T>>,
     cancel_token: Arc<CancellationToken>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
     pub fn new(
-        receiver: Receiver<Envelope<E>>,
+        receiver: Receiver<Arc<Envelope<E>>>,
         cancel_token: Arc<CancellationToken>,
     ) -> Broker<E, T> {
         Broker {
@@ -33,7 +33,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(())
     }
 
-    fn send_event(&mut self, e: &Envelope<E>) -> Result<()> {
+    fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<()> {
         let topic = Topic::from_event(&e.event);
         self.subscribers
             .iter()
@@ -43,23 +43,18 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        let mut result = Ok(());
         loop {
-            if self.receiver.capacity() == 0 {
-                result = Err(Error::ChannelIsFull);
-                break;
-            }
             select! {
                 _ = self.cancel_token.cancelled() => {
                     break;
                 }
                 Some(e) = self.receiver.recv() => {
                     self.send_event(&e)?;
-                    tokio::task::yield_now().await;
                 },
+                else => break
             }
         }
-        result
+        Ok(())
     }
 }
 

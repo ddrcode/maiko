@@ -1,4 +1,4 @@
-//! Maiko — Event-based actor runtime
+//! Maiko - Event-based actor runtime
 //!
 //! A tiny actor runtime inspired by event-driven systems like Kafka,
 //! designed for ergonomic, loosely-coupled concurrency in Rust.
@@ -25,7 +25,7 @@ pub use error::Error;
 pub use event::Event;
 pub use meta::Meta;
 pub use supervisor::Supervisor;
-pub use topic::{DefaultTopic, Topic};
+pub use topic::{Broadcast, Topic};
 
 pub use maiko_macros::Event;
 

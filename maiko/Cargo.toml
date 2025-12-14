@@ -1,19 +1,21 @@
 [package]
 name = "maiko"
-version = "0.1.0-alpha"
+version = "0.1.0"
 edition = "2024"
-description = "A lightweight, event-based actor system for Tokio"
+rust-version = "1.85"
+description = "Lightweight event-driven actor runtime with topic-based pub/sub for Tokio"
 authors = ["David de Rosier <ddrcode@gmail.com>"]
 license = "MIT"
-keywords = ["actor", "async", "events", "pubsub", "messaging"]
-categories = ["asynchronous", "concurrency"]
+keywords = ["actor", "pubsub", "tokio", "events", "streams"]
+categories = ["asynchronous", "concurrency", "network-programming"]
 repository = "https://github.com/ddrcode/maiko"
 homepage = "https://github.com/ddrcode/maiko"
+documentation = "https://docs.rs/maiko"
 readme = "README.md"
+exclude = [".gitignore", ".github/"]
 
 [dependencies]
-async-trait = "0.1.89"
-maiko-macros = { path="../maiko-macros", version="0.1.0-alpha" }
+maiko-macros = { path="../maiko-macros", version="0.1.0" }
 thiserror = "2.0.14"
 tokio = {version="1.47.1", features=["macros", "rt", "rt-multi-thread", "time"]}
 tokio-util = "0.7.17"

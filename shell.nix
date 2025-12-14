@@ -7,12 +7,9 @@ pkgs.mkShell {
     rust-analyzer
     rustc
     rustfmt
-    treefmt
-    openssl
-    pkg-config
     cargo-machete
     cargo-spellcheck
-
+    cargo-readme
     hunspell
     just
   ];

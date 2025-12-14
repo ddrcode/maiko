@@ -9,9 +9,9 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, Config, Context, Envelope, Event, Result, Topic};
+use crate::{Actor, Config, Context, Envelope, Error, Event, Result, Topic};
 use crate::{
-    DefaultTopic,
+    Broadcast,
     internal::{ActorHandler, Broker, Subscriber},
 };
 
@@ -20,14 +20,14 @@ use crate::{
 /// - Register actors with `add_actor(name, |ctx| Actor, topics)`.
 /// - `start()` spawns the broker loop and returns immediately (non-blocking).
 /// - `join()` awaits all actor tasks to finish; typically used after `start()`.
-/// - `run()` combines `start()` + `join()` and blocks until shutdown.
+/// - `run()` combines `start()` and `join()`, blocking until shutdown.
 /// - Emit events into the broker with `send(event)`.
 ///
 /// See also: [`Actor`], [`Context`], [`Topic`].
-pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
+pub struct Supervisor<E: Event, T: Topic<E> = Broadcast> {
     config: Config,
     broker: Arc<Mutex<Broker<E, T>>>,
-    sender: Sender<Envelope<E>>,
+    sender: Sender<Arc<Envelope<E>>>,
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
 }
@@ -35,7 +35,7 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
 impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
     /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
-        let (tx, rx) = channel::<Envelope<E>>(config.channel_size);
+        let (tx, rx) = channel::<Arc<Envelope<E>>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
         Self {
             broker: Arc::new(Mutex::new(Broker::new(rx, cancel_token.clone()))),
@@ -55,10 +55,13 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         A: Actor<Event = E> + 'static,
         F: FnOnce(Context<E>) -> A,
     {
-        let mut broker = self.broker.try_lock().unwrap();
+        let mut broker = self
+            .broker
+            .try_lock()
+            .map_err(|_| Error::BrokerAlreadyStarted)?;
         let name: Arc<str> = Arc::from(name);
         let alive = Arc::new(AtomicBool::new(true));
-        let (tx, rx) = tokio::sync::mpsc::channel::<Envelope<E>>(self.config.channel_size);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
         let ctx = Context::<E> {
             name: name.clone(),
             sender: self.sender.clone(),
@@ -74,7 +77,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             actor,
             receiver: rx,
             ctx,
-            drain_limit: self.config.drain_limit,
+            max_events_per_tick: self.config.max_events_per_tick,
         };
 
         self.tasks.spawn(async move { handler.run().await });
@@ -107,7 +110,9 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
 
     /// Emit an event into the broker from the supervisor.
     pub async fn send(&self, event: E) -> Result<()> {
-        self.sender.send(Envelope::new(event, "supervisor")).await?;
+        self.sender
+            .send(Envelope::new(event, "supervisor").into())
+            .await?;
         Ok(())
     }
 

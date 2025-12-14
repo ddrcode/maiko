@@ -20,11 +20,11 @@ use crate::{Envelope, Event, Meta, Result};
 /// - `send_with_correlation(event, id)`: emit an event linked to a specific correlation id.
 /// - `send_child_event(event, meta)`: convenience to set correlation id to the parent `meta.id()`.
 ///
-/// See also: [`Envelope`], [`Meta`], [`Supervisor`].
+/// See also: [`Envelope`], [`Meta`], [`crate::Supervisor`].
 #[derive(Clone)]
 pub struct Context<E: Event> {
     pub(crate) name: Arc<str>,
-    pub(crate) sender: Sender<Envelope<E>>,
+    pub(crate) sender: Sender<Arc<Envelope<E>>>,
     pub(crate) alive: Arc<AtomicBool>,
     pub(crate) cancel_token: Arc<CancellationToken>,
 }
@@ -59,7 +59,7 @@ impl<E: Event> Context<E> {
 
     #[inline]
     async fn send_envelope(&self, envelope: Envelope<E>) -> Result<()> {
-        self.sender.send(envelope).await?;
+        self.sender.send(Arc::new(envelope)).await?;
         Ok(())
     }
 
