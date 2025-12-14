@@ -57,6 +57,34 @@ pub async fn main() -> MaikoResult<()> {
     - Trait reference in bounds: use `maiko::EventTrait` to avoid name clash with the macro.
 - `Topic<E>`: maps events to topics for routing.
 - `Actor`: implement `handle`, optionally `tick`, `on_start`, `on_shutdown`.
+    - You can write these as `async fn` returning `Result<()>`; the trait
+        accepts futures and the compiler wraps your `async fn` bodies automatically.
+    - No `#[async_trait]` is required.
+
+Example `Actor` implementation with `async fn`:
+```rust
+use maiko::prelude::*;
+
+struct Greeter { ctx: Context<MyEvent> }
+
+#[derive(Clone, Debug, maiko_macros::Event)]
+enum MyEvent { Hello, Boot }
+
+impl Actor for Greeter {
+    type Event = MyEvent;
+
+    async fn on_start(&mut self) -> Result<()> {
+        self.ctx.send(MyEvent::Boot).await
+    }
+
+    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
+        if let MyEvent::Hello = event {
+            // do work
+        }
+        Ok(())
+    }
+}
+```
 - `Supervisor<E,T>`: register actors via `add_actor(name, |ctx| actor, topics)`.
     - `start()`: non-blocking; spawns the broker.
     - `join()`: await actor tasks to finish.

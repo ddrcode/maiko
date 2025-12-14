@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use maiko::*;
 
 #[derive(Event, Clone, Debug)]
@@ -11,7 +10,6 @@ struct PingPong {
     ctx: Context<PingPongEvent>,
 }
 
-#[async_trait]
 impl Actor for PingPong {
     type Event = PingPongEvent;
 

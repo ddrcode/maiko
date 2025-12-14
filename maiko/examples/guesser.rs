@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
 use maiko::*;
 use tokio::time::sleep;
 
@@ -44,7 +43,6 @@ impl Guesser {
     }
 }
 
-#[async_trait]
 impl Actor for Guesser {
     type Event = GuesserEvent;
 
@@ -73,7 +71,6 @@ impl Game {
     }
 }
 
-#[async_trait]
 impl Actor for Game {
     type Event = GuesserEvent;
 
@@ -115,7 +112,6 @@ impl Actor for Game {
 
 struct Printer;
 
-#[async_trait]
 impl Actor for Printer {
     type Event = GuesserEvent;
 

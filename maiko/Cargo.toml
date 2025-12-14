@@ -12,7 +12,6 @@ homepage = "https://github.com/ddrcode/maiko"
 readme = "README.md"
 
 [dependencies]
-async-trait = "0.1.89"
 maiko-macros = { path="../maiko-macros", version="0.1.0-alpha" }
 thiserror = "2.0.14"
 tokio = {version="1.47.1", features=["macros", "rt", "rt-multi-thread", "time"]}

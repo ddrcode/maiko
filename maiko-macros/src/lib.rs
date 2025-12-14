@@ -3,8 +3,8 @@
 //! - `#[derive(Event)]`: Implements `maiko::Event` for your type, preserving generics and bounds.
 //!
 //! Usage:
-//! ```rust
-//! use maiko_macros::Event;
+//! ```rust,ignore
+//! use maiko::Event;
 //!
 //! #[derive(Clone, Debug, Event)]
 //! enum MyEvent { Foo, Bar }

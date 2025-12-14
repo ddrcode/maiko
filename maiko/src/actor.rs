@@ -1,6 +1,5 @@
 use core::marker::Send;
-
-use async_trait::async_trait;
+use std::future::Future;
 
 use crate::{Error, Event, Meta, Result};
 
@@ -13,11 +12,16 @@ use crate::{Error, Event, Meta, Result};
 /// `Context<E>` (via a constructor/factory passed to `Supervisor::add_actor`) to
 /// emit events and stop gracefully.
 ///
+/// Ergonomics:
+/// - Although the trait methods return futures, you can implement them as `async fn`
+///   with a simple `Result<()>` return. The compiler will produce the appropriate
+///   future type automatically.
+/// - No `#[async_trait]` is required.
+///
 /// See also: [`Context`], [`Supervisor`].
-
 #[allow(unused_variables)]
-#[async_trait]
-pub trait Actor: Send {
+// #[async_trait]
+pub trait Actor: Send + Sync {
     type Event: Event + Send;
 
     /// Handle a single incoming event.
@@ -25,27 +29,31 @@ pub trait Actor: Send {
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
     /// to emit follow-up events as needed.
-    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
-        Ok(())
+    fn handle(
+        &mut self,
+        event: &Self::Event,
+        meta: &Meta,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
     }
 
     /// Optional periodic work.
     ///
     /// If implemented, this will be polled in the actor loop alongside
     /// event reception. Keep it lightweight and non-blocking.
-    async fn tick(&mut self) -> Result<()> {
+    fn tick(&mut self) -> impl Future<Output = Result<()>> + Send {
         // std::future::pending::<()>().await;
-        Ok(())
+        async { Ok(()) }
     }
 
     /// Lifecycle hook called once before the event loop starts.
-    async fn on_start(&mut self) -> Result<()> {
-        Ok(())
+    fn on_start(&mut self) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
     }
 
     /// Lifecycle hook called once after the event loop stops.
-    async fn on_shutdown(&mut self) -> Result<()> {
-        Ok(())
+    fn on_shutdown(&mut self) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
     }
 
     /// Called when an error is returned by `handle` or `tick`.
