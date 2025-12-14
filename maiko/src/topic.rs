@@ -20,6 +20,18 @@ pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone {
         Self: Sized;
 }
 
+/// Default topic that broadcasts events to all subscribed actors.
+///
+/// Use `Broadcast` when you don't need topic-based filtering and want
+/// all actors to receive all events. This is the simplest routing strategy.
+///
+/// # Examples
+///
+/// ```rust, ignore
+/// use maiko::{Supervisor, Broadcast};
+/// let mut sup = Supervisor::<MyEvent>::default();
+/// sup.add_actor("actor", |ctx| MyActor { ctx }, &[Broadcast])?;
+/// ```
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct Broadcast;
 

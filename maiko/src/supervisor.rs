@@ -20,7 +20,7 @@ use crate::{
 /// - Register actors with `add_actor(name, |ctx| Actor, topics)`.
 /// - `start()` spawns the broker loop and returns immediately (non-blocking).
 /// - `join()` awaits all actor tasks to finish; typically used after `start()`.
-/// - `run()` combines `start()` + `join()` and blocks until shutdown.
+/// - `run()` combines `start()` and `join()`, blocking until shutdown.
 /// - Emit events into the broker with `send(event)`.
 ///
 /// See also: [`Actor`], [`Context`], [`Topic`].

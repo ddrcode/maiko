@@ -18,7 +18,7 @@ use crate::{Error, Event, Meta, Result};
 ///   future type automatically.
 /// - No `#[async_trait]` is required.
 ///
-/// See also: [`Context`], [`Supervisor`].
+/// See also: [`crate::Context`], [`crate::Supervisor`].
 #[allow(unused_variables)]
 // #[async_trait]
 pub trait Actor: Send {
@@ -37,12 +37,21 @@ pub trait Actor: Send {
         async { Ok(()) }
     }
 
-    /// Optional periodic work.
+    /// Optional periodic work called when the event queue is empty.
     ///
-    /// If implemented, this will be polled in the actor loop alongside
-    /// event reception. Keep it lightweight and non-blocking.
+    /// This runs after processing up to [`Config::max_events_per_tick`] events.
+    /// Useful for:
+    /// - Polling external sources (WebSockets, file descriptors, system APIs)
+    /// - Periodic tasks (metrics reporting, health checks)
+    /// - Timeout logic (detecting stale connections)
+    /// - Housekeeping (buffer flushing, cache cleanup)
+    ///
+    /// Note: If events arrive continuously, `tick()` may not run frequently.
+    /// For time-critical operations, consider using `tokio::time::interval`
+    /// with `tokio::select!` inside your actor logic.
+    ///
+    /// [`Config::max_events_per_tick`]: crate::Config::max_events_per_tick
     fn tick(&mut self) -> impl Future<Output = Result<()>> + Send {
-        // std::future::pending::<()>().await;
         async { Ok(()) }
     }
 
@@ -56,9 +65,31 @@ pub trait Actor: Send {
         async { Ok(()) }
     }
 
-    /// Called when an error is returned by `handle` or `tick`.
-    /// Return `true` to propagate (terminate the actor), or `false` to
-    /// swallow and continue.
+    /// Called when an error is returned by [`handle`](Actor::handle) or [`tick`](Actor::tick).
+    ///
+    /// Return `Ok(())` to swallow the error and continue processing,
+    /// or `Err(error)` to propagate and stop the actor.
+    ///
+    /// # Default Behavior
+    ///
+    /// By default, all errors propagate (actor stops). Override this to implement
+    /// custom error handling, logging, or recovery logic.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use maiko::{Actor, Error, Event, Result};
+    /// # #[derive(Clone, Event)]
+    /// # struct MyEvent;
+    /// # struct MyActor;
+    /// # impl Actor for MyActor {
+    /// #     type Event = MyEvent;
+    /// fn on_error(&self, error: Error) -> Result<()> {
+    ///     eprintln!("Actor error: {}", error);
+    ///     Ok(())  // Swallow and continue
+    /// }
+    /// # }
+    /// ```
     fn on_error(&self, error: Error) -> Result<()> {
         Err(error)
     }

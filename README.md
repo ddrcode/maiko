@@ -68,11 +68,11 @@ Maiko manages the entire channel topology internally, letting you focus on busin
 
 Maiko excels at processing **unidirectional event streams** where actors don't need to know about each other:
 
-- 📊 **System event processing** - inotify, epoll, signals, device monitoring
-- 📈 **Data stream handling** - stock ticks, sensor data, telemetry pipelines  
-- 🌐 **Network event processing** - packet handling, protocol parsing
-- 🔧 **Reactive architectures** - event sourcing, CQRS patterns
-- 🎮 **Game engines** - entity systems, event-driven gameplay
+- **System event processing** - inotify, epoll, signals, device monitoring
+- **Data stream handling** - stock ticks, sensor data, telemetry pipelines
+- **Network event processing** - packet handling, protocol parsing
+- **Reactive architectures** - event sourcing, CQRS patterns
+- **Game engines** - entity systems, event-driven gameplay
 
 ### Maiko vs Alternatives
 
@@ -147,16 +147,16 @@ impl Actor for Greeter {
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
-    
+
     // Add actor with factory function
-    sup.add_actor("greeter", |ctx| Greeter { ctx }, &[DefaultTopic])?;
-    
+    sup.add_actor("greeter", |ctx| Greeter { ctx }, &[Broadcast])?;
+
     // Start the supervisor
     sup.start().await?;
-    
+
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     sup.stop().await?;
-    
+
     Ok(())
 }
 ```
@@ -201,10 +201,10 @@ impl Topic<NetworkEvent> for NetworkTopic {
 }
 ```
 
-Or use `DefaultTopic` to broadcast to all actors:
+Or use `Broadcast` to broadcast to all actors:
 
 ```rust
-sup.add_actor("processor", factory, &[DefaultTopic])?;
+sup.add_actor("processor", factory, &[Broadcast])?;
 ```
 
 ### 3. Actors
@@ -350,7 +350,7 @@ let mut sup = Supervisor::<NetworkEvent>::new();
 // Add actors with subscriptions
 sup.add_actor("ingress", |ctx| IngressActor::new(ctx), &[NetworkTopic::Ingress])?;
 sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
-sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[DefaultTopic])?;
+sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[Broadcast])?;
 
 // Start all actors
 sup.start().await?;
@@ -413,10 +413,10 @@ async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
     if let Some(correlation_id) = meta.correlation_id() {
         println!("Event chain: {}", correlation_id);
     }
-    
+
     // Child events inherit correlation
     self.ctx.send_child_event(ResponseEvent::Ok).await?;
-    
+
     Ok(())
 }
 ```
@@ -428,16 +428,16 @@ Control error propagation:
 ```rust
 impl Actor for MyActor {
     // ...
-    
-    fn on_error(&mut self, error: &Error) -> bool {
+
+    fn on_error(&self, error: Error) -> Result<()> {
         match error {
             Error::Recoverable(_) => {
                 eprintln!("Warning: {}", error);
-                false  // Swallow error, continue
+                Ok(())  // Swallow error, continue
             }
             Error::Fatal(_) => {
                 eprintln!("Fatal: {}", error);
-                true   // Propagate error, stop actor
+                Err(error)  // Propagate error, stop actor
             }
         }
     }
@@ -450,10 +450,10 @@ Fine-tune actor behavior:
 
 ```rust
 let config = Config::default()
-    .with_receiver_buffer(100)      // Event queue size
-    .with_drain_limit(50);           // Events processed per cycle
+    .with_channel_size(100)           // Event queue size per actor
+    .with_max_events_per_tick(50);    // Events processed per tick cycle
 
-let mut sup = Supervisor::with_config(config);
+let mut sup = Supervisor::new(config);
 ```
 
 ---
@@ -476,28 +476,28 @@ cargo run --example guesser
 
 ## Roadmap
 
-### ✅ v0.1.0 (Current - Single Process)
+### v0.1.0 (Current - Single Process)
 - Topic-based event routing
 - Async actor lifecycle hooks
 - Graceful shutdown via cancellation tokens
 - Correlation ID tracking
 - Flexible error handling
 
-### 🚧 v0.2.0 (Supervision & Control)
+### v0.2.0 (Supervision & Control)
 - Actor restart policies and strategies
 - Supervisor metrics and monitoring
 - Dynamic actor spawning at runtime
 - Backpressure configuration
 - Enhanced error recovery
 
-### 🔥 v0.3.0 (Cross-Process Communication)
+### v0.3.0 (Cross-Process Communication)
 - IPC bridge actors (Unix sockets, TCP)
 - Event serialization framework (bincode, JSON, protobuf)
 - Remote topic subscriptions
 - Multi-supervisor coordination
 - Process-level fault isolation
 
-### 💡 v0.4.0+ (Ready-to-Use Actor Library)
+### v0.4.0+ (Ready-to-Use Actor Library)
 - **Inter-supervisor communication** - Unix socket, gRPC bridge actors
 - **Networking actors** - HTTP client/server, WebSocket, TCP/UDP handlers
 - **Telemetry actors** - OpenTelemetry integration, metrics exporters
@@ -510,18 +510,18 @@ cargo run --example guesser
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    Supervisor                        │
+│                    Supervisor                       │
 │  ┌────────────────────────────────────────────────┐ │
 │  │              Central Broker                    │ │
 │  │  (Topic-based routing & filtering)             │ │
 │  └────────────────────────────────────────────────┘ │
-│         │              │              │              │
-│    ┌────▼───┐     ┌───▼────┐     ┌──▼─────┐        │
-│    │Actor A │     │Actor B │     │Actor C │        │
-│    │        │     │        │     │        │        │
-│    │Topics: │     │Topics: │     │Topics: │        │
-│    │  [T1]  │     │[T1,T2] │     │  [T2]  │        │
-│    └────┬───┘     └───┬────┘     └──┬─────┘        │
+│         │              │              │             │
+│    ┌────▼───┐     ┌────▼───┐     ┌────▼───┐         │
+│    │Actor A │     │Actor B │     │Actor C │         │
+│    │        │     │        │     │        │         │
+│    │Topics: │     │Topics: │     │Topics: │         │
+│    │  [T1]  │     │[T1,T2] │     │  [T2]  │         │
+│    └────┬───┘     └───┬────┘     └───┬────┘         │
 │         │             │              │              │
 │         └─────────────┴──────────────┘              │
 │              Events flow up to broker               │
@@ -541,10 +541,21 @@ cargo run --example guesser
 
 Contributions are welcome! Please feel free to:
 
-- 🐛 Report bugs via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
-- 💡 Suggest features and improvements
-- 📖 Improve documentation
-- 🔧 Submit pull requests
+- Report bugs via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
+- Suggest features and improvements
+- Improve documentation
+- Submit pull requests
+
+### Code Philosophy
+
+Maiko is **100% human-written code**, crafted with passion for Rust and genuine love for coding. While AI tools have been valuable for architectural discussions, code reviews, and documentation, every line of implementation code comes from human creativity and expertise.
+
+We believe in:
+- **Thoughtful design** over automated generation
+- **Deep understanding** of the code we write
+- **Human craftsmanship** in software engineering
+
+Contributors are expected to write their own code. AI may assist with reviews, discussions, and documentation, but implementations should reflect your own understanding and skills.
 
 ---
 
@@ -561,4 +572,4 @@ Inspired by:
 - **Akka Streams** - Reactive stream processing
 - **Tokio** - Async runtime foundation
 
-Built with ❤️ in Rust 🦀
+Built with ❤️ and by humans, for humans 🦀

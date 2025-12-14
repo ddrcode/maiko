@@ -62,7 +62,7 @@ checksum = "37c93d8daa9d8a012fd8ab92f088405fb202ea0b6ab73ee2482ae66af4f42091"
 
 [[package]]
 name = "maiko"
-version = "0.1.0-alpha"
+version = "0.1.0"
 dependencies = [
  "maiko-macros",
  "rand",
@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-macros"
-version = "0.1.0-alpha"
+version = "0.1.0"
 dependencies = [
  "quote",
  "syn",
