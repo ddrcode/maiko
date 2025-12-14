@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
 use tokio::sync::mpsc::Receiver;
 
@@ -6,9 +6,9 @@ use crate::{Actor, Context, Envelope, Result};
 
 pub(crate) struct ActorHandler<A: Actor> {
     pub(crate) actor: A,
-    pub(crate) receiver: Receiver<Envelope<A::Event>>,
+    pub(crate) receiver: Receiver<Arc<Envelope<A::Event>>>,
     pub(crate) ctx: Context<A::Event>,
-    pub(crate) drain_limit: usize,
+    pub(crate) max_events_per_tick: usize,
 }
 
 impl<A: Actor> ActorHandler<A> {
@@ -18,13 +18,11 @@ impl<A: Actor> ActorHandler<A> {
         while self.ctx.alive.load(Ordering::Acquire) {
             let mut cnt = 0;
             while let Ok(event) = self.receiver.try_recv() {
-                if let Err(e) = self.actor.handle(&event.event, &event.meta).await
-                    && self.actor.on_error(&e)
-                {
-                    return Err(e);
+                if let Err(e) = self.actor.handle(&event.event, &event.meta).await {
+                    self.actor.on_error(e)?;
                 }
                 cnt += 1;
-                if cnt == self.drain_limit {
+                if cnt == self.max_events_per_tick {
                     break;
                 }
             }
@@ -32,10 +30,8 @@ impl<A: Actor> ActorHandler<A> {
                 tokio::task::yield_now().await;
             }
 
-            if let Err(e) = self.actor.tick().await
-                && self.actor.on_error(&e)
-            {
-                return Err(e);
+            if let Err(e) = self.actor.tick().await {
+                self.actor.on_error(e)?;
             }
 
             if token.is_cancelled() {

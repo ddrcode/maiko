@@ -59,7 +59,7 @@ pub trait Actor: Send {
     /// Called when an error is returned by `handle` or `tick`.
     /// Return `true` to propagate (terminate the actor), or `false` to
     /// swallow and continue.
-    fn on_error(&self, error: &Error) -> bool {
-        true
+    fn on_error(&self, error: Error) -> Result<()> {
+        Err(error)
     }
 }

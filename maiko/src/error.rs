@@ -25,14 +25,14 @@ pub enum Error {
     SubscriberAlreadyExists(Arc<str>),
 }
 
-impl<E: Event> From<SendError<Envelope<E>>> for Error {
-    fn from(e: SendError<Envelope<E>>) -> Self {
+impl<E: Event> From<SendError<Arc<Envelope<E>>>> for Error {
+    fn from(e: SendError<Arc<Envelope<E>>>) -> Self {
         Error::SendError(e.to_string())
     }
 }
 
-impl<E: Event> From<TrySendError<Envelope<E>>> for Error {
-    fn from(e: TrySendError<Envelope<E>>) -> Self {
+impl<E: Event> From<TrySendError<Arc<Envelope<E>>>> for Error {
+    fn from(e: TrySendError<Arc<Envelope<E>>>) -> Self {
         match e {
             TrySendError::Full(_) => Error::ChannelIsFull,
             TrySendError::Closed(_) => Error::SendError(e.to_string()),

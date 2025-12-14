@@ -1,13 +1,13 @@
 pub struct Config {
     pub channel_size: usize,
-    pub drain_limit: usize,
+    pub max_events_per_tick: usize,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
             channel_size: 128,
-            drain_limit: 10,
+            max_events_per_tick: 10,
         }
     }
 }
@@ -18,8 +18,8 @@ impl Config {
         self
     }
 
-    pub fn with_drain_limit(mut self, limit: usize) -> Self {
-        self.drain_limit = limit;
+    pub fn with_max_events_per_tick(mut self, limit: usize) -> Self {
+        self.max_events_per_tick = limit;
         self
     }
 }
