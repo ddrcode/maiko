@@ -30,6 +30,7 @@ pub struct Supervisor<E: Event, T: Topic<E> = Broadcast> {
     sender: Sender<Arc<Envelope<E>>>,
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
+    broker_cancel_token: Arc<CancellationToken>,
 }
 
 impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
@@ -37,12 +38,14 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     pub fn new(config: Config) -> Self {
         let (tx, rx) = channel::<Arc<Envelope<E>>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
+        let broker_cancel_token = Arc::new(CancellationToken::new());
         Self {
-            broker: Arc::new(Mutex::new(Broker::new(rx, cancel_token.clone()))),
+            broker: Arc::new(Mutex::new(Broker::new(rx, broker_cancel_token.clone()))),
             config,
             sender: tx,
             tasks: JoinSet::new(),
             cancel_token,
+            broker_cancel_token,
         }
     }
 
@@ -88,9 +91,8 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     /// Start the broker loop in a background task. This returns immediately.
     pub async fn start(&mut self) -> Result<()> {
         let broker = self.broker.clone();
-        // let mut broker = self.broker.take().unwrap();
-        // self.tasks
-        tokio::task::spawn(async move { broker.lock().await.run().await });
+        self.tasks
+            .spawn(async move { broker.lock().await.run().await });
         Ok(())
     }
 
@@ -117,7 +119,16 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     }
 
     /// Request a graceful shutdown, then await all actor tasks.
+    ///
+    /// This stops the event broker, waits `Config::sleep_on_shutdown` to allow
+    /// in-flight event processing, then stops all actors.
+    ///
+    /// Events sent
+    /// immediately before `stop()` may not be processed if the sleep is too short.
     pub async fn stop(&mut self) -> Result<()> {
+        self.broker_cancel_token.cancel();
+        tokio::time::sleep(self.config.sleep_on_shutdown).await;
+        let _ = self.broker.lock().await;
         self.cancel_token.cancel();
         self.join().await?;
         Ok(())

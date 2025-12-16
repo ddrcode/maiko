@@ -45,16 +45,37 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     pub async fn run(&mut self) -> Result<()> {
         loop {
             select! {
-                _ = self.cancel_token.cancelled() => {
-                    break;
-                }
+                _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
                     self.send_event(&e)?;
                 },
                 else => break
             }
         }
+        self.shutdown().await;
         Ok(())
+    }
+
+    async fn shutdown(&mut self) {
+        tokio::task::yield_now().await;
+        for _ in 0..self.receiver.len() {
+            if let Ok(e) = self.receiver.try_recv() {
+                let _ = self.send_event(&e); // Best effort
+            } else {
+                break; // Queue drained faster than expected
+            }
+        }
+        tokio::task::yield_now().await;
+        while !self.is_empty() {
+            tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
+        }
+        tokio::task::yield_now().await;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.subscribers
+            .iter()
+            .all(|s| s.sender.is_closed() || s.sender.capacity() == s.sender.max_capacity())
     }
 }
 

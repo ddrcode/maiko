@@ -23,6 +23,11 @@ pub struct Config {
     /// Lower values improve fairness, higher values improve throughput.
     /// Default: 10
     pub max_events_per_tick: usize,
+
+    /// Duration to wait during shutdown before cancelling actors.
+    /// This gives the broker time to process in-flight events.
+    /// Default: 10 ms. Set to Duration::ZERO for immediate shutdown.
+    pub sleep_on_shutdown: tokio::time::Duration,
 }
 
 impl Default for Config {
@@ -30,6 +35,7 @@ impl Default for Config {
         Config {
             channel_size: 128,
             max_events_per_tick: 10,
+            sleep_on_shutdown: tokio::time::Duration::from_millis(10),
         }
     }
 }

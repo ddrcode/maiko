@@ -123,9 +123,7 @@ enum MyEvent {
 }
 
 // Create an actor
-struct Greeter {
-    ctx: Context<MyEvent>,
-}
+struct Greeter;
 
 impl Actor for Greeter {
     type Event = MyEvent;
@@ -134,13 +132,9 @@ impl Actor for Greeter {
         match event {
             MyEvent::Hello(name) => {
                 println!("Hello, {}! (from {})", name, meta.actor_name());
-                Ok(())
             }
         }
-    }
-
-    async fn on_start(&mut self) -> Result<()> {
-        self.ctx.send(MyEvent::Hello("World".into())).await
+        Ok(())
     }
 }
 
@@ -148,15 +142,15 @@ impl Actor for Greeter {
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
 
-    // Add actor with factory function
-    sup.add_actor("greeter", |ctx| Greeter { ctx }, &[Broadcast])?;
+    // Add actor and subscribe it to all topics (Broadcast)
+    sup.add_actor("greeter", |_ctx| Greeter, &[Broadcast])?;
 
-    // Start the supervisor
+    // Start the supervisor and send a message
     sup.start().await?;
+    sup.send(MyEvent::Hello("World".into())).await?;
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // Graceful shutdown (it attempts to process all events already in the queue)
     sup.stop().await?;
-
     Ok(())
 }
 ```
