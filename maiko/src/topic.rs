@@ -20,30 +20,31 @@ pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone {
         Self: Sized;
 }
 
-/// Default topic that broadcasts events to all subscribed actors.
+/// Default topic for simple systems that don't need topic-based routing.
 ///
-/// Use `Broadcast` when you don't need topic-based filtering and want
-/// all actors to receive all events. This is the simplest routing strategy.
+/// Use `DefaultTopic` when you don't need topic-based filtering and want
+/// all actors to receive all events. This is the simplest routing strategy,
+/// acting as an identity/unit type for the topic system.
 ///
 /// # Examples
 ///
 /// ```rust, ignore
-/// use maiko::{Supervisor, Broadcast};
+/// use maiko::{Supervisor, DefaultTopic};
 /// let mut sup = Supervisor::<MyEvent>::default();
-/// sup.add_actor("actor", |ctx| MyActor { ctx }, &[Broadcast])?;
+/// sup.add_actor("actor", |ctx| MyActor { ctx }, &[DefaultTopic])?;
 /// ```
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
-pub struct Broadcast;
+pub struct DefaultTopic;
 
-impl<E: Event> Topic<E> for Broadcast {
-    fn from_event(_event: &E) -> Broadcast {
-        Broadcast
+impl<E: Event> Topic<E> for DefaultTopic {
+    fn from_event(_event: &E) -> DefaultTopic {
+        DefaultTopic
     }
 }
 
-impl std::fmt::Display for Broadcast {
+impl std::fmt::Display for DefaultTopic {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "broadcast")
+        write!(f, "default")
     }
 }
 
@@ -60,8 +61,8 @@ mod tests {
     #[test]
     fn test_default_topic() {
         let event = TestEvent;
-        let result = Broadcast::from_event(&event);
-        assert_eq!(result.to_string(), "broadcast");
+        let result = DefaultTopic::from_event(&event);
+        assert_eq!(result.to_string(), "default");
     }
 
     #[test]

@@ -25,7 +25,7 @@ pub use error::Error;
 pub use event::Event;
 pub use meta::Meta;
 pub use supervisor::Supervisor;
-pub use topic::{Broadcast, Topic};
+pub use topic::{DefaultTopic, Topic};
 
 pub use maiko_macros::Event;
 

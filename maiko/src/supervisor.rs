@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{Actor, Config, Context, Envelope, Error, Event, Result, Topic};
 use crate::{
-    Broadcast,
+    DefaultTopic,
     internal::{ActorHandler, Broker, Subscriber},
 };
 
@@ -24,7 +24,7 @@ use crate::{
 /// - Emit events into the broker with `send(event)`.
 ///
 /// See also: [`Actor`], [`Context`], [`Topic`].
-pub struct Supervisor<E: Event, T: Topic<E> = Broadcast> {
+pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     config: Config,
     broker: Arc<Mutex<Broker<E, T>>>,
     sender: Sender<Arc<Envelope<E>>>,
@@ -120,14 +120,24 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
 
     /// Request a graceful shutdown, then await all actor tasks.
     ///
-    /// This stops the event broker, waits `Config::sleep_on_shutdown` to allow
-    /// in-flight event processing, then stops all actors.
+    /// # Shutdown Process
     ///
-    /// Events sent
-    /// immediately before `stop()` may not be processed if the sleep is too short.
+    /// 1. Waits for the broker to receive all pending events (up to 10ms)
+    /// 2. Stops the broker and waits for it to drain actor queues
+    /// 3. Cancels all actors and waits for tasks t
     pub async fn stop(&mut self) -> Result<()> {
+        use tokio::time::*;
+        let start = Instant::now();
+        let timeout = Duration::from_millis(10);
+        let max = self.sender.max_capacity();
+        while start.elapsed() < timeout {
+            if self.sender.capacity() == max {
+                break;
+            }
+            sleep(Duration::from_micros(100)).await;
+        }
+
         self.broker_cancel_token.cancel();
-        tokio::time::sleep(self.config.sleep_on_shutdown).await;
         let _ = self.broker.lock().await;
         self.cancel_token.cancel();
         self.join().await?;

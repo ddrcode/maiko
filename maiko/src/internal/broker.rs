@@ -57,7 +57,8 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     async fn shutdown(&mut self) {
-        tokio::task::yield_now().await;
+        use tokio::time::*;
+
         for _ in 0..self.receiver.len() {
             if let Ok(e) = self.receiver.try_recv() {
                 let _ = self.send_event(&e); // Best effort
@@ -65,11 +66,14 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 break; // Queue drained faster than expected
             }
         }
+
         tokio::task::yield_now().await;
-        while !self.is_empty() {
+
+        let start = Instant::now();
+        let timeout = Duration::from_millis(10);
+        while !self.is_empty() && start.elapsed() < timeout {
             tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
         }
-        tokio::task::yield_now().await;
     }
 
     pub fn is_empty(&self) -> bool {

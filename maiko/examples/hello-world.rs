@@ -26,8 +26,8 @@ impl Actor for Greeter {
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
 
-    // Add actor and subscribe it to all topics (Broadcast)
-    sup.add_actor("greeter", |_ctx| Greeter, &[Broadcast])?;
+    // Add actor and subscribe it to all topics (DefaultTopic)
+    sup.add_actor("greeter", |_ctx| Greeter, &[DefaultTopic])?;
 
     // Start the supervisor and send a message
     sup.start().await?;

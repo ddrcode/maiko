@@ -130,10 +130,8 @@ impl Actor for Greeter {
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
 
-    // Add actor and subscribe it to all topics (Broadcast)
-    sup.add_actor("greeter", |_ctx| Greeter, &[Broadcast])?;
-
-    // Start the supervisor and send a message
+    // Add actor and subscribe it to all topics (DefaultTopic)
+    sup.add_actor("greeter", |_ctx| Greeter, &[DefaultTopic])?;
     sup.start().await?;
     sup.send(MyEvent::Hello("World".into())).await?;
 
@@ -197,10 +195,10 @@ impl Topic<NetworkEvent> for NetworkTopic {
 }
 ```
 
-Or use `Broadcast` to broadcast to all actors:
+Or use `DefaultTopic` to broadcast to all actors:
 
 ```rust
-sup.add_actor("processor", factory, &[Broadcast])?;
+sup.add_actor("processor", factory, &[DefaultTopic])?;
 ```
 
 ### 3. Actors
@@ -284,7 +282,7 @@ let mut sup = Supervisor::<NetworkEvent>::new();
 // Add actors with subscriptions
 sup.add_actor("ingress", |ctx| IngressActor::new(ctx), &[NetworkTopic::Ingress])?;
 sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
-sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[Broadcast])?;
+sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[DefaultTopic])?;
 
 // Start all actors
 sup.start().await?;
