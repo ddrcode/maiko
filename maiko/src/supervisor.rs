@@ -21,6 +21,7 @@ use crate::{
 /// - `start()` spawns the broker loop and returns immediately (non-blocking).
 /// - `join()` awaits all actor tasks to finish; typically used after `start()`.
 /// - `run()` combines `start()` and `join()`, blocking until shutdown.
+/// - `stop()` graceful shutdown; lets actors to consumed active events
 /// - Emit events into the broker with `send(event)`.
 ///
 /// See also: [`Actor`], [`Context`], [`Topic`].
@@ -96,6 +97,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         Ok(())
     }
 
+    /// Waits until all actors and the event broker exit
     pub async fn join(&mut self) -> Result<()> {
         while let Some(res) = self.tasks.join_next().await {
             res??;
@@ -130,6 +132,8 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         let start = Instant::now();
         let timeout = Duration::from_millis(10);
         let max = self.sender.max_capacity();
+
+        // 1. Wait for the main channle to drain
         while start.elapsed() < timeout {
             if self.sender.capacity() == max {
                 break;
@@ -137,8 +141,11 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             sleep(Duration::from_micros(100)).await;
         }
 
+        // 2. Wait the the broker to shutdown gracefully
         self.broker_cancel_token.cancel();
         let _ = self.broker.lock().await;
+
+        // 3. Stop the actors
         self.cancel_token.cancel();
         self.join().await?;
         Ok(())

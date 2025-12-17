@@ -15,7 +15,7 @@ impl<E: Event, T: Topic<E>> Subscriber<E, T> {
     pub fn new(name: Arc<str>, topics: &[T], sender: Sender<Arc<Envelope<E>>>) -> Subscriber<E, T> {
         Subscriber {
             name,
-            topics: topics.iter().cloned().collect(),
+            topics: HashSet::from_iter(topics.iter().cloned()),
             sender,
         }
     }

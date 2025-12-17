@@ -59,6 +59,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     async fn shutdown(&mut self) {
         use tokio::time::*;
 
+        // Send messages that were in the queue at the time of shutdown
         for _ in 0..self.receiver.len() {
             if let Ok(e) = self.receiver.try_recv() {
                 let _ = self.send_event(&e); // Best effort
@@ -69,10 +70,11 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
         tokio::task::yield_now().await;
 
+        // Wait the inner channels to be consumed by the actors
         let start = Instant::now();
         let timeout = Duration::from_millis(10);
         while !self.is_empty() && start.elapsed() < timeout {
-            tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
+            sleep(Duration::from_micros(100)).await;
         }
     }
 
