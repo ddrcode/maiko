@@ -1,3 +1,25 @@
+# [0.1.1](https://github.com/ddrcode/maiko/compare/v0.1.0...v0.1.1) (December 18th, 2025)
+
+### Added
+
+- `hello-wrold.rs` example
+- `maintenance_interval` option added to `Config`
+- `Broker` removes closed subscribers in periodical `cleanup` method
+- `pending` method added to `Context`
+- graceful shutdown - completes pending events before stop
+
+### Changed
+
+- Main `ActorHandle` loop to work with `tokio::select!`
+- Detailed documentation aded to examples.
+- `PingPong` example with events as topics.
+- Improved performance of subscribers lookup in `Broker`
+- `Broadcast` topic renamed to `DefaultTopic`
+- `Broker` has now dedicated cancellation token (rather than shared one with actors)
+
+
+---
+
 # [0.1.0](https://github.com/ddrcode/maiko/compare/v0.0.2...v0.1.0) (December 14th, 2025)
 
 **MVP**. Fully-functional, tested, yet quite minimal version.
