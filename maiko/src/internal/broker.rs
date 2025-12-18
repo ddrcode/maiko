@@ -41,15 +41,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .iter()
             .filter(|s| s.topics.contains(&topic))
             .filter(|s| !s.sender.is_closed())
-            .filter(|s| {
-                !Arc::ptr_eq(&s.name, &e.meta.actor_name) || s.name.as_ref() != e.meta.actor_name()
-            })
+            .filter(|s| !Arc::ptr_eq(&s.name, &e.meta.actor_name))
             .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
         Ok(())
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        let mut cleanup_interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
+        let mut cleanup_interval = tokio::time::interval(self.config.maintenance_interval);
         loop {
             select! {
                 _ = self.cancel_token.cancelled() => break,
@@ -129,8 +127,9 @@ mod tests {
     #[tokio::test]
     async fn test_add_subscriber() {
         let (tx, rx) = mpsc::channel(10);
+        let config = Arc::new(crate::Config::default());
         let cancel_token = Arc::new(CancellationToken::new());
-        let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token);
+        let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config);
         let subscriber =
             super::Subscriber::new(Arc::from("subscriber1"), &[TestTopic::A], tx.clone());
         assert!(broker.add_subscriber(subscriber).is_ok());

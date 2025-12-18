@@ -130,10 +130,8 @@ impl Actor for Greeter {
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
 
-    // Add actor and subscribe it to all topics (Broadcast)
-    sup.add_actor("greeter", |_ctx| Greeter, &[Broadcast])?;
-
-    // Start the supervisor and send a message
+    // Add actor and subscribe it to all topics (DefaultTopic)
+    sup.add_actor("greeter", |_ctx| Greeter, &[DefaultTopic])?;
     sup.start().await?;
     sup.send(MyEvent::Hello("World".into())).await?;
 
@@ -197,10 +195,10 @@ impl Topic<NetworkEvent> for NetworkTopic {
 }
 ```
 
-Or use `Broadcast` to broadcast to all actors:
+Or use `DefaultTopic` to broadcast to all actors:
 
 ```rust
-sup.add_actor("processor", factory, &[Broadcast])?;
+sup.add_actor("processor", factory, &[DefaultTopic])?;
 ```
 
 ### 3. Actors
@@ -284,7 +282,7 @@ let mut sup = Supervisor::<NetworkEvent>::new();
 // Add actors with subscriptions
 sup.add_actor("ingress", |ctx| IngressActor::new(ctx), &[NetworkTopic::Ingress])?;
 sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
-sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[Broadcast])?;
+sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[DefaultTopic])?;
 
 // Start all actors
 sup.start().await?;
@@ -382,6 +380,64 @@ That means Maiko may be not best suited for **request-response** patterns. Altho
 
 ## Advanced Features
 
+### Tick Patterns
+
+The `tick()` method runs in a `select!` loop alongside event reception. What you `.await` inside determines when your actor wakes:
+
+**Pattern 1: Time-Based Producer**
+```rust
+impl Actor for HeartbeatActor {
+    async fn tick(&mut self) -> Result<()> {
+        tokio::time::sleep(Duration::from_secs(5)).await;  // Wakes every 5s
+        self.ctx.send(HeartbeatEvent).await
+    }
+}
+```
+
+**Pattern 2: External Event Source**
+```rust
+impl Actor for WebSocketReader {
+    async fn tick(&mut self) -> Result<()> {
+        let frame = self.socket.read().await?;  // Wakes when data arrives
+        self.ctx.send(FrameEvent(frame)).await
+    }
+}
+```
+
+**Pattern 3: Pure Event Processor**
+```rust
+impl Actor for EventLogger {
+    async fn tick(&mut self) -> Result<()> {
+        self.ctx.pending().await  // Never wakes - only handles events (default behavior)
+    }
+
+    async fn handle(&mut self, event: &Event, _meta: &Meta) -> Result<()> {
+        log::info!("Event: {:?}", event);  // All logic in handle()
+        Ok(())
+    }
+}
+```
+
+**Pattern 4: Housekeeping After Events**
+```rust
+impl Actor for BufferedWriter {
+    async fn tick(&mut self) -> Result<()> {
+        // Returns immediately - called after processing event batches
+        if self.buffer.len() > 100 {
+            self.flush().await?;
+        }
+        Ok(())
+    }
+
+    async fn handle(&mut self, event: &Event, _meta: &Meta) -> Result<()> {
+        self.buffer.push(event.clone());
+        Ok(())
+    }
+}
+```
+
+**Key insight:** `ctx.pending()` is more ergonomic than `std::future::pending()` since it returns `Result<()>` to match the trait signature.
+
 ### Correlation IDs
 
 Track related events across actors:
@@ -461,37 +517,6 @@ let mut sup = Supervisor::new(config);
 
 ---
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    Supervisor                       │
-│  ┌────────────────────────────────────────────────┐ │
-│  │              Central Broker                    │ │
-│  │  (Topic-based routing & filtering)             │ │
-│  └────────────────────────────────────────────────┘ │
-│         │              │              │             │
-│    ┌────▼───┐     ┌────▼───┐     ┌────▼───┐         │
-│    │Actor A │     │Actor B │     │Actor C │         │
-│    │        │     │        │     │        │         │
-│    │Topics: │     │Topics: │     │Topics: │         │
-│    │  [T1]  │     │[T1,T2] │     │  [T2]  │         │
-│    └────┬───┘     └───┬────┘     └───┬────┘         │
-│         │             │              │              │
-│         └─────────────┴──────────────┘              │
-│              Events flow up to broker               │
-└─────────────────────────────────────────────────────┘
-```
-
-**Key Components:**
-
-- **Supervisor** - Manages actor lifecycles and shutdown
-- **Broker** - Routes events to subscribed actors based on topics
-- **Actors** - Independent event processors with isolated state
-- **Context** - Actor's interface to send events and check system state
-
----
-
 ## Contributing
 
 Contributions are welcome! Please feel free to:
@@ -516,15 +541,15 @@ Miako is built with ❤️ and by humans, for humans 🦀
 
 ---
 
-## License
-
-Licensed under the [MIT License](LICENSE).
-
----
-
 ## Acknowledgments
 
 Inspired by:
 - **Kafka** - Topic-based event streaming
 - **Akka Streams** - Reactive stream processing
 - **Tokio** - Async runtime foundation
+
+---
+
+## License
+
+Licensed under the [MIT License](LICENSE).

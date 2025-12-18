@@ -380,6 +380,64 @@ That means Maiko may be not best suited for **request-response** patterns. Altho
 
 ## Advanced Features
 
+### Tick Patterns
+
+The `tick()` method runs in a `select!` loop alongside event reception. What you `.await` inside determines when your actor wakes:
+
+**Pattern 1: Time-Based Producer**
+```rust
+impl Actor for HeartbeatActor {
+    async fn tick(&mut self) -> Result<()> {
+        tokio::time::sleep(Duration::from_secs(5)).await;  // Wakes every 5s
+        self.ctx.send(HeartbeatEvent).await
+    }
+}
+```
+
+**Pattern 2: External Event Source**
+```rust
+impl Actor for WebSocketReader {
+    async fn tick(&mut self) -> Result<()> {
+        let frame = self.socket.read().await?;  // Wakes when data arrives
+        self.ctx.send(FrameEvent(frame)).await
+    }
+}
+```
+
+**Pattern 3: Pure Event Processor**
+```rust
+impl Actor for EventLogger {
+    async fn tick(&mut self) -> Result<()> {
+        self.ctx.pending().await  // Never wakes - only handles events (default behavior)
+    }
+
+    async fn handle(&mut self, event: &Event, _meta: &Meta) -> Result<()> {
+        log::info!("Event: {:?}", event);  // All logic in handle()
+        Ok(())
+    }
+}
+```
+
+**Pattern 4: Housekeeping After Events**
+```rust
+impl Actor for BufferedWriter {
+    async fn tick(&mut self) -> Result<()> {
+        // Returns immediately - called after processing event batches
+        if self.buffer.len() > 100 {
+            self.flush().await?;
+        }
+        Ok(())
+    }
+
+    async fn handle(&mut self, event: &Event, _meta: &Meta) -> Result<()> {
+        self.buffer.push(event.clone());
+        Ok(())
+    }
+}
+```
+
+**Key insight:** `ctx.pending()` is more ergonomic than `std::future::pending()` since it returns `Result<()>` to match the trait signature.
+
 ### Correlation IDs
 
 Track related events across actors:

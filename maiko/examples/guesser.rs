@@ -194,7 +194,7 @@ impl Actor for Game {
         if self.round >= 10 {
             self.ctx.stop();
         }
-        Ok(())
+        self.ctx.pending().await
     }
 }
 
