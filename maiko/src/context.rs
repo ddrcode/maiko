@@ -63,10 +63,9 @@ impl<E: Event> Context<E> {
         Ok(())
     }
 
-    /// Signal this actor to stop and trigger the cancellation token.
+    /// Signal this actor to stop
     pub fn stop(&self) {
         self.alive.store(false, Ordering::Release);
-        self.cancel_token.cancel();
     }
 
     /// The actor's name as registered with the supervisor.
@@ -79,5 +78,31 @@ impl<E: Event> Context<E> {
     #[inline]
     pub fn is_alive(&self) -> bool {
         self.alive.load(Ordering::Relaxed)
+    }
+
+    /// Returns a future that never completes.
+    ///
+    /// Use this in [`Actor::tick`](crate::Actor::tick) when you don't need periodic logic
+    /// and want your actor to be purely event-driven:
+    ///
+    /// ```rust,ignore
+    /// impl Actor for MyEventProcessor {
+    ///     async fn tick(&mut self) -> Result<()> {
+    ///         self.ctx.pending().await  // Never returns - only reacts to events
+    ///     }
+    ///
+    ///     async fn handle(&mut self, event: &Event, meta: &Meta) -> Result<()> {
+    ///         // All logic here - purely reactive
+    ///         process(event).await
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// This is more ergonomic than `std::future::pending()` and matches the
+    /// `Result<()>` return type expected by `tick()`.
+    #[inline]
+    pub async fn pending(&self) -> Result<()> {
+        std::future::pending::<()>().await;
+        Ok(())
     }
 }

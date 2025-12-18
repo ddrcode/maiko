@@ -1,15 +1,65 @@
+//! Guessing Game - Actor Coordination Example
+//!
+//! The Game waits for guesses from both players, pairs them, and emits results.
+//!
+//! This example demonstrates Maiko patterns for coordinating multiple actors
+//! in a stateful, interactive system.
+//!
+//! ## 1. Tick-Based Actors (Event Producers)
+//!
+//! The `Player` actors use `tick()` as their primary logic - they don't react to events,
+//! they **generate** them at regular intervals.
+//!
+//! ## 2. Stateful Coordination
+//!
+//! The `Game` actor maintains state across multiple events, collecting guesses from
+//! multiple players before processing them together. This shows how actors can
+//! coordinate without knowing about each other - they just emit and consume events.
+//!
+//! ## 3. Topic-Based Separation of Concerns
+//!
+//! Events are routed to different topics based on their purpose:
+//! - **Game topic**: Game logic events (guesses) go to the Game coordinator
+//! - **Output topic**: Display events (results, messages) go to the Printer
+//!
+//! This separation allows clean architectural boundaries without coupling actors.
+//!
+//! ## 4. Self-Termination
+//!
+//! The Game actor stops the entire system using `ctx.stop()` after completing its task.
+
 use std::time::Duration;
 
 use maiko::*;
 use tokio::time::sleep;
 
+/// Player identifier for distinguishing events from different players.
+///
+/// By encoding the player ID in the event itself (rather than using actor names),
+/// we maintain type safety and avoid string comparisons.
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+enum PlayerId {
+    Player1,
+    Player2,
+}
+
+/// Events in the guessing game.
+///
+/// Each event carries structured data specific to its purpose:
+/// - `Guess`: Contains both the player ID and their guess
+/// - `Result`: Contains both players' numbers for comparison
+/// - `Message`: Carries string output for display
 #[derive(Clone, Debug, Event)]
 enum GuesserEvent {
-    Guess(u8),
-    Result(u8, u8),
+    Guess { player: PlayerId, number: u8 },
+    Result { player1: u8, player2: u8 },
     Message(String),
 }
 
+/// Topics for routing events to appropriate actors.
+///
+/// Game logic events go to the coordinator, while output events go to the printer.
+/// This separation allows clean architectural boundaries.
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 enum GuesserTopic {
     Game,
@@ -23,22 +73,28 @@ impl Topic<GuesserEvent> for GuesserTopic {
 
         match event {
             Message(..) => Output,
-            Result(..) => Output,
-            Guess(..) => Game,
+            Result { .. } => Output,
+            Guess { .. } => Game,
         }
     }
 }
 
+/// A player actor that generates guesses at regular intervals.
+///
+/// This is a **tick-based actor** - its primary logic is in `tick()` rather than
+/// `handle()`. Players don't react to events; they produce them on a schedule.
 struct Guesser {
     ctx: Context<GuesserEvent>,
+    player_id: PlayerId,
     cycle_time: Duration,
 }
 
 impl Guesser {
-    fn new(ctx: Context<GuesserEvent>, time: u64) -> Self {
+    fn new(ctx: Context<GuesserEvent>, player_id: PlayerId, interval_ms: u64) -> Self {
         Self {
             ctx,
-            cycle_time: Duration::from_millis(time),
+            player_id,
+            cycle_time: Duration::from_millis(interval_ms),
         }
     }
 }
@@ -46,27 +102,42 @@ impl Guesser {
 impl Actor for Guesser {
     type Event = GuesserEvent;
 
+    /// Generate a random guess at regular intervals.
     async fn tick(&mut self) -> maiko::Result<()> {
         sleep(self.cycle_time).await;
-        let guess = rand::random::<u8>() % 10;
-        self.ctx.send(GuesserEvent::Guess(guess)).await
+        let number = rand::random::<u8>() % 10;
+
+        // Emit a guess event with our player ID
+        self.ctx
+            .send(GuesserEvent::Guess {
+                player: self.player_id,
+                number,
+            })
+            .await
     }
 }
 
+/// The game coordinator that pairs guesses and determines results.
+///
+/// This is a **stateful actor** that:
+/// - Collects guesses from multiple players
+/// - Pairs them when both are available
+/// - Emits results for display
+/// - Tracks rounds and terminates after completion
 struct Game {
     ctx: Context<GuesserEvent>,
-    number1: Option<u8>,
-    number2: Option<u8>,
-    count: u64,
+    player1_guess: Option<u8>,
+    player2_guess: Option<u8>,
+    round: u64,
 }
 
 impl Game {
     fn new(ctx: Context<GuesserEvent>) -> Self {
         Self {
             ctx,
-            number1: None,
-            number2: None,
-            count: 0,
+            player1_guess: None,
+            player2_guess: None,
+            round: 0,
         }
     }
 }
@@ -75,59 +146,79 @@ impl Actor for Game {
     type Event = GuesserEvent;
 
     async fn on_start(&mut self) -> maiko::Result<()> {
+        // Send welcome message on startup
         self.ctx
             .send(GuesserEvent::Message(
-                "Welcome to the Guessing Game!\n(the game will stop after 10 attempts)".to_string(),
+                "Welcome to the Guessing Game!\n(the game will stop after 10 rounds)".to_string(),
             ))
             .await
     }
 
+    /// Collect guesses from players and emit results when both have guessed.
     async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
-        if let GuesserEvent::Guess(guess) = event {
-            if meta.actor_name() == "Player1" {
-                self.number1 = Some(*guess);
-            } else if meta.actor_name() == "Player2" {
-                self.number2 = Some(*guess);
+        if let GuesserEvent::Guess { player, number } = event {
+            // Store the guess based on player ID
+            match player {
+                PlayerId::Player1 => self.player1_guess = Some(*number),
+                PlayerId::Player2 => self.player2_guess = Some(*number),
             }
 
-            if let (Some(n1), Some(n2)) = (self.number1, self.number2) {
-                self.count += 1;
-                self.number1 = None;
-                self.number2 = None;
-                self.ctx.send(GuesserEvent::Result(n1, n2)).await?;
+            // When both players have guessed, pair them and emit result
+            if let (Some(n1), Some(n2)) = (self.player1_guess, self.player2_guess) {
+                self.round += 1;
+
+                // Clear guesses for next round
+                self.player1_guess = None;
+                self.player2_guess = None;
+
+                // Emit result with correlation to track related events
+                self.ctx
+                    .send_child_event(
+                        GuesserEvent::Result {
+                            player1: n1,
+                            player2: n2,
+                        },
+                        meta,
+                    )
+                    .await?;
             }
         }
 
         Ok(())
     }
 
+    /// Check if the game should end and trigger shutdown.
+    /// The `ctx.stop()` calls actor to exit. As the supervisor expects all actors
+    /// to run, this will lead to overall shutdown.
     async fn tick(&mut self) -> maiko::Result<()> {
-        if self.count >= 10 {
+        if self.round >= 10 {
             self.ctx.stop();
         }
-
-        Ok(())
+        self.ctx.pending().await
     }
 }
 
+/// Output actor that formats and displays game events.
+///
+/// This is a **pure consumer** actor - it only reacts to events without emitting
+/// new ones. It demonstrates the observer pattern where actors can watch events
+/// without participating in the main logic.
 struct Printer;
 
 impl Actor for Printer {
     type Event = GuesserEvent;
 
+    /// Display messages and results to the console.
     async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> maiko::Result<()> {
         match event {
             GuesserEvent::Message(msg) => {
                 println!("{}", msg);
             }
-            GuesserEvent::Result(guess, number) if guess == number => {
-                println!("Correct guess! The number was {}", number);
+            GuesserEvent::Result { player1, player2 } if player1 == player2 => {
+                println!("Match! Both players guessed {}", player1);
             }
-            GuesserEvent::Result(guess, number) if guess != number => {
-                println!(
-                    "Wrong! The number was {} while the guess was {}",
-                    number, guess
-                );
+            GuesserEvent::Result { player1, player2 } => {
+                println!("No match. Player1: {}, Player2: {}", player1, player2);
             }
             _ => {}
         }
@@ -137,16 +228,30 @@ impl Actor for Printer {
 }
 
 #[tokio::main]
-
 async fn main() -> Result<()> {
     let mut supervisor = Supervisor::<GuesserEvent, GuesserTopic>::default();
 
-    supervisor.add_actor("Player1", |ctx| Guesser::new(ctx, 500), &[])?;
-    supervisor.add_actor("Player2", |ctx| Guesser::new(ctx, 350), &[])?;
+    // Add Player actors with empty subscriptions - they only produce events
+    supervisor.add_actor(
+        "Player1",
+        |ctx| Guesser::new(ctx, PlayerId::Player1, 500),
+        &[], // No subscriptions - pure producer
+    )?;
+    supervisor.add_actor(
+        "Player2",
+        |ctx| Guesser::new(ctx, PlayerId::Player2, 350),
+        &[], // No subscriptions - pure producer
+    )?;
+
+    // Game coordinator subscribes to Game topic (receives guesses)
     supervisor.add_actor("Game", Game::new, &[GuesserTopic::Game])?;
+
+    // Printer subscribes to Output topic (receives results and messages)
     supervisor.add_actor("Printer", |_| Printer, &[GuesserTopic::Output])?;
 
+    // Run until Game actor calls ctx.stop()
     supervisor.run().await?;
-    println!("Game over!");
+
+    println!("\nGame over!");
     Ok(())
 }

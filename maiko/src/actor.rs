@@ -39,20 +39,56 @@ pub trait Actor: Send {
 
     /// Optional periodic work called when the event queue is empty.
     ///
-    /// This runs after processing up to [`Config::max_events_per_tick`] events.
-    /// Useful for:
-    /// - Polling external sources (WebSockets, file descriptors, system APIs)
-    /// - Periodic tasks (metrics reporting, health checks)
-    /// - Timeout logic (detecting stale connections)
-    /// - Housekeeping (buffer flushing, cache cleanup)
+    /// This runs in a `select!` loop alongside event reception. What you `.await`
+    /// inside `tick()` determines when your actor wakes up.
     ///
-    /// Note: If events arrive continuously, `tick()` may not run frequently.
-    /// For time-critical operations, consider using `tokio::time::interval`
-    /// with `tokio::select!` inside your actor logic.
+    /// # Common Patterns
+    ///
+    /// **Time-Based Producer** (polls periodically):
+    /// ```rust,ignore
+    /// async fn tick(&mut self) -> Result<()> {
+    ///     tokio::time::sleep(Duration::from_secs(1)).await;
+    ///     let data = generate_data();
+    ///     self.ctx.send(DataEvent(data)).await
+    /// }
+    /// ```
+    ///
+    /// **External Event Source** (driven by I/O):
+    /// ```rust,ignore
+    /// async fn tick(&mut self) -> Result<()> {
+    ///     let frame = self.websocket.read().await?;
+    ///     self.ctx.send(WebSocketEvent(frame)).await
+    /// }
+    /// ```
+    ///
+    /// **Housekeeping Only** (runs after processing events):
+    /// ```rust,ignore
+    /// async fn tick(&mut self) -> Result<()> {
+    ///     if self.should_flush() {
+    ///         self.flush_buffer().await?;
+    ///     }
+    ///     Ok(())  // Returns immediately
+    /// }
+    /// ```
+    ///
+    /// **No Periodic Logic** (pure event processor):
+    /// ```rust,ignore
+    /// async fn tick(&mut self) -> Result<()> {
+    ///     self.ctx.pending().await  // Never returns - actor only reacts to events
+    /// }
+    /// ```
+    ///
+    /// # Default Behavior
+    ///
+    /// The default implementation returns a pending future that never completes,
+    /// making the actor purely event-driven with no periodic work.
     ///
     /// [`Config::max_events_per_tick`]: crate::Config::max_events_per_tick
     fn tick(&mut self) -> impl Future<Output = Result<()>> + Send {
-        async { Ok(()) }
+        async {
+            std::future::pending::<()>().await;
+            Ok(())
+        }
     }
 
     /// Lifecycle hook called once before the event loop starts.

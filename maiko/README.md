@@ -14,7 +14,7 @@
 
 ## What is Maiko?
 
-**Maiko** is a lightweight actor runtime for building event-driven concurrent systems in Rust. Unlike traditional actor frameworks, Maiko actors communicate through **topic-based pub/sub** rather than direct addressing, making them loosely coupled and ideal for stream processing workloads.
+**Maiko** is a lightweight actor runtime for building event-driven concurrent systems in Rust. Unlike traditional actor frameworks (usually inspired by Erlang), Maiko actors communicate through **topic-based pub/sub** rather than direct addressing, making them loosely coupled and ideal for stream processing workloads.
 
 ### The Problem Maiko Solves
 
@@ -89,26 +89,14 @@ Maiko excels at processing **unidirectional event streams** where actors don't n
 | Type-Safe Routing | ✅ | ✅ | ✅ | ✅ |
 | Learning Curve | Low | Medium | Low | Low |
 
-**Use Case Guide:**
-
-| Use Case | Best Choice |
-|----------|-------------|
-| Event streams, pub/sub patterns | **Maiko** ✅ |
-| Request/reply, actor addressing | Actix, Ractor |
-| Supervision trees, fault tolerance | Actix, Ractor |
-| Simple async tasks | Tokio tasks |
-| Distributed messaging | Kafka, NATS |
-
 ---
 
 ## Quick Start
 
-Add Maiko to your `Cargo.toml`:
+Add Maiko to your `Cargo.toml`, by executing the following command:
 
-```toml
-[dependencies]
-maiko = "0.1.0"
-tokio = { version = "1", features = ["full"] }
+```sh
+cargo add maiko
 ```
 
 ### Hello World Example
@@ -123,9 +111,7 @@ enum MyEvent {
 }
 
 // Create an actor
-struct Greeter {
-    ctx: Context<MyEvent>,
-}
+struct Greeter;
 
 impl Actor for Greeter {
     type Event = MyEvent;
@@ -134,13 +120,9 @@ impl Actor for Greeter {
         match event {
             MyEvent::Hello(name) => {
                 println!("Hello, {}! (from {})", name, meta.actor_name());
-                Ok(())
             }
         }
-    }
-
-    async fn on_start(&mut self) -> Result<()> {
-        self.ctx.send(MyEvent::Hello("World".into())).await
+        Ok(())
     }
 }
 
@@ -148,17 +130,29 @@ impl Actor for Greeter {
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
 
-    // Add actor with factory function
-    sup.add_actor("greeter", |ctx| Greeter { ctx }, &[Broadcast])?;
-
-    // Start the supervisor
+    // Add actor and subscribe it to all topics (DefaultTopic)
+    sup.add_actor("greeter", |_ctx| Greeter, &[DefaultTopic])?;
     sup.start().await?;
+    sup.send(MyEvent::Hello("World".into())).await?;
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // Graceful shutdown (it attempts to process all events already in the queue)
     sup.stop().await?;
-
     Ok(())
 }
+```
+
+### Other Examples
+
+See the [`examples/`](maiko/examples/) directory for complete programs:
+
+- **[`pingpong.rs`](maiko/examples/pingpong.rs)** - Simple event exchange between actors
+- **[`guesser.rs`](maiko/examples/guesser.rs)** - Multi-actor game with topics and timing
+
+Run examples with:
+
+```bash
+cargo run --example pingpong
+cargo run --example guesser
 ```
 
 ---
@@ -201,10 +195,10 @@ impl Topic<NetworkEvent> for NetworkTopic {
 }
 ```
 
-Or use `Broadcast` to broadcast to all actors:
+Or use `DefaultTopic` to broadcast to all actors:
 
 ```rust
-sup.add_actor("processor", factory, &[Broadcast])?;
+sup.add_actor("processor", factory, &[DefaultTopic])?;
 ```
 
 ### 3. Actors
@@ -252,6 +246,12 @@ impl Actor for PacketProcessor {
 }
 ```
 
+The `tick()` method runs when the event queue is empty, making it perfect for:
+- Polling external sources (WebSockets, file descriptors, system APIs)
+- Periodic tasks (metrics reporting, health checks)
+- Timeout logic (detecting stale connections)
+- Housekeeping (buffer flushing, cache cleanup)
+
 ### 4. Context
 
 The `Context` provides actors with capabilities:
@@ -272,7 +272,29 @@ if !ctx.is_alive() {
 let name = ctx.name();
 ```
 
-### 5. Actor Patterns: Handle vs Tick
+### 5. Supervisor
+
+The `Supervisor` manages actor lifecycles:
+
+```rust
+let mut sup = Supervisor::<NetworkEvent>::new();
+
+// Add actors with subscriptions
+sup.add_actor("ingress", |ctx| IngressActor::new(ctx), &[NetworkTopic::Ingress])?;
+sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
+sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[DefaultTopic])?;
+
+// Start all actors
+sup.start().await?;
+
+// ... application runs ...
+
+// Graceful shutdown
+sup.stop().await?;
+```
+
+
+### 6. Actor Patterns: Handle vs Tick
 
 Maiko actors typically follow one of two patterns:
 
@@ -319,47 +341,8 @@ impl Actor for StockReader {
         Ok(())
     }
 }
-
-// System event monitor - polls inotify/epoll
-impl Actor for SystemMonitor {
-    type Event = SystemEvent;
-
-    async fn tick(&mut self) -> Result<()> {
-        // Poll for file system events
-        for event in self.inotify.read_events()? {
-            self.ctx.send(SystemEvent::FileChanged(event.path)).await?;
-        }
-        Ok(())
-    }
-}
 ```
 
-The `tick()` method runs when the event queue is empty, making it perfect for:
-- **Polling external sources** (WebSockets, file descriptors, system APIs)
-- **Periodic tasks** (metrics reporting, health checks)
-- **Timeout logic** (detecting stale connections)
-- **Housekeeping** (buffer flushing, cache cleanup)
-
-### 6. Supervisor
-
-The `Supervisor` manages actor lifecycles:
-
-```rust
-let mut sup = Supervisor::<NetworkEvent>::new();
-
-// Add actors with subscriptions
-sup.add_actor("ingress", |ctx| IngressActor::new(ctx), &[NetworkTopic::Ingress])?;
-sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
-sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[Broadcast])?;
-
-// Start all actors
-sup.start().await?;
-
-// ... application runs ...
-
-// Graceful shutdown
-sup.stop().await?;
-```
 
 ---
 
@@ -374,10 +357,10 @@ Maiko actors **don't know about each other**. They only know about:
 This is fundamentally different from Akka/Actix where actors have addresses:
 
 ```rust
-// ❌ Traditional actors (tight coupling)
+// Traditional actors (tight coupling)
 actor_ref.tell(message);  // Must know the actor's address
 
-// ✅ Maiko (loose coupling)
+// Maiko (loose coupling)
 ctx.send(event).await?;   // Only knows about event types
 ```
 
@@ -391,18 +374,69 @@ System Event → Parser → Validator → Processor → Logger
 
 This makes Maiko ideal for **pipeline architectures** and **stream processing**.
 
-### Type Safety
-
-Event types are checked at compile time. Invalid event routing is impossible:
-
-```rust
-// Compile error - wrong event type!
-ctx.send(DifferentEvent::Foo).await?;
-```
+That means Maiko may be not best suited for **request-response** patterns. Although req-resp is possible in theory (with two separate event types), it's not the primary use case, and solutions like [Actix Web](https://actix.rs/) or [Ractor](https://docs.rs/ractor/latest/ractor/) are better suited for this.
 
 ---
 
 ## Advanced Features
+
+### Tick Patterns
+
+The `tick()` method runs in a `select!` loop alongside event reception. What you `.await` inside determines when your actor wakes:
+
+**Pattern 1: Time-Based Producer**
+```rust
+impl Actor for HeartbeatActor {
+    async fn tick(&mut self) -> Result<()> {
+        tokio::time::sleep(Duration::from_secs(5)).await;  // Wakes every 5s
+        self.ctx.send(HeartbeatEvent).await
+    }
+}
+```
+
+**Pattern 2: External Event Source**
+```rust
+impl Actor for WebSocketReader {
+    async fn tick(&mut self) -> Result<()> {
+        let frame = self.socket.read().await?;  // Wakes when data arrives
+        self.ctx.send(FrameEvent(frame)).await
+    }
+}
+```
+
+**Pattern 3: Pure Event Processor**
+```rust
+impl Actor for EventLogger {
+    async fn tick(&mut self) -> Result<()> {
+        self.ctx.pending().await  // Never wakes - only handles events (default behavior)
+    }
+
+    async fn handle(&mut self, event: &Event, _meta: &Meta) -> Result<()> {
+        log::info!("Event: {:?}", event);  // All logic in handle()
+        Ok(())
+    }
+}
+```
+
+**Pattern 4: Housekeeping After Events**
+```rust
+impl Actor for BufferedWriter {
+    async fn tick(&mut self) -> Result<()> {
+        // Returns immediately - called after processing event batches
+        if self.buffer.len() > 100 {
+            self.flush().await?;
+        }
+        Ok(())
+    }
+
+    async fn handle(&mut self, event: &Event, _meta: &Meta) -> Result<()> {
+        self.buffer.push(event.clone());
+        Ok(())
+    }
+}
+```
+
+**Key insight:** `ctx.pending()` is more ergonomic than `std::future::pending()` since it returns `Result<()>` to match the trait signature.
 
 ### Correlation IDs
 
@@ -458,46 +492,23 @@ let mut sup = Supervisor::new(config);
 
 ---
 
-## Examples
-
-See the [`examples/`](maiko/examples/) directory for complete programs:
-
-- **[pingpong.rs](maiko/examples/pingpong.rs)** - Simple event exchange between actors
-- **[guesser.rs](maiko/examples/guesser.rs)** - Multi-actor game with topics and timing
-
-Run examples with:
-
-```bash
-cargo run --example pingpong
-cargo run --example guesser
-```
-
----
-
 ## Roadmap
 
-### v0.1.0 (Current - Single Process)
-- Topic-based event routing
-- Async actor lifecycle hooks
-- Graceful shutdown via cancellation tokens
-- Correlation ID tracking
-- Flexible error handling
-
-### v0.2.0 (Supervision & Control)
+### Next Goal - Supervision & Control
 - Actor restart policies and strategies
 - Supervisor metrics and monitoring
 - Dynamic actor spawning at runtime
 - Backpressure configuration
 - Enhanced error recovery
 
-### v0.3.0 (Cross-Process Communication)
+### Long-Term Vision: Cross-Process Communication
 - IPC bridge actors (Unix sockets, TCP)
 - Event serialization framework (bincode, JSON, protobuf)
 - Remote topic subscriptions
 - Multi-supervisor coordination
 - Process-level fault isolation
 
-### v0.4.0+ (Ready-to-Use Actor Library)
+### independent work: Ready-to-Use Actor Library
 - **Inter-supervisor communication** - Unix socket, gRPC bridge actors
 - **Networking actors** - HTTP client/server, WebSocket, TCP/UDP handlers
 - **Telemetry actors** - OpenTelemetry integration, metrics exporters
@@ -506,45 +517,14 @@ cargo run --example guesser
 
 ---
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    Supervisor                       │
-│  ┌────────────────────────────────────────────────┐ │
-│  │              Central Broker                    │ │
-│  │  (Topic-based routing & filtering)             │ │
-│  └────────────────────────────────────────────────┘ │
-│         │              │              │             │
-│    ┌────▼───┐     ┌────▼───┐     ┌────▼───┐         │
-│    │Actor A │     │Actor B │     │Actor C │         │
-│    │        │     │        │     │        │         │
-│    │Topics: │     │Topics: │     │Topics: │         │
-│    │  [T1]  │     │[T1,T2] │     │  [T2]  │         │
-│    └────┬───┘     └───┬────┘     └───┬────┘         │
-│         │             │              │              │
-│         └─────────────┴──────────────┘              │
-│              Events flow up to broker               │
-└─────────────────────────────────────────────────────┘
-```
-
-**Key Components:**
-
-- **Supervisor** - Manages actor lifecycles and shutdown
-- **Broker** - Routes events to subscribed actors based on topics
-- **Actors** - Independent event processors with isolated state
-- **Context** - Actor's interface to send events and check system state
-
----
-
 ## Contributing
 
 Contributions are welcome! Please feel free to:
 
 - Report bugs via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
+- Submit pull requests
 - Suggest features and improvements
 - Improve documentation
-- Submit pull requests
 
 ### Code Philosophy
 
@@ -557,11 +537,7 @@ We believe in:
 
 Contributors are expected to write their own code. AI may assist with reviews, discussions, and documentation, but implementations should reflect your own understanding and skills.
 
----
-
-## License
-
-Licensed under the [MIT License](LICENSE).
+Miako is built with ❤️ and by humans, for humans 🦀
 
 ---
 
@@ -572,4 +548,8 @@ Inspired by:
 - **Akka Streams** - Reactive stream processing
 - **Tokio** - Async runtime foundation
 
-Built with ❤️ and by humans, for humans 🦀
+---
+
+## License
+
+Licensed under the [MIT License](LICENSE).

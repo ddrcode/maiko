@@ -1,6 +1,6 @@
 use std::sync::{Arc, atomic::Ordering};
 
-use tokio::sync::mpsc::Receiver;
+use tokio::{select, sync::mpsc::Receiver};
 
 use crate::{Actor, Context, Envelope, Result};
 
@@ -16,30 +16,48 @@ impl<A: Actor> ActorHandler<A> {
         self.actor.on_start().await?;
         let token = self.ctx.cancel_token.clone();
         while self.ctx.alive.load(Ordering::Acquire) {
-            let mut cnt = 0;
-            while let Ok(event) = self.receiver.try_recv() {
-                if let Err(e) = self.actor.handle(&event.event, &event.meta).await {
-                    self.actor.on_error(e)?;
-                }
-                cnt += 1;
-                if cnt == self.max_events_per_tick {
+            select! {
+                biased;
+
+                _ = token.cancelled() => {
+                    self.ctx.stop();
                     break;
+                },
+
+                Some(event) = self.receiver.recv() => {
+                    let res = self.actor.handle(&event.event, &event.meta).await;
+                    self.handle_error(res)?;
+
+                    let mut cnt = 1;
+                    while let Ok(event) = self.receiver.try_recv() {
+                        let res = self.actor.handle(&event.event, &event.meta).await;
+                        self.handle_error(res)?;
+                        cnt += 1;
+                        if cnt == self.max_events_per_tick {
+                            break;
+                        }
+                    }
+                    if cnt > 0 {
+                        tokio::task::yield_now().await;
+                    }
                 }
-            }
-            if cnt > 0 {
-                tokio::task::yield_now().await;
-            }
 
-            if let Err(e) = self.actor.tick().await {
-                self.actor.on_error(e)?;
-            }
+                tick = self.actor.tick() => {
+                    self.handle_error(tick)?;
+                    tokio::task::yield_now().await;
+                }
 
-            if token.is_cancelled() {
-                self.ctx.stop();
-                break;
             }
         }
 
         self.actor.on_shutdown().await
+    }
+
+    #[inline]
+    fn handle_error(&self, result: Result<()>) -> Result<()> {
+        if let Err(e) = result {
+            self.actor.on_error(e)?;
+        }
+        Ok(())
     }
 }

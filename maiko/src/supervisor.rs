@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{Actor, Config, Context, Envelope, Error, Event, Result, Topic};
 use crate::{
-    Broadcast,
+    DefaultTopic,
     internal::{ActorHandler, Broker, Subscriber},
 };
 
@@ -21,28 +21,34 @@ use crate::{
 /// - `start()` spawns the broker loop and returns immediately (non-blocking).
 /// - `join()` awaits all actor tasks to finish; typically used after `start()`.
 /// - `run()` combines `start()` and `join()`, blocking until shutdown.
+/// - `stop()` graceful shutdown; lets actors to consumed active events
 /// - Emit events into the broker with `send(event)`.
 ///
 /// See also: [`Actor`], [`Context`], [`Topic`].
-pub struct Supervisor<E: Event, T: Topic<E> = Broadcast> {
-    config: Config,
+pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
+    config: Arc<Config>,
     broker: Arc<Mutex<Broker<E, T>>>,
     sender: Sender<Arc<Envelope<E>>>,
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
+    broker_cancel_token: Arc<CancellationToken>,
 }
 
 impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
     /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
+        let config = Arc::new(config);
         let (tx, rx) = channel::<Arc<Envelope<E>>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
+        let broker_cancel_token = Arc::new(CancellationToken::new());
+        let broker = Broker::new(rx, broker_cancel_token.clone(), config.clone());
         Self {
-            broker: Arc::new(Mutex::new(Broker::new(rx, cancel_token.clone()))),
+            broker: Arc::new(Mutex::new(broker)),
             config,
             sender: tx,
             tasks: JoinSet::new(),
             cancel_token,
+            broker_cancel_token,
         }
     }
 
@@ -88,14 +94,19 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     /// Start the broker loop in a background task. This returns immediately.
     pub async fn start(&mut self) -> Result<()> {
         let broker = self.broker.clone();
-        // let mut broker = self.broker.take().unwrap();
-        // self.tasks
-        tokio::task::spawn(async move { broker.lock().await.run().await });
+        self.tasks
+            .spawn(async move { broker.lock().await.run().await });
         Ok(())
     }
 
+    /// Waits until at least one of the actor tasks completes then
+    /// triggers a shutdown if not already requested.
     pub async fn join(&mut self) -> Result<()> {
         while let Some(res) = self.tasks.join_next().await {
+            if !self.cancel_token.is_cancelled() {
+                self.stop().await?;
+                break;
+            }
             res??;
         }
         Ok(())
@@ -117,9 +128,35 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     }
 
     /// Request a graceful shutdown, then await all actor tasks.
+    ///
+    /// # Shutdown Process
+    ///
+    /// 1. Waits for the broker to receive all pending events (up to 10 ms)
+    /// 2. Stops the broker and waits for it to drain actor queues
+    /// 3. Cancels all actors and waits for tasks t
     pub async fn stop(&mut self) -> Result<()> {
+        use tokio::time::*;
+        let start = Instant::now();
+        let timeout = Duration::from_millis(10);
+        let max = self.sender.max_capacity();
+
+        // 1. Wait for the main channle to drain
+        while start.elapsed() < timeout {
+            if self.sender.capacity() == max {
+                break;
+            }
+            sleep(Duration::from_micros(100)).await;
+        }
+
+        // 2. Wait the the broker to shutdown gracefully
+        self.broker_cancel_token.cancel();
+        let _ = self.broker.lock().await;
+
+        // 3. Stop the actors
         self.cancel_token.cancel();
-        self.join().await?;
+        while let Some(res) = self.tasks.join_next().await {
+            res??;
+        }
         Ok(())
     }
 }

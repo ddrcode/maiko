@@ -23,6 +23,8 @@ pub struct Config {
     /// Lower values improve fairness, higher values improve throughput.
     /// Default: 10
     pub max_events_per_tick: usize,
+
+    pub maintenance_interval: tokio::time::Duration,
 }
 
 impl Default for Config {
@@ -30,6 +32,7 @@ impl Default for Config {
         Config {
             channel_size: 128,
             max_events_per_tick: 10,
+            maintenance_interval: tokio::time::Duration::from_secs(10),
         }
     }
 }
@@ -57,6 +60,14 @@ impl Config {
     /// [`Actor::tick`]: crate::Actor::tick
     pub fn with_max_events_per_tick(mut self, limit: usize) -> Self {
         self.max_events_per_tick = limit;
+        self
+    }
+
+    /// Set the maintenance interval for the broker.
+    ///
+    /// This controls how often the broker cleans up expired subscribers.
+    pub fn with_maintenance_interval(mut self, interval: tokio::time::Duration) -> Self {
+        self.maintenance_interval = interval;
         self
     }
 }

@@ -1,7 +1,15 @@
+# [0.1.1](https://github.com/ddrcode/maiko/compare/v0.1.0...v0.1.1) (December 18th, 2025)
+
+No changes. Version bumped to be aligned with the main library.
+
+---
+
 # [0.1.0](https://github.com/ddrcode/maiko/compare/v0.0.2...v0.1.0) (December 14th, 2025)
 
-**MVP**. Fully-functional, teset, yet quite minimal version.
+**MVP**. Fully-functional, tested, yet quite minimal version.
 
-## Added
+### Added
 
-- `Event` derive macro [#3](https://github.com/ddrcode/maiko/issues/3)
+- `Event` derive macro ([#3])
+
+[#3]: https://github.com/ddrcode/maiko/issues/3
