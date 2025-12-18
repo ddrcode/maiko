@@ -26,7 +26,7 @@ use crate::{
 ///
 /// See also: [`Actor`], [`Context`], [`Topic`].
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
-    config: Config,
+    config: Arc<Config>,
     broker: Arc<Mutex<Broker<E, T>>>,
     sender: Sender<Arc<Envelope<E>>>,
     tasks: JoinSet<Result<()>>,
@@ -37,11 +37,13 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
 impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
     /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
+        let config = Arc::new(config);
         let (tx, rx) = channel::<Arc<Envelope<E>>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
         let broker_cancel_token = Arc::new(CancellationToken::new());
+        let broker = Broker::new(rx, broker_cancel_token.clone(), config.clone());
         Self {
-            broker: Arc::new(Mutex::new(Broker::new(rx, broker_cancel_token.clone()))),
+            broker: Arc::new(Mutex::new(broker)),
             config,
             sender: tx,
             tasks: JoinSet::new(),

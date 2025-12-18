@@ -4,24 +4,26 @@ use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
 
 use super::Subscriber;
-use crate::{Envelope, Error, Event, Result, Topic};
+use crate::{Config, Envelope, Error, Event, Result, Topic};
 
-#[derive(Debug)]
 pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Arc<Envelope<E>>>,
     subscribers: Vec<Subscriber<E, T>>,
     cancel_token: Arc<CancellationToken>,
+    config: Arc<Config>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
     pub fn new(
         receiver: Receiver<Arc<Envelope<E>>>,
         cancel_token: Arc<CancellationToken>,
+        config: Arc<Config>,
     ) -> Broker<E, T> {
         Broker {
             receiver,
             subscribers: Vec::new(),
             cancel_token,
+            config,
         }
     }
 
