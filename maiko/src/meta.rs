@@ -18,7 +18,7 @@ use uuid::Uuid;
 pub struct Meta {
     id: u128,
     timestamp: u64,
-    actor_name: Arc<str>,
+    pub(crate) actor_name: Arc<str>,
     correlation_id: Option<u128>,
 }
 

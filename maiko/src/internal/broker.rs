@@ -37,23 +37,34 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         let topic = Topic::from_event(&e.event);
         self.subscribers
             .iter()
-            .filter(|s| s.topics.contains(&topic) && s.name != e.meta.actor_name().into())
+            .filter(|s| s.topics.contains(&topic))
+            .filter(|s| !s.sender.is_closed())
+            .filter(|s| {
+                !Arc::ptr_eq(&s.name, &e.meta.actor_name) || s.name.as_ref() != e.meta.actor_name()
+            })
             .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
         Ok(())
     }
 
     pub async fn run(&mut self) -> Result<()> {
+        let mut cleanup_interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
         loop {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
                     self.send_event(&e)?;
                 },
-                else => break
+                _ = cleanup_interval.tick() => {
+                    self.cleanup();
+                }
             }
         }
         self.shutdown().await;
         Ok(())
+    }
+
+    fn cleanup(&mut self) {
+        self.subscribers.retain(|s| !s.sender.is_closed());
     }
 
     async fn shutdown(&mut self) {

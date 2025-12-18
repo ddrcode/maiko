@@ -459,37 +459,6 @@ let mut sup = Supervisor::new(config);
 
 ---
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    Supervisor                       │
-│  ┌────────────────────────────────────────────────┐ │
-│  │              Central Broker                    │ │
-│  │  (Topic-based routing & filtering)             │ │
-│  └────────────────────────────────────────────────┘ │
-│         │              │              │             │
-│    ┌────▼───┐     ┌────▼───┐     ┌────▼───┐         │
-│    │Actor A │     │Actor B │     │Actor C │         │
-│    │        │     │        │     │        │         │
-│    │Topics: │     │Topics: │     │Topics: │         │
-│    │  [T1]  │     │[T1,T2] │     │  [T2]  │         │
-│    └────┬───┘     └───┬────┘     └───┬────┘         │
-│         │             │              │              │
-│         └─────────────┴──────────────┘              │
-│              Events flow up to broker               │
-└─────────────────────────────────────────────────────┘
-```
-
-**Key Components:**
-
-- **Supervisor** - Manages actor lifecycles and shutdown
-- **Broker** - Routes events to subscribed actors based on topics
-- **Actors** - Independent event processors with isolated state
-- **Context** - Actor's interface to send events and check system state
-
----
-
 ## Contributing
 
 Contributions are welcome! Please feel free to:
@@ -514,15 +483,15 @@ Miako is built with ❤️ and by humans, for humans 🦀
 
 ---
 
-## License
-
-Licensed under the [MIT License](LICENSE).
-
----
-
 ## Acknowledgments
 
 Inspired by:
 - **Kafka** - Topic-based event streaming
 - **Akka Streams** - Reactive stream processing
 - **Tokio** - Async runtime foundation
+
+---
+
+## License
+
+Licensed under the [MIT License](LICENSE).

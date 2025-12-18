@@ -97,9 +97,14 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         Ok(())
     }
 
-    /// Waits until all actors and the event broker exit
+    /// Waits until at least one of the actor tasks completes then
+    /// triggers a shutdown if not already requested.
     pub async fn join(&mut self) -> Result<()> {
         while let Some(res) = self.tasks.join_next().await {
+            if !self.cancel_token.is_cancelled() {
+                self.stop().await?;
+                break;
+            }
             res??;
         }
         Ok(())
@@ -147,7 +152,9 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
 
         // 3. Stop the actors
         self.cancel_token.cancel();
-        self.join().await?;
+        while let Some(res) = self.tasks.join_next().await {
+            res??;
+        }
         Ok(())
     }
 }

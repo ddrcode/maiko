@@ -63,10 +63,9 @@ impl<E: Event> Context<E> {
         Ok(())
     }
 
-    /// Signal this actor to stop and trigger the cancellation token.
+    /// Signal this actor to stop
     pub fn stop(&self) {
         self.alive.store(false, Ordering::Release);
-        self.cancel_token.cancel();
     }
 
     /// The actor's name as registered with the supervisor.
