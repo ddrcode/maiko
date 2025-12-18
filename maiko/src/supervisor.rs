@@ -131,7 +131,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     ///
     /// # Shutdown Process
     ///
-    /// 1. Waits for the broker to receive all pending events (up to 10ms)
+    /// 1. Waits for the broker to receive all pending events (up to 10 ms)
     /// 2. Stops the broker and waits for it to drain actor queues
     /// 3. Cancels all actors and waits for tasks t
     pub async fn stop(&mut self) -> Result<()> {
