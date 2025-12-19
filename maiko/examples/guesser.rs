@@ -243,6 +243,8 @@ async fn main() -> Result<()> {
         &[], // No subscriptions - pure producer
     )?;
 
+    supervisor.build_actor(|b, ctx| b.actor(Guesser::new(ctx, PlayerId::Player2, 350)));
+
     // Game coordinator subscribes to Game topic (receives guesses)
     supervisor.add_actor("Game", Game::new, &[GuesserTopic::Game])?;
 

@@ -2,14 +2,14 @@ use std::sync::{Arc, atomic::AtomicBool};
 
 use tokio::{
     sync::{
-        Mutex,
+        Mutex, Notify,
         mpsc::{Sender, channel},
     },
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, Config, Context, Envelope, Error, Event, Result, Topic};
+use crate::{Actor, ActorBuilder, Config, Context, Envelope, Error, Event, Result, Topic};
 use crate::{
     DefaultTopic,
     internal::{ActorHandler, Broker, Subscriber},
@@ -32,6 +32,7 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
+    start_notifier: Arc<Notify>,
 }
 
 impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
@@ -49,6 +50,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             tasks: JoinSet::new(),
             cancel_token,
             broker_cancel_token,
+            start_notifier: Arc::new(Notify::new()),
         }
     }
 
@@ -86,9 +88,32 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             max_events_per_tick: self.config.max_events_per_tick,
         };
 
-        self.tasks.spawn(async move { handler.run().await });
+        let notifier = self.start_notifier.clone();
+        self.tasks.spawn(async move {
+            notifier.notified().await;
+            println!("startujemy {}", handler.ctx.name());
+            handler.run().await
+        });
 
         Ok(())
+    }
+
+    pub fn build_actor<A, F>(&mut self, builder_fn: F)
+    where
+        A: Actor<Event = E> + 'static,
+        F: FnOnce(ActorBuilder<E, T, A>, Context<E>) -> ActorBuilder<E, T, A>,
+    {
+        let name: Arc<str> = Arc::from("test");
+        let alive = Arc::new(AtomicBool::new(true));
+        let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
+        let ctx = Context::<E> {
+            name: name.clone(),
+            sender: self.sender.clone(),
+            alive: alive.clone(),
+            cancel_token: self.cancel_token.clone(),
+        };
+        let builder = builder_fn(ActorBuilder::new(), ctx);
+        let actor = builder.actor.expect("Actor mut be provided");
     }
 
     /// Start the broker loop in a background task. This returns immediately.
@@ -96,6 +121,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         let broker = self.broker.clone();
         self.tasks
             .spawn(async move { broker.lock().await.run().await });
+        self.start_notifier.notify_waiters();
         Ok(())
     }
 
