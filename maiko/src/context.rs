@@ -25,8 +25,7 @@ use crate::{Envelope, Event, Meta, Result};
 pub struct Context<E: Event> {
     pub(crate) name: Arc<str>,
     pub(crate) sender: Sender<Arc<Envelope<E>>>,
-    pub(crate) alive: Arc<AtomicBool>,
-    pub(crate) cancel_token: Arc<CancellationToken>,
+    pub(crate) alive: bool,
 }
 
 impl<E: Event> Context<E> {
@@ -64,8 +63,8 @@ impl<E: Event> Context<E> {
     }
 
     /// Signal this actor to stop
-    pub fn stop(&self) {
-        self.alive.store(false, Ordering::Release);
+    pub fn stop(&mut self) {
+        self.alive = false;
     }
 
     /// The actor's name as registered with the supervisor.
@@ -77,7 +76,7 @@ impl<E: Event> Context<E> {
     /// Whether the actor is considered alive by the runtime.
     #[inline]
     pub fn is_alive(&self) -> bool {
-        self.alive.load(Ordering::Relaxed)
+        self.alive
     }
 
     /// Returns a future that never completes.

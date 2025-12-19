@@ -2,7 +2,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 
 use tokio::{
     sync::{
-        Mutex, Notify,
+        Mutex,
         mpsc::{Sender, channel},
     },
     task::JoinSet,
@@ -32,7 +32,6 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
-    start_notifier: Arc<Notify>,
 }
 
 impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
@@ -50,7 +49,6 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             tasks: JoinSet::new(),
             cancel_token,
             broker_cancel_token,
-            start_notifier: Arc::new(Notify::new()),
         }
     }
 
@@ -68,13 +66,11 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             .try_lock()
             .map_err(|_| Error::BrokerAlreadyStarted)?;
         let name: Arc<str> = Arc::from(name);
-        let alive = Arc::new(AtomicBool::new(true));
         let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
         let ctx = Context::<E> {
             name: name.clone(),
             sender: self.sender.clone(),
-            alive: alive.clone(),
-            cancel_token: self.cancel_token.clone(),
+            alive: true,
         };
         let actor = factory(ctx.clone());
 
@@ -86,34 +82,58 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             receiver: rx,
             ctx,
             max_events_per_tick: self.config.max_events_per_tick,
+            cancel_token: self.cancel_token.clone(),
         };
 
-        let notifier = self.start_notifier.clone();
         self.tasks.spawn(async move {
-            notifier.notified().await;
-            println!("startujemy {}", handler.ctx.name());
+            println!("starting {}", handler.ctx.name());
             handler.run().await
         });
 
         Ok(())
     }
 
-    pub fn build_actor<A, F>(&mut self, builder_fn: F)
+    pub fn build_actor<A, F>(&mut self, name: &str, builder_fn: F) -> Result<()>
     where
         A: Actor<Event = E> + 'static,
         F: FnOnce(ActorBuilder<E, T, A>, Context<E>) -> ActorBuilder<E, T, A>,
     {
-        let name: Arc<str> = Arc::from("test");
+        let name: Arc<str> = Arc::from(name);
         let alive = Arc::new(AtomicBool::new(true));
         let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
         let ctx = Context::<E> {
             name: name.clone(),
             sender: self.sender.clone(),
-            alive: alive.clone(),
+            alive: true,
+        };
+        let builder = builder_fn(ActorBuilder::new(), ctx.clone());
+        let actor = builder.actor.expect("Actor must be provided");
+
+        let mut broker = self
+            .broker
+            .try_lock()
+            .map_err(|_| Error::BrokerAlreadyStarted)?;
+        let subscriber = Subscriber::<E, T> {
+            name: name.clone(),
+            topics: builder.topics,
+            sender: tx,
+        };
+        broker.add_subscriber(subscriber)?;
+
+        let mut handler = ActorHandler {
+            actor,
+            receiver: rx,
+            ctx,
+            max_events_per_tick: self.config.max_events_per_tick,
             cancel_token: self.cancel_token.clone(),
         };
-        let builder = builder_fn(ActorBuilder::new(), ctx);
-        let actor = builder.actor.expect("Actor mut be provided");
+
+        self.tasks.spawn(async move {
+            println!("starting {}", handler.ctx.name());
+            handler.run().await
+        });
+
+        Ok(())
     }
 
     /// Start the broker loop in a background task. This returns immediately.
@@ -121,7 +141,6 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         let broker = self.broker.clone();
         self.tasks
             .spawn(async move { broker.lock().await.run().await });
-        self.start_notifier.notify_waiters();
         Ok(())
     }
 
