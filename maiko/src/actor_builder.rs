@@ -14,12 +14,7 @@ pub struct ActorBuilder<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> {
     actor: Option<A>,
 }
 
-impl<
-    'a,
-    E: Event + Sync + 'static,
-    T: Topic<E> + Send + Sync + 'static,
-    A: Actor<Event = E> + 'static,
-> ActorBuilder<'a, E, T, A>
+impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A>
 {
     pub(crate) fn new(supervisor: &'a mut Supervisor<E, T>, name: &str) -> Self {
         let name: Arc<str> = Arc::from(name);

@@ -8,13 +8,16 @@ use crate::event::Event;
 /// events for the broker. Actors subscribe to one or more topics, and the
 /// broker delivers events to matching subscribers.
 ///
+/// Topics must be `Send + Sync + 'static` because they are stored in the
+/// broker which runs in a spawned task and is shared across threads.
+///
 /// Common patterns:
 /// - Enum topics for simple classification.
 /// - Struct topics when you need richer metadata (e.g., names or IDs).
 ///
 /// Trait bounds: refer to the event trait as [`crate::Event`] in generic
 /// signatures to avoid confusion with the `Event` derive macro.
-pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone {
+pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone + Send + Sync + 'static {
     fn from_event(event: &E) -> Self
     where
         Self: Sized;

@@ -35,7 +35,7 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     start_notifier: Arc<Notify>,
 }
 
-impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
+impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
         let config = Arc::new(config);
@@ -60,7 +60,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     /// `topics` declare which event topics the actor subscribes to.
     pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: &[T]) -> Result<()>
     where
-        A: Actor<Event = E> + 'static,
+        A: Actor<Event = E>,
         F: FnOnce(Context<E>) -> A,
     {
         self.build_actor(name).actor(factory).topics(topics).build()
@@ -68,7 +68,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
 
     pub fn build_actor<A>(&mut self, name: &str) -> ActorBuilder<'_, E, T, A>
     where
-        A: Actor<Event = E> + 'static,
+        A: Actor<Event = E>,
     {
         ActorBuilder::new(self, name)
     }
@@ -184,7 +184,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
     }
 }
 
-impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Default for Supervisor<E, T> {
+impl<E: Event, T: Topic<E>> Default for Supervisor<E, T> {
     fn default() -> Self {
         Self::new(Config::default())
     }
