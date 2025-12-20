@@ -28,3 +28,10 @@ doc:
 # Run spell checker
 spell:
     cargo spellcheck
+
+# Run all examples
+examples:
+    cargo run --example hello-world
+    cargo run --example pingpong
+    cargo run --example guesser
+

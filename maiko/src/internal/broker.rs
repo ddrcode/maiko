@@ -130,11 +130,17 @@ mod tests {
         let config = Arc::new(crate::Config::default());
         let cancel_token = Arc::new(CancellationToken::new());
         let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config);
-        let subscriber =
-            super::Subscriber::new(Arc::from("subscriber1"), HashSet::from([TestTopic::A]), tx.clone());
+        let subscriber = super::Subscriber::new(
+            Arc::from("subscriber1"),
+            HashSet::from([TestTopic::A]),
+            tx.clone(),
+        );
         assert!(broker.add_subscriber(subscriber).is_ok());
-        let duplicate_subscriber =
-            super::Subscriber::new(Arc::from("subscriber1"), HashSet::from([TestTopic::B]), tx.clone());
+        let duplicate_subscriber = super::Subscriber::new(
+            Arc::from("subscriber1"),
+            HashSet::from([TestTopic::B]),
+            tx.clone(),
+        );
         assert!(broker.add_subscriber(duplicate_subscriber).is_err());
     }
 }
