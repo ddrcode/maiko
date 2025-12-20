@@ -274,8 +274,9 @@ let name = ctx.name();
 
 ### 5. Supervisor
 
-The `Supervisor` manages actor lifecycles:
+The `Supervisor` manages actor lifecycles and provides two registration APIs:
 
+**Simple API** (most common):
 ```rust
 let mut sup = Supervisor::<NetworkEvent>::new();
 
@@ -283,7 +284,19 @@ let mut sup = Supervisor::<NetworkEvent>::new();
 sup.add_actor("ingress", |ctx| IngressActor::new(ctx), &[NetworkTopic::Ingress])?;
 sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
 sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[DefaultTopic])?;
+```
 
+**Builder API** (for advanced configuration):
+```rust
+// Fine-grained control over actor registration
+sup.build_actor::<IngressActor>("ingress")
+    .actor(|ctx| IngressActor::new(ctx))
+    .topics(&[NetworkTopic::Ingress])
+    .build()?;
+```
+
+**Runtime control:**
+```rust
 // Start all actors
 sup.start().await?;
 

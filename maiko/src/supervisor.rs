@@ -20,12 +20,30 @@ use crate::{
 
 /// Coordinates actors and the broker, and owns the top-level runtime.
 ///
-/// - Register actors with `add_actor(name, |ctx| Actor, topics)`.
-/// - `start()` spawns the broker loop and returns immediately (non-blocking).
-/// - `join()` awaits all actor tasks to finish; typically used after `start()`.
-/// - `run()` combines `start()` and `join()`, blocking until shutdown.
-/// - `stop()` graceful shutdown; lets actors to consumed active events
-/// - Emit events into the broker with `send(event)`.
+/// # Actor Registration
+///
+/// Two ways to register actors:
+///
+/// **Simple API** (for common cases):
+/// ```ignore
+/// supervisor.add_actor("my-actor", |ctx| MyActor::new(ctx), &[MyTopic::Data])?;
+/// ```
+///
+/// **Builder API** (for advanced configuration):
+/// ```ignore
+/// supervisor.build_actor::<MyActor>("my-actor")
+///     .actor(|ctx| MyActor::new(ctx))
+///     .topics(&[MyTopic::Data])
+///     .build()?;
+/// ```
+///
+/// # Runtime Control
+///
+/// - [`start()`](Self::start) spawns the broker loop and returns immediately (non-blocking).
+/// - [`join()`](Self::join) awaits all actor tasks to finish; typically used after `start()`.
+/// - [`run()`](Self::run) combines `start()` and `join()`, blocking until shutdown.
+/// - [`stop()`](Self::stop) graceful shutdown; lets actors consume active events
+/// - [`send(event)`](Self::send) emits events into the broker.
 ///
 /// See also: [`Actor`], [`Context`], [`Topic`].
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
@@ -57,10 +75,26 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         }
     }
 
-    /// Register a new actor with a factory that receives a `Context<E>`.
+    /// Register a new actor with a factory that receives a [`Context<E>`].
     ///
-    /// The `name` is used for metadata and (by default) to avoid self-routing.
-    /// `topics` declare which event topics the actor subscribes to.
+    /// This is a convenience method that wraps the builder API. For advanced
+    /// configuration, use [`build_actor()`](Self::build_actor) instead.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Actor identifier used for metadata and routing
+    /// * `factory` - Closure that receives a Context and returns the actor
+    /// * `topics` - Slice of topics the actor subscribes to
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// supervisor.add_actor(
+    ///     "processor",
+    ///     |ctx| DataProcessor::new(ctx),
+    ///     &[MyTopic::Data, MyTopic::Control]
+    /// )?;
+    /// ```
     pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: &[T]) -> Result<()>
     where
         A: Actor<Event = E>,
@@ -69,6 +103,19 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         self.build_actor(name).actor(factory).topics(topics).build()
     }
 
+    /// Begin building an actor registration with fine-grained control.
+    ///
+    /// Returns an [`ActorBuilder`] that allows setting topics and (future)
+    /// configuration separately. For simple cases, prefer [`add_actor()`](Self::add_actor).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// supervisor.build_actor::<MyActor>("processor")
+    ///     .actor(|ctx| MyActor::new(ctx))
+    ///     .topics(&[MyTopic::Data])
+    ///     .build()?;
+    /// ```
     pub fn build_actor<A>(&mut self, name: &str) -> ActorBuilder<'_, E, T, A>
     where
         A: Actor<Event = E>,
@@ -77,6 +124,13 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         ActorBuilder::new(self, ctx)
     }
 
+    /// Internal method to register an actor with the supervisor.
+    ///
+    /// This is called by both `add_actor()` and `ActorBuilder.build()` to perform
+    /// the actual registration. It:
+    /// 1. Creates a Subscriber and registers it with the broker
+    /// 2. Creates an ActorHandler wrapping the actor
+    /// 3. Spawns the actor task (which waits for start notification)
     pub(crate) fn register_actor<A>(
         &mut self,
         ctx: Context<E>,
@@ -113,6 +167,9 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         Ok(())
     }
 
+    /// Create a new Context for an actor.
+    ///
+    /// Internal helper used by `add_actor` and `ActorBuilder` to create actor contexts.
     pub(crate) fn create_context(&self, name: &str) -> Context<E> {
         Context::<E> {
             name: Arc::<str>::from(name),

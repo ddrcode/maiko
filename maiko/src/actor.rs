@@ -26,7 +26,7 @@ pub trait Actor: Send + 'static {
 
     /// Handle a single incoming event.
     ///
-    /// Equvialent to:
+    /// Equivalent to:
     ///
     /// ```ignore
     /// async fn handle(&mut self, event: Self::Event, meta: &Meta) -> Result<()>;
@@ -45,7 +45,7 @@ pub trait Actor: Send + 'static {
 
     /// Optional periodic work called when the event queue is empty.
     ///
-    /// Equvialent to:
+    /// Equivalent to:
     ///
     /// ```ignore
     /// async fn tick(&mut self) -> Result<()>;
@@ -103,7 +103,7 @@ pub trait Actor: Send + 'static {
 
     /// Lifecycle hook called once before the event loop starts.
     ///
-    /// Equvialent to:
+    /// Equivalent to:
     ///
     /// ```ignore
     /// async fn on_start(&mut self) -> Result<()>;
@@ -114,7 +114,7 @@ pub trait Actor: Send + 'static {
 
     /// Lifecycle hook called once after the event loop stops.
     ///
-    /// Equvialent to:
+    /// Equivalent to:
     ///
     /// ```ignore
     /// async fn on_shutdown(&mut self) -> Result<()>;
@@ -125,7 +125,7 @@ pub trait Actor: Send + 'static {
 
     /// Called when an error is returned by [`handle`](Actor::handle) or [`tick`](Actor::tick).
     ///
-    /// Equvialent to:
+    /// Equivalent to:
     ///
     /// ```ignore
     /// async fn on_error(&self, error: Error) -> Result<()>;
