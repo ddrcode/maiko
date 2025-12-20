@@ -1,11 +1,6 @@
-use std::{
-    collections::HashSet,
-    sync::{Arc, atomic::AtomicBool},
-};
+use std::collections::HashSet;
 
-use tokio::sync::mpsc::Sender;
-
-use crate::{Actor, Context, Envelope, Error, Event, Result, Supervisor, Topic};
+use crate::{Actor, Context, Error, Event, Result, Supervisor, Topic};
 
 pub struct ActorBuilder<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> {
     supervisor: &'a mut Supervisor<E, T>,
@@ -14,24 +9,13 @@ pub struct ActorBuilder<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> {
     actor: Option<A>,
 }
 
-impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A>
-{
-    pub(crate) fn new(supervisor: &'a mut Supervisor<E, T>, name: &str) -> Self {
-        let name: Arc<str> = Arc::from(name);
-        let sender = supervisor.sender.clone();
+impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
+    pub(crate) fn new(supervisor: &'a mut Supervisor<E, T>, context: Context<E>) -> Self {
         Self {
             supervisor,
-            context: Self::create_context(name, sender),
+            context,
             topics: HashSet::new(),
             actor: None,
-        }
-    }
-
-    fn create_context(name: Arc<str>, sender: Sender<Arc<Envelope<E>>>) -> Context<E> {
-        Context::<E> {
-            name,
-            sender,
-            alive: Arc::new(AtomicBool::new(true)),
         }
     }
 

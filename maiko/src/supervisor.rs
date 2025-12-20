@@ -1,4 +1,7 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::HashSet,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use tokio::{
     sync::{
@@ -28,7 +31,7 @@ use crate::{
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     config: Arc<Config>,
     broker: Arc<Mutex<Broker<E, T>>>,
-    pub(crate) sender: Sender<Arc<Envelope<E>>>,
+    sender: Sender<Arc<Envelope<E>>>,
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
@@ -70,7 +73,8 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     where
         A: Actor<Event = E>,
     {
-        ActorBuilder::new(self, name)
+        let ctx = self.create_context(name);
+        ActorBuilder::new(self, ctx)
     }
 
     pub(crate) fn register_actor<A>(
@@ -80,7 +84,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         topics: HashSet<T>,
     ) -> Result<()>
     where
-        A: Actor<Event = E> + 'static,
+        A: Actor<Event = E>,
     {
         let mut broker = self
             .broker
@@ -107,6 +111,14 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         });
 
         Ok(())
+    }
+
+    pub(crate) fn create_context(&self, name: &str) -> Context<E> {
+        Context::<E> {
+            name: Arc::<str>::from(name),
+            sender: self.sender.clone(),
+            alive: Arc::new(AtomicBool::new(true)),
+        }
     }
 
     /// Start the broker loop in a background task. This returns immediately.
