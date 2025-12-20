@@ -1,5 +1,7 @@
-25
+29
 Actix
+ActorBuilder
+ActorHandler
 Akka
 APIs
 cancelled
@@ -13,6 +15,7 @@ ms
 Ractor
 runnable
 runtime
+spawned
 Tokio
 UIs
 struct
@@ -25,3 +28,4 @@ u128
 WebSockets
 shutdown
 implementors
+rustc

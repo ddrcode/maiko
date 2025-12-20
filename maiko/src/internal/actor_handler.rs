@@ -1,6 +1,7 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::Arc;
 
 use tokio::{select, sync::mpsc::Receiver};
+use tokio_util::sync::CancellationToken;
 
 use crate::{Actor, Context, Envelope, Result};
 
@@ -9,13 +10,14 @@ pub(crate) struct ActorHandler<A: Actor> {
     pub(crate) receiver: Receiver<Arc<Envelope<A::Event>>>,
     pub(crate) ctx: Context<A::Event>,
     pub(crate) max_events_per_tick: usize,
+    pub(crate) cancel_token: Arc<CancellationToken>,
 }
 
 impl<A: Actor> ActorHandler<A> {
     pub async fn run(&mut self) -> Result<()> {
         self.actor.on_start().await?;
-        let token = self.ctx.cancel_token.clone();
-        while self.ctx.alive.load(Ordering::Acquire) {
+        let token = self.cancel_token.clone();
+        while self.ctx.is_alive() {
             select! {
                 biased;
 

@@ -1,15 +1,18 @@
-use std::sync::{Arc, atomic::AtomicBool};
+use std::{
+    collections::HashSet,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use tokio::{
     sync::{
-        Mutex,
+        Mutex, Notify,
         mpsc::{Sender, channel},
     },
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, Config, Context, Envelope, Error, Event, Result, Topic};
+use crate::{Actor, ActorBuilder, Config, Context, Envelope, Error, Event, Result, Topic};
 use crate::{
     DefaultTopic,
     internal::{ActorHandler, Broker, Subscriber},
@@ -17,12 +20,30 @@ use crate::{
 
 /// Coordinates actors and the broker, and owns the top-level runtime.
 ///
-/// - Register actors with `add_actor(name, |ctx| Actor, topics)`.
-/// - `start()` spawns the broker loop and returns immediately (non-blocking).
-/// - `join()` awaits all actor tasks to finish; typically used after `start()`.
-/// - `run()` combines `start()` and `join()`, blocking until shutdown.
-/// - `stop()` graceful shutdown; lets actors to consumed active events
-/// - Emit events into the broker with `send(event)`.
+/// # Actor Registration
+///
+/// Two ways to register actors:
+///
+/// **Simple API** (for common cases):
+/// ```ignore
+/// supervisor.add_actor("my-actor", |ctx| MyActor::new(ctx), &[MyTopic::Data])?;
+/// ```
+///
+/// **Builder API** (for advanced configuration):
+/// ```ignore
+/// supervisor.build_actor::<MyActor>("my-actor")
+///     .actor(|ctx| MyActor::new(ctx))
+///     .topics(&[MyTopic::Data])
+///     .build()?;
+/// ```
+///
+/// # Runtime Control
+///
+/// - [`start()`](Self::start) spawns the broker loop and returns immediately (non-blocking).
+/// - [`join()`](Self::join) awaits all actor tasks to finish; typically used after `start()`.
+/// - [`run()`](Self::run) combines `start()` and `join()`, blocking until shutdown.
+/// - [`stop()`](Self::stop) graceful shutdown; lets actors consume active events
+/// - [`send(event)`](Self::send) emits events into the broker.
 ///
 /// See also: [`Actor`], [`Context`], [`Topic`].
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
@@ -32,9 +53,10 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
+    start_notifier: Arc<Notify>,
 }
 
-impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<E, T> {
+impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
         let config = Arc::new(config);
@@ -49,34 +71,83 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             tasks: JoinSet::new(),
             cancel_token,
             broker_cancel_token,
+            start_notifier: Arc::new(Notify::new()),
         }
     }
 
-    /// Register a new actor with a factory that receives a `Context<E>`.
+    /// Register a new actor with a factory that receives a [`Context<E>`].
     ///
-    /// The `name` is used for metadata and (by default) to avoid self-routing.
-    /// `topics` declare which event topics the actor subscribes to.
+    /// This is a convenience method that wraps the builder API. For advanced
+    /// configuration, use [`build_actor()`](Self::build_actor) instead.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Actor identifier used for metadata and routing
+    /// * `factory` - Closure that receives a Context and returns the actor
+    /// * `topics` - Slice of topics the actor subscribes to
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// supervisor.add_actor(
+    ///     "processor",
+    ///     |ctx| DataProcessor::new(ctx),
+    ///     &[MyTopic::Data, MyTopic::Control]
+    /// )?;
+    /// ```
     pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: &[T]) -> Result<()>
     where
-        A: Actor<Event = E> + 'static,
+        A: Actor<Event = E>,
         F: FnOnce(Context<E>) -> A,
+    {
+        self.build_actor(name).actor(factory).topics(topics).build()
+    }
+
+    /// Begin building an actor registration with fine-grained control.
+    ///
+    /// Returns an [`ActorBuilder`] that allows setting topics and (future)
+    /// configuration separately. For simple cases, prefer [`add_actor()`](Self::add_actor).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// supervisor.build_actor::<MyActor>("processor")
+    ///     .actor(|ctx| MyActor::new(ctx))
+    ///     .topics(&[MyTopic::Data])
+    ///     .build()?;
+    /// ```
+    pub fn build_actor<A>(&mut self, name: &str) -> ActorBuilder<'_, E, T, A>
+    where
+        A: Actor<Event = E>,
+    {
+        let ctx = self.create_context(name);
+        ActorBuilder::new(self, ctx)
+    }
+
+    /// Internal method to register an actor with the supervisor.
+    ///
+    /// This is called by both `add_actor()` and `ActorBuilder.build()` to perform
+    /// the actual registration. It:
+    /// 1. Creates a Subscriber and registers it with the broker
+    /// 2. Creates an ActorHandler wrapping the actor
+    /// 3. Spawns the actor task (which waits for start notification)
+    pub(crate) fn register_actor<A>(
+        &mut self,
+        ctx: Context<E>,
+        actor: A,
+        topics: HashSet<T>,
+    ) -> Result<()>
+    where
+        A: Actor<Event = E>,
     {
         let mut broker = self
             .broker
             .try_lock()
             .map_err(|_| Error::BrokerAlreadyStarted)?;
-        let name: Arc<str> = Arc::from(name);
-        let alive = Arc::new(AtomicBool::new(true));
-        let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
-        let ctx = Context::<E> {
-            name: name.clone(),
-            sender: self.sender.clone(),
-            alive: alive.clone(),
-            cancel_token: self.cancel_token.clone(),
-        };
-        let actor = factory(ctx.clone());
 
-        let subscriber = Subscriber::<E, T>::new(name.clone(), topics, tx);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
+
+        let subscriber = Subscriber::<E, T>::new(ctx.name.clone(), topics, tx);
         broker.add_subscriber(subscriber)?;
 
         let mut handler = ActorHandler {
@@ -84,11 +155,27 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             receiver: rx,
             ctx,
             max_events_per_tick: self.config.max_events_per_tick,
+            cancel_token: self.cancel_token.clone(),
         };
 
-        self.tasks.spawn(async move { handler.run().await });
+        let notified = self.start_notifier.clone().notified_owned();
+        self.tasks.spawn(async move {
+            notified.await;
+            handler.run().await
+        });
 
         Ok(())
+    }
+
+    /// Create a new Context for an actor.
+    ///
+    /// Internal helper used by `add_actor` and `ActorBuilder` to create actor contexts.
+    pub(crate) fn create_context(&self, name: &str) -> Context<E> {
+        Context::<E> {
+            name: Arc::<str>::from(name),
+            sender: self.sender.clone(),
+            alive: Arc::new(AtomicBool::new(true)),
+        }
     }
 
     /// Start the broker loop in a background task. This returns immediately.
@@ -96,6 +183,7 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         let broker = self.broker.clone();
         self.tasks
             .spawn(async move { broker.lock().await.run().await });
+        self.start_notifier.notify_waiters();
         Ok(())
     }
 
@@ -159,9 +247,13 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         }
         Ok(())
     }
+
+    pub fn config(&self) -> &Config {
+        self.config.as_ref()
+    }
 }
 
-impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Default for Supervisor<E, T> {
+impl<E: Event, T: Topic<E>> Default for Supervisor<E, T> {
     fn default() -> Self {
         Self::new(Config::default())
     }

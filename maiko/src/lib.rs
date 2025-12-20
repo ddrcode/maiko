@@ -6,6 +6,7 @@
 //! See `examples/guesser.rs` and `examples/pingpong.rs`.
 
 mod actor;
+mod actor_builder;
 mod config;
 mod context;
 mod envelope;
@@ -18,6 +19,7 @@ mod topic;
 mod internal;
 
 pub use actor::Actor;
+pub use actor_builder::ActorBuilder;
 pub use config::Config;
 pub use context::Context;
 pub use envelope::Envelope;

@@ -21,10 +21,16 @@ use crate::{Error, Event, Meta, Result};
 /// See also: [`crate::Context`], [`crate::Supervisor`].
 #[allow(unused_variables)]
 // #[async_trait]
-pub trait Actor: Send {
+pub trait Actor: Send + 'static {
     type Event: Event + Send;
 
     /// Handle a single incoming event.
+    ///
+    /// Equivalent to:
+    ///
+    /// ```ignore
+    /// async fn handle(&mut self, event: Self::Event, meta: &Meta) -> Result<()>;
+    /// ```
     ///
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
@@ -38,6 +44,12 @@ pub trait Actor: Send {
     }
 
     /// Optional periodic work called when the event queue is empty.
+    ///
+    /// Equivalent to:
+    ///
+    /// ```ignore
+    /// async fn tick(&mut self) -> Result<()>;
+    /// ```
     ///
     /// This runs in a `select!` loop alongside event reception. What you `.await`
     /// inside `tick()` determines when your actor wakes up.
@@ -82,8 +94,6 @@ pub trait Actor: Send {
     ///
     /// The default implementation returns a pending future that never completes,
     /// making the actor purely event-driven with no periodic work.
-    ///
-    /// [`Config::max_events_per_tick`]: crate::Config::max_events_per_tick
     fn tick(&mut self) -> impl Future<Output = Result<()>> + Send {
         async {
             std::future::pending::<()>().await;
@@ -92,16 +102,34 @@ pub trait Actor: Send {
     }
 
     /// Lifecycle hook called once before the event loop starts.
+    ///
+    /// Equivalent to:
+    ///
+    /// ```ignore
+    /// async fn on_start(&mut self) -> Result<()>;
+    /// ```
     fn on_start(&mut self) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
 
     /// Lifecycle hook called once after the event loop stops.
+    ///
+    /// Equivalent to:
+    ///
+    /// ```ignore
+    /// async fn on_shutdown(&mut self) -> Result<()>;
+    /// ```
     fn on_shutdown(&mut self) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
 
     /// Called when an error is returned by [`handle`](Actor::handle) or [`tick`](Actor::tick).
+    ///
+    /// Equivalent to:
+    ///
+    /// ```ignore
+    /// async fn on_error(&self, error: Error) -> Result<()>;
+    /// ```
     ///
     /// Return `Ok(())` to swallow the error and continue processing,
     /// or `Err(error)` to propagate and stop the actor.
