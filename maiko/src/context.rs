@@ -4,7 +4,6 @@ use std::sync::{
 };
 
 use tokio::sync::mpsc::Sender;
-use tokio_util::sync::CancellationToken;
 
 use crate::{Envelope, Event, Meta, Result};
 
@@ -25,7 +24,7 @@ use crate::{Envelope, Event, Meta, Result};
 pub struct Context<E: Event> {
     pub(crate) name: Arc<str>,
     pub(crate) sender: Sender<Arc<Envelope<E>>>,
-    pub(crate) alive: bool,
+    pub(crate) alive: Arc<AtomicBool>,
 }
 
 impl<E: Event> Context<E> {
@@ -63,8 +62,9 @@ impl<E: Event> Context<E> {
     }
 
     /// Signal this actor to stop
+    #[inline]
     pub fn stop(&mut self) {
-        self.alive = false;
+        self.alive.store(false, Ordering::Release);
     }
 
     /// The actor's name as registered with the supervisor.
@@ -76,7 +76,7 @@ impl<E: Event> Context<E> {
     /// Whether the actor is considered alive by the runtime.
     #[inline]
     pub fn is_alive(&self) -> bool {
-        self.alive
+        self.alive.load(Ordering::Acquire)
     }
 
     /// Returns a future that never completes.

@@ -1,4 +1,4 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::Arc;
 
 use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
@@ -17,7 +17,7 @@ impl<A: Actor> ActorHandler<A> {
     pub async fn run(&mut self) -> Result<()> {
         self.actor.on_start().await?;
         let token = self.cancel_token.clone();
-        while self.ctx.alive {
+        while self.ctx.is_alive() {
             select! {
                 biased;
 
