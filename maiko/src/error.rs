@@ -23,6 +23,9 @@ pub enum Error {
 
     #[error("Subscriber with name '{0}' already exists.")]
     SubscriberAlreadyExists(Arc<str>),
+
+    #[error("Adding new actor failed. {0}")]
+    ActorBuilderError(Arc<str>),
 }
 
 impl<E: Event> From<SendError<Arc<Envelope<E>>>> for Error {

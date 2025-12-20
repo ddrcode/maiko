@@ -1,4 +1,4 @@
-use std::sync::{Arc, atomic::AtomicBool};
+use std::{collections::HashSet, sync::Arc};
 
 use tokio::{
     sync::{
@@ -9,7 +9,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, Config, Context, Envelope, Error, Event, Result, Topic};
+use crate::{Actor, ActorBuilder, Config, Context, Envelope, Error, Event, Result, Topic};
 use crate::{
     DefaultTopic,
     internal::{ActorHandler, Broker, Subscriber},
@@ -28,7 +28,7 @@ use crate::{
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     config: Arc<Config>,
     broker: Arc<Mutex<Broker<E, T>>>,
-    sender: Sender<Arc<Envelope<E>>>,
+    pub(crate) sender: Sender<Arc<Envelope<E>>>,
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
@@ -63,20 +63,33 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
         A: Actor<Event = E> + 'static,
         F: FnOnce(Context<E>) -> A,
     {
+        self.build_actor(name).actor(factory).topics(topics).build()
+    }
+
+    pub fn build_actor<A>(&mut self, name: &str) -> ActorBuilder<'_, E, T, A>
+    where
+        A: Actor<Event = E> + 'static,
+    {
+        ActorBuilder::new(self, name)
+    }
+
+    pub(crate) fn register_actor<A>(
+        &mut self,
+        ctx: Context<E>,
+        actor: A,
+        topics: HashSet<T>,
+    ) -> Result<()>
+    where
+        A: Actor<Event = E> + 'static,
+    {
         let mut broker = self
             .broker
             .try_lock()
             .map_err(|_| Error::BrokerAlreadyStarted)?;
-        let name: Arc<str> = Arc::from(name);
-        let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
-        let ctx = Context::<E> {
-            name: name.clone(),
-            sender: self.sender.clone(),
-            alive: Arc::new(AtomicBool::new(true)),
-        };
-        let actor = factory(ctx.clone());
 
-        let subscriber = Subscriber::<E, T>::new(name.clone(), topics, tx);
+        let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
+
+        let subscriber = Subscriber::<E, T>::new(ctx.name.clone(), topics, tx);
         broker.add_subscriber(subscriber)?;
 
         let mut handler = ActorHandler {
@@ -164,6 +177,10 @@ impl<E: Event + Sync + 'static, T: Topic<E> + Send + Sync + 'static> Supervisor<
             res??;
         }
         Ok(())
+    }
+
+    pub fn config(&self) -> &Config {
+        self.config.as_ref()
     }
 }
 
