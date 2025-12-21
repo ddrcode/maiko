@@ -147,7 +147,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
 
-        let subscriber = Subscriber::<E, T>::new(ctx.name.clone(), topics, tx);
+        let subscriber = Subscriber::<E, T>::new(ctx.clone_name(), topics, tx);
         broker.add_subscriber(subscriber)?;
 
         let mut handler = ActorHandler {

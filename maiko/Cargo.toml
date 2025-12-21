@@ -1,6 +1,6 @@
 [package]
 name = "maiko"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.85"
 description = "Lightweight event-driven actor runtime with topic-based pub/sub for Tokio"
@@ -15,7 +15,7 @@ readme = "README.md"
 exclude = [".gitignore", ".github/"]
 
 [dependencies]
-maiko-macros = { path="../maiko-macros", version="0.1.1" }
+maiko-macros = { path="../maiko-macros", version="0.1.2" }
 thiserror = "2.0.14"
 tokio = {version="1.47.1", features=["macros", "rt", "rt-multi-thread", "time"]}
 tokio-util = "0.7.17"
