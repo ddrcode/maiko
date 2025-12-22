@@ -8,6 +8,7 @@ use crate::{Event, Meta};
 /// - `meta`: `Meta` describing who emitted the event and when.
 ///   Includes `actor_name` and optional `correlation_id` for linking related events.
 #[derive(Debug, Clone)]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Envelope<E: Event> {
     pub meta: Meta,
     pub event: E,
@@ -35,6 +36,15 @@ impl<E: Event> Envelope<E> {
         Self {
             meta: Meta::new(actor_name.into(), Some(correlation_id)),
             event,
+        }
+    }
+}
+
+impl<E: Event> From<(&E, &Meta)> for Envelope<E> {
+    fn from((event, meta): (&E, &Meta)) -> Self {
+        Envelope::<E> {
+            meta: meta.clone(),
+            event: event.clone(),
         }
     }
 }

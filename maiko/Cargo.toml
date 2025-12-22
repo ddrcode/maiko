@@ -14,8 +14,14 @@ documentation = "https://docs.rs/maiko"
 readme = "README.md"
 exclude = [".gitignore", ".github/"]
 
+[features]
+default = ["macros"]
+macros = ["dep:maiko-macros"]
+serde = ["dep:serde"]
+
 [dependencies]
-maiko-macros = { path="../maiko-macros", version="0.1.2" }
+maiko-macros = { path="../maiko-macros", version="0.1.2", optional = true }
+serde = { version = "1.0.228", features = ["derive", "rc"], optional = true }
 thiserror = "2.0.14"
 tokio = {version="1.47.1", features=["macros", "rt", "rt-multi-thread", "time"]}
 tokio-util = "0.7.17"

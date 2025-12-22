@@ -31,4 +31,4 @@ pub use topic::{DefaultTopic, Topic};
 
 pub use maiko_macros::Event;
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T = ()> = std::result::Result<T, Error>;
