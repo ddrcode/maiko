@@ -104,11 +104,11 @@ pub trait Actor: Send + 'static {
     ///
     /// The default implementation returns a pending future that never completes,
     /// making the actor purely event-driven with no periodic work.
-    fn tick(&mut self) -> impl Future<Output = Result<()>> + Send {
-        async {
-            std::future::pending::<()>().await;
-            Ok(())
-        }
+    fn tick<'a>(
+        &'a mut self,
+        runtime: &'a mut Runtime<'_, Self::Event>,
+    ) -> impl Future<Output = Result<()>> + Send + 'a {
+        runtime.default_tick(self)
     }
 
     /// Lifecycle hook called once before the event loop starts.

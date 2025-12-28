@@ -31,7 +31,7 @@
 use std::{sync::Arc, time::Duration};
 
 use maiko::*;
-use tokio::time::sleep;
+use tokio::{select, time::sleep};
 
 /// Player identifier for distinguishing events from different players.
 ///
@@ -103,7 +103,7 @@ impl Actor for Guesser {
     type Event = GuesserEvent;
 
     /// Generate a random guess at regular intervals.
-    async fn tick(&mut self) -> maiko::Result<()> {
+    async fn tick(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> maiko::Result<()> {
         sleep(self.cycle_time).await;
         let number = rand::random::<u8>() % 10;
 
@@ -193,9 +193,12 @@ impl Actor for Game {
     /// Check if the game should end and trigger shutdown.
     /// The `ctx.stop()` calls actor to exit. As the supervisor expects all actors
     /// to run, this will lead to overall shutdown.
-    async fn tick(&mut self) -> maiko::Result<()> {
+    async fn tick(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> maiko::Result<()> {
         if self.round >= 10 {
             self.ctx.stop();
+        }
+        if let Some(ref envelope) = runtime.recv().await {
+            runtime.default_event_handler(self, envelope).await?;
         }
         Ok(())
     }

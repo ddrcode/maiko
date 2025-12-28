@@ -35,20 +35,7 @@ impl<'a, E: Event> Runtime<'a, E> {
     ) -> Result<()> {
         while self.ctx.is_alive() {
             self.heartbeat();
-
-            select! {
-                biased;
-
-                Some(ref envelope) = self.receiver.recv() => {
-                    self.default_event_handler(actor, envelope).await?;
-                }
-
-                tick = actor.tick() => {
-                    Self::handle_error(actor, tick)?;
-                    tokio::task::yield_now().await; // FIXME
-                }
-
-            }
+            actor.tick(self).await?;
         }
         Ok(())
     }
@@ -59,9 +46,8 @@ impl<'a, E: Event> Runtime<'a, E> {
     ) -> Result<()> {
         select! {
             biased;
-
             Some(ref envelope) = self.receiver.recv() => {
-                self.default_event_handler(actor, envelope).await?;
+                actor.handle_envelope(envelope).await?;
             }
         }
         Ok(())
