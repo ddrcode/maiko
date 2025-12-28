@@ -20,54 +20,51 @@ pub struct Runtime<'a, E: Event> {
 }
 
 impl<'a, E: Event> Runtime<'a, E> {
-    pub fn default_run<'b, A: Actor<Event = E> + ?Sized>(
+    pub async fn default_run<'b, A: Actor<Event = E> + ?Sized>(
         &'b mut self,
         actor: &'b mut A,
-    ) -> impl Future<Output = Result<()>> + Send + 'b {
-        async move {
-            while self.ctx.is_alive() {
-                self.heartbeat();
+    ) -> Result<()> {
+        while self.ctx.is_alive() {
+            self.heartbeat();
 
-                select! {
-                    biased;
+            select! {
+                biased;
 
-                    _ = self.cancel_token.cancelled() => {
-                        self.ctx.stop();
-                        break;
-                    },
+                _ = self.cancel_token.cancelled() => {
+                    self.ctx.stop();
+                    break;
+                },
 
-                    Some(event) = self.receiver.recv() => {
+                Some(event) = self.receiver.recv() => {
+                    let res = actor.handle(&event.event, &event.meta).await;
+                    Self::handle_error(actor, res)?;
+
+                    let mut cnt = 1;
+                    while let Ok(event) = self.receiver.try_recv() {
                         let res = actor.handle(&event.event, &event.meta).await;
-                        // Self::handle_error(actor, res)?;
-
-                        let mut cnt = 1;
-                        while let Ok(event) = self.receiver.try_recv() {
-                            let res = actor.handle(&event.event, &event.meta).await;
-                            // Self::handle_error(actor, res)?;
-                            cnt += 1;
-                            if cnt == self.config.max_events_per_tick {
-                                break;
-                            }
-                        }
-                        if cnt > 0 {
-                            tokio::task::yield_now().await;
+                        Self::handle_error(actor, res)?;
+                        cnt += 1;
+                        if cnt == self.config.max_events_per_tick {
+                            break;
                         }
                     }
-
-                    tick = actor.tick() => {
-                        // Self::handle_error(actor, tick)?;
-                        tick?;
+                    if cnt > 0 {
                         tokio::task::yield_now().await;
                     }
-
                 }
+
+                tick = actor.tick() => {
+                    Self::handle_error(actor, tick)?;
+                    tokio::task::yield_now().await;
+                }
+
             }
-            Ok(())
         }
+        Ok(())
     }
 
     #[inline]
-    fn handle_error<A: Actor<Event = E>>(actor: &A, result: Result<()>) -> Result<()> {
+    fn handle_error<A: Actor<Event = E> + ?Sized>(actor: &A, result: Result<()>) -> Result<()> {
         if let Err(e) = result {
             actor.on_error(e)?;
         }
