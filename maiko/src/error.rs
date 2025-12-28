@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::mpsc::error::{SendError, TrySendError};
+use tokio::sync::mpsc::error::{SendError, TryRecvError, TrySendError};
 
 use crate::{Envelope, Event};
 
@@ -11,6 +11,9 @@ pub enum Error {
 
     #[error("Couldn't send the message: {0}")]
     SendError(String),
+
+    #[error("Couldn't receive message: {0}")]
+    RecvError(#[from] TryRecvError),
 
     #[error("Actor task join error: {0}")]
     ActorJoinError(#[from] tokio::task::JoinError),

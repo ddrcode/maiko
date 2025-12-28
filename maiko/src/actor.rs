@@ -1,7 +1,7 @@
 use core::marker::Send;
 use std::{future::Future, sync::Arc};
 
-use crate::{Envelope, Error, Event, Meta, Result, Runtime};
+use crate::{Envelope, Error, Event, Result, Runtime};
 
 /// Core trait implemented by user-defined actors.
 ///
@@ -35,11 +35,7 @@ pub trait Actor: Send + 'static {
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
     /// to emit follow-up events as needed.
-    fn handle(
-        &mut self,
-        event: &Self::Event,
-        meta: &Meta,
-    ) -> impl Future<Output = Result<()>> + Send {
+    fn handle_event(&mut self, event: &Self::Event) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
     }
 
@@ -47,7 +43,14 @@ pub trait Actor: Send + 'static {
         &mut self,
         envelope: &Arc<Envelope<Self::Event>>,
     ) -> impl Future<Output = Result> + Send {
-        self.handle(&envelope.event, &envelope.meta)
+        self.handle_event(&envelope.event)
+    }
+
+    fn run<'a>(
+        &'a mut self,
+        runtime: &'a mut Runtime<'_, Self::Event>,
+    ) -> impl Future<Output = Result<()>> + Send + 'a {
+        runtime.default_run(self)
     }
 
     /// Optional periodic work called when the event queue is empty.
@@ -106,13 +109,6 @@ pub trait Actor: Send + 'static {
             std::future::pending::<()>().await;
             Ok(())
         }
-    }
-
-    fn run<'a>(
-        &'a mut self,
-        runtime: &'a mut Runtime<'_, Self::Event>,
-    ) -> impl Future<Output = Result<()>> + Send + 'a {
-        runtime.default_run(self)
     }
 
     /// Lifecycle hook called once before the event loop starts.
