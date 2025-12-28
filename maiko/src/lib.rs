@@ -13,6 +13,7 @@ mod envelope;
 mod error;
 mod event;
 mod meta;
+mod runtime;
 mod supervisor;
 mod topic;
 
@@ -26,9 +27,11 @@ pub use envelope::Envelope;
 pub use error::Error;
 pub use event::Event;
 pub use meta::Meta;
+pub use runtime::Runtime;
 pub use supervisor::Supervisor;
 pub use topic::{DefaultTopic, Topic};
 
+#[cfg(feature = "macros")]
 pub use maiko_macros::Event;
 
 pub type Result<T = ()> = std::result::Result<T, Error>;

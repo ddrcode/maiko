@@ -63,7 +63,7 @@ impl<E: Event> Context<E> {
 
     /// Signal this actor to stop
     #[inline]
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         self.alive.store(false, Ordering::Release);
     }
 

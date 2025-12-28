@@ -1,7 +1,7 @@
 use core::marker::Send;
-use std::future::Future;
+use std::{future::Future, sync::Arc};
 
-use crate::{Error, Event, Meta, Result};
+use crate::{Envelope, Error, Event, Meta, Result, Runtime};
 
 /// Core trait implemented by user-defined actors.
 ///
@@ -41,6 +41,13 @@ pub trait Actor: Send + 'static {
         meta: &Meta,
     ) -> impl Future<Output = Result<()>> + Send {
         async { Ok(()) }
+    }
+
+    fn handle_envelope(
+        &mut self,
+        envelope: &Arc<Envelope<Self::Event>>,
+    ) -> impl Future<Output = Result> + Send {
+        self.handle(&envelope.event, &envelope.meta)
     }
 
     /// Optional periodic work called when the event queue is empty.
@@ -99,6 +106,13 @@ pub trait Actor: Send + 'static {
             std::future::pending::<()>().await;
             Ok(())
         }
+    }
+
+    fn run<'a>(
+        &mut self,
+        runtime: &mut Runtime<'a, Self::Event>,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async { Ok(()) }
     }
 
     /// Lifecycle hook called once before the event loop starts.

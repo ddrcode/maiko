@@ -25,6 +25,8 @@ pub struct Config {
     pub max_events_per_tick: usize,
 
     pub maintenance_interval: tokio::time::Duration,
+
+    pub watchdog_interval: tokio::time::Duration,
 }
 
 impl Default for Config {
@@ -33,6 +35,7 @@ impl Default for Config {
             channel_size: 128,
             max_events_per_tick: 10,
             maintenance_interval: tokio::time::Duration::from_secs(10),
+            watchdog_interval: tokio::time::Duration::from_millis(10),
         }
     }
 }
