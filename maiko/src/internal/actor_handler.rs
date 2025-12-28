@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, Config, Context, Envelope, Result, Runtime};
+use crate::{Actor, Config, Context, Envelope, Error, Result, Runtime};
 
 pub(crate) struct ActorHandler<A: Actor> {
     pub(crate) actor: A,
@@ -18,11 +18,15 @@ impl<A: Actor> ActorHandler<A> {
         self.actor.on_start().await?;
 
         {
+            let (watchdog_tx, mut watchdog_rx) =
+                tokio::sync::mpsc::channel::<()>(self.config.watchdog_channel_size);
+
             let mut runtime = Runtime {
                 ctx: &self.ctx,
                 receiver: &mut self.receiver,
                 cancel_token: self.cancel_token.clone(),
                 config: self.config.clone(),
+                watchdog_tx,
             };
             let actor_fut = self.actor.run(&mut runtime);
             tokio::pin!(actor_fut);
@@ -31,23 +35,15 @@ impl<A: Actor> ActorHandler<A> {
                 select! {
                     result = &mut actor_fut => {
                         result?;
-                        break;
                     }
 
                     _ = tokio::time::sleep(self.config.watchdog_interval) => {
-                        // Check if heartbeat received
-                        // match self.watchdog_rx.try_recv() {
-                        //     Ok(_) => continue,  // Heartbeat received, reset timer
-                        //     Err(_) => {
-                        //         // No heartbeat - actor might be stuck
-                        //         tracing::error!(
-                        //             "Actor {} watchdog timeout - no heartbeat for {:?}",
-                        //             self.runtime.ctx.name(),
-                        //             timeout
-                        //         );
-                        //         return Err(Error::WatchdogTimeout);
-                        //     }
-                        // }
+                        match watchdog_rx.try_recv() {
+                            Ok(_) => continue,
+                            Err(_) => {
+                                return Err(Error::WatchdogTimeout);
+                            }
+                        }
                     }
                 }
             }

@@ -109,10 +109,10 @@ pub trait Actor: Send + 'static {
     }
 
     fn run<'a>(
-        &mut self,
-        runtime: &mut Runtime<'a, Self::Event>,
-    ) -> impl Future<Output = Result<()>> + Send {
-        async { Ok(()) }
+        &'a mut self,
+        runtime: &'a mut Runtime<'_, Self::Event>,
+    ) -> impl Future<Output = Result<()>> + Send + 'a {
+        runtime.default_run(self)
     }
 
     /// Lifecycle hook called once before the event loop starts.
