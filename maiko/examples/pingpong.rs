@@ -56,7 +56,7 @@ impl Actor for PingPong {
     type Event = PingPongEvent;
 
     /// Handle incoming events by responding with the opposite event.
-    async fn handle_event(&mut self, event: &Self::Event) -> Result<()> {
+    async fn handle_event(&mut self, event: &Self::Event) -> maiko::Result {
         println!("Event: {event:?} received by {} actor", self.ctx.name());
         let response = match event {
             PingPongEvent::Ping => PingPongEvent::Pong,
@@ -77,10 +77,11 @@ impl Actor for PingPong {
 struct Counter {
     count: u32,
 }
+
 impl Actor for Counter {
     type Event = PingPongEvent;
 
-    async fn handle_event(&mut self, _event: &Self::Event) -> Result<()> {
+    async fn handle_event(&mut self, _event: &Self::Event) -> maiko::Result {
         self.count += 1;
         Ok(())
     }

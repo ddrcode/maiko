@@ -10,13 +10,9 @@ use crate::{Actor, Config, Context, Envelope, Event, Result};
 
 pub struct Runtime<'a, E: Event> {
     pub ctx: &'a Context<E>,
-
     pub(crate) receiver: &'a mut Receiver<Arc<Envelope<E>>>,
-
     pub cancel_token: Arc<CancellationToken>,
-
     pub config: Arc<Config>,
-
     pub(crate) watchdog_tx: tokio::sync::mpsc::Sender<()>,
 }
 
@@ -44,14 +40,12 @@ impl<'a, E: Event> Runtime<'a, E> {
         &'b mut self,
         actor: &'b mut A,
     ) -> Result<()> {
-        self.heartbeat();
-        
         // Use a short timeout to avoid blocking forever when no events arrive
         // This ensures heartbeat is sent regularly even when idle
         // Timeout should be shorter than watchdog_interval
-        let timeout = tokio::time::sleep(tokio::time::Duration::from_millis(5));
+        let timeout = tokio::time::sleep(self.config.tick_interval);
         tokio::pin!(timeout);
-        
+
         select! {
             biased;
             Some(ref envelope) = self.receiver.recv() => {

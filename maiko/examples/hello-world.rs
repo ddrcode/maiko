@@ -12,7 +12,7 @@ struct Greeter;
 impl Actor for Greeter {
     type Event = MyEvent;
 
-    async fn handle_event(&mut self, event: &Self::Event) -> Result<()> {
+    async fn handle_event(&mut self, event: &Self::Event) -> maiko::Result {
         match event {
             MyEvent::Hello(name) => {
                 println!("Hello, {}!", name);
@@ -23,7 +23,7 @@ impl Actor for Greeter {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> maiko::Result {
     let mut sup = Supervisor::<MyEvent>::default();
 
     // Add actor and subscribe it to all topics (DefaultTopic)

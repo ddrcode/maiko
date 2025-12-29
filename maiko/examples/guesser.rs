@@ -99,6 +99,18 @@ impl Guesser {
             interval,
         }
     }
+
+    async fn send_guess(&self) -> maiko::Result {
+        let number = rand::random::<u8>() % 10;
+
+        // Emit a guess event with our player ID
+        self.ctx
+            .send(GuesserEvent::Guess {
+                player: self.player_id,
+                number,
+            })
+            .await
+    }
 }
 
 impl Actor for Guesser {
@@ -108,27 +120,16 @@ impl Actor for Guesser {
     ///
     /// Uses a timer to produce guesses on a schedule, demonstrating
     /// how actors can be primarily I/O or time-driven rather than event-driven.
-    async fn tick(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> maiko::Result<()> {
+    async fn tick(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> maiko::Result {
         runtime.heartbeat();
 
         select! {
             // Handle any events sent to us (though we don't expect any)
-            Some(envelope) = runtime.recv() => {
-                runtime.default_handle(self, &envelope).await?;
-            }
+            Some(envelope) = runtime.recv() =>
+                runtime.default_handle(self, &envelope).await?,
 
             // Wait for our interval tick, then generate a guess
-            _ = self.interval.tick() => {
-                let number = rand::random::<u8>() % 10;
-
-                // Emit a guess event with our player ID
-                self.ctx
-                    .send(GuesserEvent::Guess {
-                        player: self.player_id,
-                        number,
-                    })
-                    .await?;
-            }
+            _ = self.interval.tick() => self.send_guess().await?
         }
 
         Ok(())
@@ -163,7 +164,7 @@ impl Game {
 impl Actor for Game {
     type Event = GuesserEvent;
 
-    async fn on_start(&mut self) -> maiko::Result<()> {
+    async fn on_start(&mut self) -> maiko::Result {
         // Send welcome message on startup
         self.ctx
             .send(GuesserEvent::Message(
@@ -173,44 +174,42 @@ impl Actor for Game {
     }
 
     /// Collect guesses from players and emit results when both have guessed.
-    async fn handle_envelope(
-        &mut self,
-        envelope: &Arc<Envelope<Self::Event>>,
-    ) -> maiko::Result<()> {
-        if let GuesserEvent::Guess { player, number } = &envelope.event {
-            // Store the guess based on player ID
-            match player {
-                PlayerId::Player1 => self.player1_guess = Some(*number),
-                PlayerId::Player2 => self.player2_guess = Some(*number),
-            }
+    async fn handle_envelope(&mut self, envelope: &Arc<Envelope<Self::Event>>) -> maiko::Result {
+        let GuesserEvent::Guess { player, number } = &envelope.event else {
+            return Ok(());
+        };
 
-            // When both players have guessed, pair them and emit result
-            if let (Some(n1), Some(n2)) = (self.player1_guess, self.player2_guess) {
-                self.round += 1;
-
-                // Clear guesses for next round
-                self.player1_guess = None;
-                self.player2_guess = None;
-
-                // Emit result with correlation to track related events
-                self.ctx
-                    .send_child_event(
-                        GuesserEvent::Result {
-                            player1: n1,
-                            player2: n2,
-                        },
-                        &envelope.meta,
-                    )
-                    .await?;
-                
-                // Check if we've completed 10 rounds
-                if self.round >= 10 {
-                    self.ctx.stop();
-                }
-            }
+        // Store the guess based on player ID
+        match player {
+            PlayerId::Player1 => self.player1_guess = Some(*number),
+            PlayerId::Player2 => self.player2_guess = Some(*number),
         }
 
-        Ok(())
+        // When both players have guessed, pair them and emit result
+        let (Some(n1), Some(n2)) = (self.player1_guess, self.player2_guess) else {
+            return Ok(());
+        };
+
+        // Increment round and check if we've completed 10 rounds
+        if self.round >= 10 {
+            self.ctx.stop();
+        }
+        self.round += 1;
+
+        // Clear guesses for next round
+        self.player1_guess = None;
+        self.player2_guess = None;
+
+        // Emit result with correlation to track related events
+        self.ctx
+            .send_child_event(
+                GuesserEvent::Result {
+                    player1: n1,
+                    player2: n2,
+                },
+                &envelope.meta,
+            )
+            .await
     }
 }
 
@@ -225,7 +224,7 @@ impl Actor for Printer {
     type Event = GuesserEvent;
 
     /// Display messages and results to the console.
-    async fn handle_event(&mut self, event: &Self::Event) -> maiko::Result<()> {
+    async fn handle_event(&mut self, event: &Self::Event) -> maiko::Result {
         match event {
             GuesserEvent::Message(msg) => {
                 println!("{}", msg);
@@ -253,6 +252,8 @@ async fn main() -> Result<()> {
         |ctx| Guesser::new(ctx, PlayerId::Player1, 500),
         &[], // No subscriptions - pure producer
     )?;
+
+    // Exmaple of adding  actor with builder
     supervisor
         .build_actor("Player2")
         .actor(|ctx| Guesser::new(ctx, PlayerId::Player2, 350))

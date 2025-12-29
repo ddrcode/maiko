@@ -28,6 +28,7 @@ pub struct Config {
 
     pub watchdog_interval: tokio::time::Duration,
     pub watchdog_channel_size: usize,
+    pub tick_interval: tokio::time::Duration,
 }
 
 impl Default for Config {
@@ -38,6 +39,7 @@ impl Default for Config {
             maintenance_interval: tokio::time::Duration::from_secs(10),
             watchdog_interval: tokio::time::Duration::from_secs(1),
             watchdog_channel_size: 10,
+            tick_interval: tokio::time::Duration::from_millis(100),
         }
     }
 }
