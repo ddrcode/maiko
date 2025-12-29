@@ -43,14 +43,19 @@ impl<A: Actor> ActorHandler<A> {
 
                     result = &mut actor_fut => {
                         result?;
+                        break;
                     }
 
                     _ = tokio::time::sleep(self.config.watchdog_interval) => {
-                        match watchdog_rx.try_recv() {
-                            Ok(_) => continue, // FIXME it should always be exactly one! Check this
-                            Err(_) => {
-                                return Err(Error::WatchdogTimeout);
-                            }
+                        // Drain all heartbeats - we just need to know at least one arrived
+                        let mut got_heartbeat = false;
+                        while watchdog_rx.try_recv().is_ok() {
+                            got_heartbeat = true;
+                        }
+                        
+                        if !got_heartbeat {
+                            eprintln!("Watchdog timeout for actor: {}", self.ctx.name());
+                            return Err(Error::WatchdogTimeout);
                         }
                     }
                 }

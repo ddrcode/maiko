@@ -25,7 +25,7 @@ impl<'a, E: Event> Runtime<'a, E> {
         self.receiver.recv().await
     }
 
-    pub async fn try_recv(&mut self) -> std::result::Result<Arc<Envelope<E>>, TryRecvError> {
+    pub fn try_recv(&mut self) -> std::result::Result<Arc<Envelope<E>>, TryRecvError> {
         self.receiver.try_recv()
     }
 
@@ -44,16 +44,27 @@ impl<'a, E: Event> Runtime<'a, E> {
         &'b mut self,
         actor: &'b mut A,
     ) -> Result<()> {
+        self.heartbeat();
+        
+        // Use a short timeout to avoid blocking forever when no events arrive
+        // This ensures heartbeat is sent regularly even when idle
+        // Timeout should be shorter than watchdog_interval
+        let timeout = tokio::time::sleep(tokio::time::Duration::from_millis(5));
+        tokio::pin!(timeout);
+        
         select! {
             biased;
             Some(ref envelope) = self.receiver.recv() => {
                 actor.handle_envelope(envelope).await?;
             }
+            _ = &mut timeout => {
+                // Just return to send another heartbeat
+            }
         }
         Ok(())
     }
 
-    pub async fn default_event_handler<'b, A: Actor<Event = E> + ?Sized>(
+    pub async fn default_handle<'b, A: Actor<Event = E> + ?Sized>(
         &'b mut self,
         actor: &'b mut A,
         envelope: &Arc<Envelope<E>>,

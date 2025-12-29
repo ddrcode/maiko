@@ -31,7 +31,7 @@
 use std::{sync::Arc, time::Duration};
 
 use maiko::*;
-use tokio::{select, time::sleep};
+use tokio::select;
 
 /// Player identifier for distinguishing events from different players.
 ///
@@ -86,15 +86,17 @@ impl Topic<GuesserEvent> for GuesserTopic {
 struct Guesser {
     ctx: Context<GuesserEvent>,
     player_id: PlayerId,
-    cycle_time: Duration,
+    interval: tokio::time::Interval,
 }
 
 impl Guesser {
     fn new(ctx: Context<GuesserEvent>, player_id: PlayerId, interval_ms: u64) -> Self {
+        let mut interval = tokio::time::interval(Duration::from_millis(interval_ms));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         Self {
             ctx,
             player_id,
-            cycle_time: Duration::from_millis(interval_ms),
+            interval,
         }
     }
 }
@@ -103,17 +105,33 @@ impl Actor for Guesser {
     type Event = GuesserEvent;
 
     /// Generate a random guess at regular intervals.
+    ///
+    /// Uses a timer to produce guesses on a schedule, demonstrating
+    /// how actors can be primarily I/O or time-driven rather than event-driven.
     async fn tick(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> maiko::Result<()> {
-        sleep(self.cycle_time).await;
-        let number = rand::random::<u8>() % 10;
+        runtime.heartbeat();
 
-        // Emit a guess event with our player ID
-        self.ctx
-            .send(GuesserEvent::Guess {
-                player: self.player_id,
-                number,
-            })
-            .await
+        select! {
+            // Handle any events sent to us (though we don't expect any)
+            Some(envelope) = runtime.recv() => {
+                runtime.default_handle(self, &envelope).await?;
+            }
+
+            // Wait for our interval tick, then generate a guess
+            _ = self.interval.tick() => {
+                let number = rand::random::<u8>() % 10;
+
+                // Emit a guess event with our player ID
+                self.ctx
+                    .send(GuesserEvent::Guess {
+                        player: self.player_id,
+                        number,
+                    })
+                    .await?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -184,22 +202,14 @@ impl Actor for Game {
                         &envelope.meta,
                     )
                     .await?;
+                
+                // Check if we've completed 10 rounds
+                if self.round >= 10 {
+                    self.ctx.stop();
+                }
             }
         }
 
-        Ok(())
-    }
-
-    /// Check if the game should end and trigger shutdown.
-    /// The `ctx.stop()` calls actor to exit. As the supervisor expects all actors
-    /// to run, this will lead to overall shutdown.
-    async fn tick(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> maiko::Result<()> {
-        if self.round >= 10 {
-            self.ctx.stop();
-        }
-        if let Some(ref envelope) = runtime.recv().await {
-            runtime.default_event_handler(self, envelope).await?;
-        }
         Ok(())
     }
 }
