@@ -20,7 +20,6 @@ use crate::{Envelope, Error, Event, Result, Runtime};
 ///
 /// See also: [`crate::Context`], [`crate::Supervisor`].
 #[allow(unused_variables)]
-// #[async_trait]
 pub trait Actor: Send + 'static {
     type Event: Event + Send;
 
@@ -29,16 +28,21 @@ pub trait Actor: Send + 'static {
     /// Equivalent to:
     ///
     /// ```ignore
-    /// async fn handle(&mut self, event: Self::Event, meta: &Meta) -> Result<()>;
+    /// async fn handle_event(&mut self, event: Self::Event) -> Result;
     /// ```
     ///
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
     /// to emit follow-up events as needed.
-    fn handle_event(&mut self, event: &Self::Event) -> impl Future<Output = Result<()>> + Send {
+    fn handle_event(&mut self, event: &Self::Event) -> impl Future<Output = Result> + Send {
         async { Ok(()) }
     }
 
+    /// Equivalent to:
+    ///
+    /// ```ignore
+    /// async fn handle_envelope(&mut self, lope: &Arc<Envelope<Self::Event>>) -> Result;
+    /// ```
     fn handle_envelope(
         &mut self,
         envelope: &Arc<Envelope<Self::Event>>,
@@ -46,6 +50,11 @@ pub trait Actor: Send + 'static {
         self.handle_event(&envelope.event)
     }
 
+    /// Equivalent to:
+    ///
+    /// ```ignore
+    /// async fn run(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> Result;
+    /// ```
     fn run<'a>(
         &'a mut self,
         runtime: &'a mut Runtime<'_, Self::Event>,
@@ -58,7 +67,7 @@ pub trait Actor: Send + 'static {
     /// Equivalent to:
     ///
     /// ```ignore
-    /// async fn tick(&mut self) -> Result<()>;
+    /// async fn tick(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> Result;
     /// ```
     ///
     /// This runs in a `select!` loop alongside event reception. What you `.await`
@@ -68,7 +77,7 @@ pub trait Actor: Send + 'static {
     ///
     /// **Time-Based Producer** (polls periodically):
     /// ```rust,ignore
-    /// async fn tick(&mut self) -> Result<()> {
+    /// async fn tick(&mut self) -> Result {
     ///     tokio::time::sleep(Duration::from_secs(1)).await;
     ///     let data = generate_data();
     ///     self.ctx.send(DataEvent(data)).await
@@ -77,7 +86,7 @@ pub trait Actor: Send + 'static {
     ///
     /// **External Event Source** (driven by I/O):
     /// ```rust,ignore
-    /// async fn tick(&mut self) -> Result<()> {
+    /// async fn tick(&mut self) -> Result {
     ///     let frame = self.websocket.read().await?;
     ///     self.ctx.send(WebSocketEvent(frame)).await
     /// }
@@ -85,7 +94,7 @@ pub trait Actor: Send + 'static {
     ///
     /// **Housekeeping Only** (runs after processing events):
     /// ```rust,ignore
-    /// async fn tick(&mut self) -> Result<()> {
+    /// async fn tick(&mut self) -> Result {
     ///     if self.should_flush() {
     ///         self.flush_buffer().await?;
     ///     }
@@ -95,7 +104,7 @@ pub trait Actor: Send + 'static {
     ///
     /// **No Periodic Logic** (pure event processor):
     /// ```rust,ignore
-    /// async fn tick(&mut self) -> Result<()> {
+    /// async fn tick(&mut self) -> Result {
     ///     self.ctx.pending().await  // Never returns - actor only reacts to events
     /// }
     /// ```
@@ -107,7 +116,7 @@ pub trait Actor: Send + 'static {
     fn tick<'a>(
         &'a mut self,
         runtime: &'a mut Runtime<'_, Self::Event>,
-    ) -> impl Future<Output = Result<()>> + Send + 'a {
+    ) -> impl Future<Output = Result> + Send + 'a {
         runtime.default_tick(self)
     }
 
@@ -116,9 +125,9 @@ pub trait Actor: Send + 'static {
     /// Equivalent to:
     ///
     /// ```ignore
-    /// async fn on_start(&mut self) -> Result<()>;
+    /// async fn on_start(&mut self) -> Result;
     /// ```
-    fn on_start(&mut self) -> impl Future<Output = Result<()>> + Send {
+    fn on_start(&mut self) -> impl Future<Output = Result> + Send {
         async { Ok(()) }
     }
 
@@ -127,9 +136,9 @@ pub trait Actor: Send + 'static {
     /// Equivalent to:
     ///
     /// ```ignore
-    /// async fn on_shutdown(&mut self) -> Result<()>;
+    /// async fn on_shutdown(&mut self) -> Result;
     /// ```
-    fn on_shutdown(&mut self) -> impl Future<Output = Result<()>> + Send {
+    fn on_shutdown(&mut self) -> impl Future<Output = Result> + Send {
         async { Ok(()) }
     }
 
@@ -138,7 +147,7 @@ pub trait Actor: Send + 'static {
     /// Equivalent to:
     ///
     /// ```ignore
-    /// async fn on_error(&self, error: Error) -> Result<()>;
+    /// async fn on_error(&self, error: Error) -> Result;
     /// ```
     ///
     /// Return `Ok(())` to swallow the error and continue processing,
@@ -158,13 +167,13 @@ pub trait Actor: Send + 'static {
     /// # struct MyActor;
     /// # impl Actor for MyActor {
     /// #     type Event = MyEvent;
-    /// fn on_error(&self, error: Error) -> Result<()> {
+    /// fn on_error(&self, error: Error) -> Result{
     ///     eprintln!("Actor error: {}", error);
     ///     Ok(())  // Swallow and continue
     /// }
     /// # }
     /// ```
-    fn on_error(&self, error: Error) -> Result<()> {
+    fn on_error(&self, error: Error) -> Result {
         Err(error)
     }
 }

@@ -24,7 +24,6 @@ impl<A: Actor> ActorHandler<A> {
             let mut runtime = Runtime {
                 ctx: &self.ctx,
                 receiver: &mut self.receiver,
-                cancel_token: self.cancel_token.clone(),
                 config: self.config.clone(),
                 watchdog_tx,
             };
@@ -52,7 +51,7 @@ impl<A: Actor> ActorHandler<A> {
                         while watchdog_rx.try_recv().is_ok() {
                             got_heartbeat = true;
                         }
-                        
+
                         if !got_heartbeat {
                             eprintln!("Watchdog timeout for actor: {}", self.ctx.name());
                             return Err(Error::WatchdogTimeout);

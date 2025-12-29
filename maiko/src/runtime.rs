@@ -4,14 +4,12 @@ use tokio::{
     select,
     sync::mpsc::{Receiver, error::TryRecvError},
 };
-use tokio_util::sync::CancellationToken;
 
 use crate::{Actor, Config, Context, Envelope, Event, Result};
 
 pub struct Runtime<'a, E: Event> {
     pub ctx: &'a Context<E>,
     pub(crate) receiver: &'a mut Receiver<Arc<Envelope<E>>>,
-    pub cancel_token: Arc<CancellationToken>,
     pub config: Arc<Config>,
     pub(crate) watchdog_tx: tokio::sync::mpsc::Sender<()>,
 }
