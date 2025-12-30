@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::{
     select,
     sync::mpsc::{Receiver, error::TryRecvError},
+    time::Interval,
 };
 
 use crate::{Actor, Config, Context, Envelope, Event, Result};
@@ -12,6 +13,7 @@ pub struct Runtime<'a, E: Event> {
     pub(crate) receiver: &'a mut Receiver<Arc<Envelope<E>>>,
     pub config: Arc<Config>,
     pub(crate) watchdog_tx: tokio::sync::mpsc::Sender<()>,
+    pub interval: Interval,
 }
 
 impl<'a, E: Event> Runtime<'a, E> {
@@ -28,7 +30,6 @@ impl<'a, E: Event> Runtime<'a, E> {
         actor: &'b mut A,
     ) -> Result<()> {
         while self.ctx.is_alive() {
-            self.heartbeat();
             actor.tick(self).await?;
         }
         Ok(())
@@ -38,19 +39,13 @@ impl<'a, E: Event> Runtime<'a, E> {
         &'b mut self,
         actor: &'b mut A,
     ) -> Result<()> {
-        // Use a short timeout to avoid blocking forever when no events arrive
-        // This ensures heartbeat is sent regularly even when idle
-        // Timeout should be shorter than watchdog_interval
-        let timeout = tokio::time::sleep(self.config.tick_interval);
-        tokio::pin!(timeout);
-
         select! {
             biased;
             Some(ref envelope) = self.receiver.recv() => {
                 actor.handle_envelope(envelope).await?;
             }
-            _ = &mut timeout => {
-                // Just return to send another heartbeat
+            _ = self.interval.tick() => {
+                self.heartbeat();
             }
         }
         Ok(())

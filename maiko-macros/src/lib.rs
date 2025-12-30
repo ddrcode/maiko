@@ -40,7 +40,7 @@ pub fn select(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
             let timeout = tokio::time::sleep(#runtime.config.tick_interval);
-            tokio::pin!(timeout);
+            #runtime.heartbeat();
 
             tokio::select! {
                 biased;
@@ -48,9 +48,9 @@ pub fn select(input: TokenStream) -> TokenStream {
                     #runtime.default_handle(#actor, envelope).await?;
                 }
                 #arms
-                _ = timeout => {}
+                _ = timeout => {
+                }
             }
-            Ok(())
         }
     };
 

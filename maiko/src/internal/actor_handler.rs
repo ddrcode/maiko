@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::{select, sync::mpsc::Receiver};
+use tokio::{select, sync::mpsc::Receiver, time::MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
 use crate::{Actor, Config, Context, Envelope, Error, Result, Runtime};
@@ -21,11 +21,15 @@ impl<A: Actor> ActorHandler<A> {
             let (watchdog_tx, mut watchdog_rx) =
                 tokio::sync::mpsc::channel::<()>(self.config.watchdog_channel_size);
 
+            let mut interval = tokio::time::interval(self.config.tick_interval);
+            interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
             let mut runtime = Runtime {
                 ctx: &self.ctx,
                 receiver: &mut self.receiver,
                 config: self.config.clone(),
                 watchdog_tx,
+                interval,
             };
 
             let actor_fut = self.actor.run(&mut runtime);
@@ -53,7 +57,6 @@ impl<A: Actor> ActorHandler<A> {
                         }
 
                         if !got_heartbeat {
-                            eprintln!("Watchdog timeout for actor: {}", self.ctx.name());
                             return Err(Error::WatchdogTimeout);
                         }
                     }

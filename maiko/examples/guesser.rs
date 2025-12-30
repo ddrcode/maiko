@@ -123,7 +123,8 @@ impl Actor for Guesser {
         select!(self, runtime,
             // Wait for our interval tick, then generate a guess
             _ = self.interval.tick() => { self.send_guess().await?; }
-        )
+        );
+        Ok(())
     }
 }
 
