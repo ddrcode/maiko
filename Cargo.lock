@@ -77,6 +77,7 @@ dependencies = [
 name = "maiko-macros"
 version = "0.2.0"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]

@@ -31,7 +31,6 @@
 use std::{sync::Arc, time::Duration};
 
 use maiko::*;
-use tokio::select;
 
 /// Player identifier for distinguishing events from different players.
 ///
@@ -121,18 +120,10 @@ impl Actor for Guesser {
     /// Uses a timer to produce guesses on a schedule, demonstrating
     /// how actors can be primarily I/O or time-driven rather than event-driven.
     async fn tick(&mut self, runtime: &mut Runtime<'_, Self::Event>) -> maiko::Result {
-        runtime.heartbeat();
-
-        select! {
-            // Handle any events sent to us (though we don't expect any)
-            Some(envelope) = runtime.recv() =>
-                runtime.default_handle(self, &envelope).await?,
-
+        select!(self, runtime,
             // Wait for our interval tick, then generate a guess
-            _ = self.interval.tick() => self.send_guess().await?
-        }
-
-        Ok(())
+            _ = self.interval.tick() => { self.send_guess().await?; }
+        )
     }
 }
 

@@ -32,6 +32,6 @@ pub use supervisor::Supervisor;
 pub use topic::{DefaultTopic, Topic};
 
 #[cfg(feature = "macros")]
-pub use maiko_macros::Event;
+pub use maiko_macros::{Event, select};
 
 pub type Result<T = ()> = std::result::Result<T, Error>;
