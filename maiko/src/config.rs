@@ -37,7 +37,7 @@ impl Default for Config {
             channel_size: 128,
             max_events_per_tick: 10,
             maintenance_interval: tokio::time::Duration::from_secs(10),
-            watchdog_interval: tokio::time::Duration::from_secs(1),
+            watchdog_interval: tokio::time::Duration::from_secs(10),
             watchdog_channel_size: 10,
             tick_interval: tokio::time::Duration::from_millis(100),
         }
