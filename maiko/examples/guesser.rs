@@ -28,10 +28,8 @@
 //!
 //! The Game actor stops the entire system using `ctx.stop()` after completing its task.
 
-use std::time::Duration;
-
 use maiko::*;
-use tokio::time::sleep;
+use std::time::Duration;
 
 /// Player identifier for distinguishing events from different players.
 ///
@@ -103,8 +101,7 @@ impl Actor for Guesser {
     type Event = GuesserEvent;
 
     /// Generate a random guess at regular intervals.
-    async fn tick(&mut self) -> maiko::Result<()> {
-        sleep(self.cycle_time).await;
+    async fn step(&mut self) -> maiko::Result<StepAction> {
         let number = rand::random::<u8>() % 10;
 
         // Emit a guess event with our player ID
@@ -113,7 +110,9 @@ impl Actor for Guesser {
                 player: self.player_id,
                 number,
             })
-            .await
+            .await?;
+
+        Ok(StepAction::Backoff(self.cycle_time))
     }
 }
 
@@ -155,7 +154,7 @@ impl Actor for Game {
     }
 
     /// Collect guesses from players and emit results when both have guessed.
-    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
+    async fn handle_event(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
         if let GuesserEvent::Guess { player, number } = event {
             // Store the guess based on player ID
             match player {
@@ -190,11 +189,11 @@ impl Actor for Game {
     /// Check if the game should end and trigger shutdown.
     /// The `ctx.stop()` calls actor to exit. As the supervisor expects all actors
     /// to run, this will lead to overall shutdown.
-    async fn tick(&mut self) -> maiko::Result<()> {
+    async fn step(&mut self) -> maiko::Result<StepAction> {
         if self.round >= 10 {
             self.ctx.stop();
         }
-        Ok(())
+        Ok(StepAction::AwaitEvent)
     }
 }
 
@@ -209,7 +208,7 @@ impl Actor for Printer {
     type Event = GuesserEvent;
 
     /// Display messages and results to the console.
-    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> maiko::Result<()> {
+    async fn handle_event(&mut self, event: &Self::Event, _meta: &Meta) -> maiko::Result<()> {
         match event {
             GuesserEvent::Message(msg) => {
                 println!("{}", msg);

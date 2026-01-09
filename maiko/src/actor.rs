@@ -1,7 +1,7 @@
 use core::marker::Send;
 use std::future::Future;
 
-use crate::{Error, Event, Meta, Result};
+use crate::{Error, Event, Meta, Result, StepAction};
 
 /// Core trait implemented by user-defined actors.
 ///
@@ -35,7 +35,7 @@ pub trait Actor: Send + 'static {
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
     /// to emit follow-up events as needed.
-    fn handle(
+    fn handle_event(
         &mut self,
         event: &Self::Event,
         meta: &Meta,
@@ -94,11 +94,8 @@ pub trait Actor: Send + 'static {
     ///
     /// The default implementation returns a pending future that never completes,
     /// making the actor purely event-driven with no periodic work.
-    fn tick(&mut self) -> impl Future<Output = Result<()>> + Send {
-        async {
-            std::future::pending::<()>().await;
-            Ok(())
-        }
+    fn step(&mut self) -> impl Future<Output = Result<StepAction>> + Send {
+        async { Ok(StepAction::Never) }
     }
 
     /// Lifecycle hook called once before the event loop starts.
