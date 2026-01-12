@@ -1,7 +1,7 @@
 use core::marker::Send;
-use std::future::Future;
+use std::{future::Future, sync::Arc};
 
-use crate::{Error, Event, Meta, Result, StepAction};
+use crate::{Envelope, Error, Event, Result, StepAction};
 
 /// Core trait implemented by user-defined actors.
 ///
@@ -19,8 +19,6 @@ use crate::{Error, Event, Meta, Result, StepAction};
 /// - No `#[async_trait]` is required.
 ///
 /// See also: [`crate::Context`], [`crate::Supervisor`].
-#[allow(unused_variables)]
-// #[async_trait]
 pub trait Actor: Send + 'static {
     type Event: Event + Send;
 
@@ -35,12 +33,16 @@ pub trait Actor: Send + 'static {
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
     /// to emit follow-up events as needed.
-    fn handle_event(
-        &mut self,
-        event: &Self::Event,
-        meta: &Meta,
-    ) -> impl Future<Output = Result<()>> + Send {
+    fn handle_event(&mut self, event: &Self::Event) -> impl Future<Output = Result<()>> + Send {
+        let _event = event;
         async { Ok(()) }
+    }
+
+    fn handle_envelope(
+        &mut self,
+        lope: &Arc<Envelope<Self::Event>>,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async { self.handle_event(&lope.event).await }
     }
 
     /// Optional periodic work called when the event queue is empty.

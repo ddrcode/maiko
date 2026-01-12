@@ -51,12 +51,12 @@ impl<A: Actor> ActorHandler<A> {
                 },
 
                 Some(event) = self.receiver.recv() => {
-                    let res = self.actor.handle_event(&event.event, &event.meta).await;
+                    let res = self.actor.handle_envelope(&event).await;
                     self.handle_error(res)?;
 
                     let mut cnt = 1;
                     while let Ok(event) = self.receiver.try_recv() {
-                        let res = self.actor.handle_event(&event.event, &event.meta).await;
+                        let res = self.actor.handle_envelope(&event).await;
                         self.handle_error(res)?;
                         cnt += 1;
                         if cnt == self.max_events_per_tick {

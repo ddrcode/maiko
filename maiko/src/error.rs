@@ -26,6 +26,9 @@ pub enum Error {
 
     #[error("Adding new actor failed. {0}")]
     ActorBuilderError(Arc<str>),
+
+    #[error("Error external to Maiko occured: {0}")]
+    External(Arc<str>),
 }
 
 impl<E: Event> From<SendError<Arc<Envelope<E>>>> for Error {
