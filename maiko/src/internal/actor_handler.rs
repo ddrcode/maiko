@@ -40,9 +40,16 @@ pub(crate) struct ActorHandler<A: Actor> {
     pub(crate) cancel_token: Arc<CancellationToken>,
 }
 
-type ActorFuture<'a> = Option<ReusableBoxFuture<'a, Result<StepAction>>>;
+type ActorFuture<'a> = ReusableBoxFuture<'a, Result<StepAction>>;
 
 impl<A: Actor> ActorHandler<A> {
+    fn make_step_ft(actor: Arc<Mutex<A>>) -> impl Future<Output = ()> {
+        async move {
+            let mut a = actor.lock().await;
+            a.step().await;
+        }
+    }
+
     pub async fn run(&mut self) -> Result<()> {
         {
             self.actor.lock().await.on_start().await?;
@@ -60,18 +67,14 @@ impl<A: Actor> ActorHandler<A> {
         //     let mut a = actor.lock().await;
         //     a.step().await;
         // }));
-        let actor = self.actor.clone();
-        let mut step_ft: ActorFuture<'_> = Some(ReusableBoxFuture::new(async move {
-            let mut a = actor.lock().await;
-            a.step().await
-        }));
+        let mut step_ft = ReusableBoxFuture::new(Self::make_step_ft(self.actor.clone()));
 
         while self.ctx.is_alive() {
             select! {
                 biased;
 
                 _ = token.cancelled() => {
-                    let _ = step_ft.take();
+                    // let _ = step_ft.take();
                     self.ctx.stop();
                     break;
                 },
@@ -95,22 +98,33 @@ impl<A: Actor> ActorHandler<A> {
                     // }
                 }
 
-                _ = async {
-                        if let Some(x) = &mut step_ft {
-                            x.await;
-                        }
-                    }, if step_ft.is_some() => {
-                    println!("Actor step completed, scheduling next step ({})", self.ctx.name());
-                    tokio::task::yield_now().await;
-                    if let Some(ft) = step_ft.as_mut() {
-                        let actor = self.actor.clone();
-                        ft.set(async move {
-                            let mut a = actor.lock().await;
-                            a.step().await
-                        });
-                    }
-
+                _ = &mut step_ft => {
+                    // println!("Actor step completed, scheduling next step ({})", self.ctx.name());
+                    // tokio::task::yield_now().await;
+                    // let actor = self.actor.clone();
+                    // step_ft.set(async move {
+                    //     let mut a = actor.lock().await;
+                    //     a.step().await;
+                    // });
+                    step_ft.set(Self::make_step_ft(self.actor.clone()));
                 }
+
+                // _ = async {
+                //         if let Some(x) = &mut step_ft {
+                //             x.await;
+                //         }
+                //     }, if step_ft.is_some() => {
+                //     println!("Actor step completed, scheduling next step ({})", self.ctx.name());
+                //     tokio::task::yield_now().await;
+                //     if let Some(ft) = step_ft.as_mut() {
+                //         let actor = self.actor.clone();
+                //         ft.set(async move {
+                //             let mut a = actor.lock().await;
+                //             a.step().await
+                //         });
+                //     }
+                //
+                // }
 
                 // _ = async {
                 //     if let Some(backoff_sleep) = step_handler.backoff.as_mut() {
