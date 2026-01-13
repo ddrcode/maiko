@@ -97,7 +97,7 @@ pub trait Actor: Send + 'static {
     /// The default implementation returns a pending future that never completes,
     /// making the actor purely event-driven with no periodic work.
     fn step(&mut self) -> impl Future<Output = Result<StepAction>> + Send {
-        async { std::future::pending::<Result<StepAction>>().await }
+        std::future::pending::<Result<StepAction>>()
         // async { Ok(StepAction::Never) }
     }
 
