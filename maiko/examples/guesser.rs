@@ -1,4 +1,4 @@
-//! Guessing Game - Actor Coordination Exampl
+//! Guessing Game - Actor Coordination Example
 //!
 //! The Game waits for guesses from both players, pairs them, and emits results.
 //!
@@ -29,7 +29,7 @@
 //! The Game actor stops the entire system using `ctx.stop()` after completing its task.
 
 use maiko::*;
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 /// Player identifier for distinguishing events from different players.
 ///
@@ -112,8 +112,6 @@ impl Actor for Guesser {
             })
             .await?;
 
-        tokio::time::sleep(self.cycle_time).await;
-
         Ok(StepAction::Backoff(self.cycle_time))
     }
 }
@@ -156,8 +154,8 @@ impl Actor for Game {
     }
 
     /// Collect guesses from players and emit results when both have guessed.
-    async fn handle_envelope(&mut self, lope: &Arc<Envelope<Self::Event>>) -> maiko::Result<()> {
-        if let GuesserEvent::Guess { player, number } = &lope.event {
+    async fn handle_event(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
+        if let GuesserEvent::Guess { player, number } = event {
             // Store the guess based on player ID
             match player {
                 PlayerId::Player1 => self.player1_guess = Some(*number),
@@ -179,7 +177,7 @@ impl Actor for Game {
                             player1: n1,
                             player2: n2,
                         },
-                        &lope.meta,
+                        meta,
                     )
                     .await?;
             }
@@ -210,7 +208,7 @@ impl Actor for Printer {
     type Event = GuesserEvent;
 
     /// Display messages and results to the console.
-    async fn handle_event(&mut self, event: &Self::Event) -> maiko::Result<()> {
+    async fn handle_event(&mut self, event: &Self::Event, _meta: &Meta) -> maiko::Result<()> {
         match event {
             GuesserEvent::Message(msg) => {
                 println!("{}", msg);

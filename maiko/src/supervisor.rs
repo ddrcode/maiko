@@ -151,7 +151,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         broker.add_subscriber(subscriber)?;
 
         let mut handler = ActorHandler {
-            actor: Arc::new(Mutex::new(actor)),
+            actor,
             receiver: rx,
             ctx,
             max_events_per_tick: self.config.max_events_per_tick,
