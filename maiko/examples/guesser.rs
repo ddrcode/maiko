@@ -154,8 +154,8 @@ impl Actor for Game {
     }
 
     /// Collect guesses from players and emit results when both have guessed.
-    async fn handle_event(&mut self, event: &Self::Event, meta: &Meta) -> maiko::Result<()> {
-        if let GuesserEvent::Guess { player, number } = event {
+    async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> maiko::Result<()> {
+        if let GuesserEvent::Guess { player, number } = envelope.event() {
             // Store the guess based on player ID
             match player {
                 PlayerId::Player1 => self.player1_guess = Some(*number),
@@ -177,7 +177,7 @@ impl Actor for Game {
                             player1: n1,
                             player2: n2,
                         },
-                        meta,
+                        envelope.meta(),
                     )
                     .await?;
             }
@@ -208,8 +208,8 @@ impl Actor for Printer {
     type Event = GuesserEvent;
 
     /// Display messages and results to the console.
-    async fn handle_event(&mut self, event: &Self::Event, _meta: &Meta) -> maiko::Result<()> {
-        match event {
+    async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> maiko::Result<()> {
+        match envelope.event() {
             GuesserEvent::Message(msg) => {
                 println!("{}", msg);
             }

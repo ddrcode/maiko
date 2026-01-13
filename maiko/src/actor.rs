@@ -1,5 +1,5 @@
 use core::marker::Send;
-use std::{future::Future, sync::Arc};
+use std::future::Future;
 
 use crate::{Envelope, Error, Event, Result, StepAction};
 
@@ -24,25 +24,34 @@ pub trait Actor: Send + 'static {
 
     /// Handle a single incoming event.
     ///
-    /// Equivalent to:
+    /// Receives the full [`Envelope`] containing both the event payload and metadata.
+    /// Use `envelope.event()` for pattern matching, or access `envelope.meta` for
+    /// sender information and correlation IDs.
+    ///
+    /// # Example
     ///
     /// ```ignore
-    /// async fn handle(&mut self, event: Self::Event, meta: &Meta) -> Result<()>;
+    /// async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
+    ///     match envelope.event() {
+    ///         MyEvent::Foo(x) => self.handle_foo(x).await,
+    ///         MyEvent::Bar => {
+    ///             // Access metadata when needed
+    ///             println!("Bar from {}", envelope.meta.actor_name());
+    ///             Ok(())
+    ///         }
+    ///     }
+    /// }
     /// ```
     ///
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
     /// to emit follow-up events as needed.
-    fn handle_event(&mut self, event: &Self::Event) -> impl Future<Output = Result<()>> + Send {
-        let _event = event;
-        async { Ok(()) }
-    }
-
-    fn handle_envelope(
+    fn handle_event(
         &mut self,
-        lope: &Arc<Envelope<Self::Event>>,
+        envelope: &Envelope<Self::Event>,
     ) -> impl Future<Output = Result<()>> + Send {
-        async { self.handle_event(&lope.event).await }
+        let _ = envelope;
+        async { Ok(()) }
     }
 
     /// Optional periodic work called when the event queue is empty.

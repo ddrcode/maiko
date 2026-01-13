@@ -26,6 +26,10 @@ impl StepHandler {
     fn can_step(&self) -> bool {
         self.backoff.is_none() && self.pause == StepPause::None
     }
+    fn reset(&mut self) {
+        self.backoff = None;
+        self.pause = StepPause::None;
+    }
 }
 
 pub(crate) struct ActorHandler<A: Actor> {
@@ -51,12 +55,12 @@ impl<A: Actor> ActorHandler<A> {
                 },
 
                 Some(event) = self.receiver.recv() => {
-                    let res = self.actor.handle_envelope(&event).await;
+                    let res = self.actor.handle_event(&event).await;
                     self.handle_error(res)?;
 
                     let mut cnt = 1;
                     while let Ok(event) = self.receiver.try_recv() {
-                        let res = self.actor.handle_envelope(&event).await;
+                        let res = self.actor.handle_event(&event).await;
                         self.handle_error(res)?;
                         cnt += 1;
                         if cnt == self.max_events_per_tick {
@@ -76,15 +80,20 @@ impl<A: Actor> ActorHandler<A> {
                     let _ = step_handler.backoff.take();
                     match self.actor.step().await {
                         Ok(action) => handle_step_action(action, &mut step_handler).await,
-                        Err(e) => self.actor.on_error(e)?
+                        Err(e) => {
+                            self.actor.on_error(e)?;
+                            step_handler.reset();
+                        }
                      }
                 }
-
 
                 res = self.actor.step(), if step_handler.can_step() => {
                      match res {
                         Ok(action) => handle_step_action(action, &mut step_handler).await,
-                        Err(e) => self.actor.on_error(e)?
+                        Err(e) => {
+                            self.actor.on_error(e)?;
+                            step_handler.reset();
+                        }
                      }
                 }
             }

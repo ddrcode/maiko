@@ -56,9 +56,13 @@ impl Actor for PingPong {
     type Event = PingPongEvent;
 
     /// Handle incoming events by responding with the opposite event.
-    async fn handle_event(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
-        println!("Event: {event:?} received by {} actor", self.ctx.name());
-        let response = match event {
+    async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
+        println!(
+            "Event: {:?} received by {} actor",
+            envelope.event(),
+            self.ctx.name()
+        );
+        let response = match envelope.event() {
             PingPongEvent::Ping => PingPongEvent::Pong,
             PingPongEvent::Pong => PingPongEvent::Ping,
         };
@@ -80,7 +84,7 @@ struct Counter {
 impl Actor for Counter {
     type Event = PingPongEvent;
 
-    async fn handle_event(&mut self, _event: &Self::Event, _meta: &Meta) -> Result<()> {
+    async fn handle_event(&mut self, _envelope: &Envelope<Self::Event>) -> Result<()> {
         self.count += 1;
         Ok(())
     }

@@ -14,8 +14,8 @@ use crate::{Event, Meta};
     serde(bound = "")
 )]
 pub struct Envelope<E: Event> {
-    pub meta: Meta,
-    pub event: E,
+    meta: Meta,
+    event: E,
 }
 
 impl<E: Event> Envelope<E> {
@@ -42,6 +42,29 @@ impl<E: Event> Envelope<E> {
             event,
         }
     }
+
+    /// Returns a reference to the event payload.
+    ///
+    /// This is a convenience method for pattern matching. For method calls,
+    /// you can also use `Deref` (e.g., `envelope.some_event_method()`).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// match envelope.event() {
+    ///     MyEvent::Foo(x) => handle_foo(x),
+    ///     MyEvent::Bar => handle_bar(),
+    /// }
+    /// ```
+    #[inline]
+    pub fn event(&self) -> &E {
+        &self.event
+    }
+
+    #[inline]
+    pub fn meta(&self) -> &Meta {
+        &self.meta
+    }
 }
 
 impl<E: Event> From<(&E, &Meta)> for Envelope<E> {
@@ -50,5 +73,12 @@ impl<E: Event> From<(&E, &Meta)> for Envelope<E> {
             meta: meta.clone(),
             event: event.clone(),
         }
+    }
+}
+
+impl<E: Event> std::ops::Deref for Envelope<E> {
+    type Target = E;
+    fn deref(&self) -> &E {
+        &self.event
     }
 }

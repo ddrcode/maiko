@@ -1,3 +1,23 @@
+# [0.2.0](https://github.com/ddrcode/maiko/compare/v0.1.1...v0.2.0) (January 13th, 2026)
+
+** Breaking changes **
+
+1. Adopted Maiko to work with project [Charon](https://github.com/ddrcode/charon)
+as a first library use case.
+2. Number of ergonomy improvements (API changes!)
+
+### Added
+
+- `StepAction` enum to control `step` function behavior
+- `serde` feature that makes events serializable/deserializable
+
+### Changed
+
+- Renamed `tick` to `step` in `Actor`
+- Renamed `handle` to `handle_event` in `Actor`
+- Fields of `Envelope` made private (use methods instead)
+- Implemented `Deref` for `Envelope` that makes it to dereference to event
+
 # [0.1.1](https://github.com/ddrcode/maiko/compare/v0.1.0...v0.1.1) (December 18th, 2025)
 
 ### Added
