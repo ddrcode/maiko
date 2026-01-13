@@ -10,6 +10,8 @@ as a first library use case.
 
 - `StepAction` enum to control `step` function behavior
 - `serde` feature that makes events serializable/deserializable
+- `External` option in `Error` enum
+- `clone_name` method in `Context`
 
 ### Changed
 
@@ -17,6 +19,8 @@ as a first library use case.
 - Renamed `handle` to `handle_event` in `Actor`
 - Fields of `Envelope` made private (use methods instead)
 - Implemented `Deref` for `Envelope` that makes it to dereference to event
+
+---
 
 # [0.1.1](https://github.com/ddrcode/maiko/compare/v0.1.0...v0.1.1) (December 18th, 2025)
 

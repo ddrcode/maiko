@@ -1,36 +1,12 @@
-use std::{pin::Pin, sync::Arc};
+use std::sync::Arc;
 
-use tokio::{select, sync::mpsc::Receiver, time::Sleep};
+use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, Context, Envelope, Result, StepAction};
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-enum StepPause {
-    #[default]
-    None,
-    AwaitEvent,
-    Suppressed,
-}
-
-#[derive(Default)]
-struct StepHandler {
-    backoff: Option<Pin<Box<Sleep>>>,
-    pause: StepPause,
-}
-
-impl StepHandler {
-    fn is_delayed(&self) -> bool {
-        self.backoff.is_some() && self.pause == StepPause::None
-    }
-    fn can_step(&self) -> bool {
-        self.backoff.is_none() && self.pause == StepPause::None
-    }
-    fn reset(&mut self) {
-        self.backoff = None;
-        self.pause = StepPause::None;
-    }
-}
+use crate::{
+    Actor, Context, Envelope, Result, StepAction,
+    internal::{StepHandler, StepPause},
+};
 
 pub(crate) struct ActorHandler<A: Actor> {
     pub(crate) actor: A,
