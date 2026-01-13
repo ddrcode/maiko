@@ -36,12 +36,12 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<()> {
-        let topic = Topic::from_event(&e.event);
+        let topic = Topic::from_event(e.event());
         self.subscribers
             .iter()
             .filter(|s| s.topics.contains(&topic))
             .filter(|s| !s.sender.is_closed())
-            .filter(|s| !Arc::ptr_eq(&s.name, &e.meta.actor_name))
+            .filter(|s| !Arc::ptr_eq(&s.name, &e.meta().actor_name))
             .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
         Ok(())
     }

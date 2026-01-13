@@ -1,7 +1,7 @@
 use core::marker::Send;
 use std::future::Future;
 
-use crate::{Error, Event, Meta, Result};
+use crate::{Envelope, Error, Event, Result, StepAction};
 
 /// Core trait implemented by user-defined actors.
 ///
@@ -19,27 +19,38 @@ use crate::{Error, Event, Meta, Result};
 /// - No `#[async_trait]` is required.
 ///
 /// See also: [`crate::Context`], [`crate::Supervisor`].
-#[allow(unused_variables)]
-// #[async_trait]
 pub trait Actor: Send + 'static {
     type Event: Event + Send;
 
     /// Handle a single incoming event.
     ///
-    /// Equivalent to:
+    /// Receives the full [`Envelope`] containing both the event payload and metadata.
+    /// Use `envelope.event()` for pattern matching, or access `envelope.meta` for
+    /// sender information and correlation IDs.
+    ///
+    /// # Example
     ///
     /// ```ignore
-    /// async fn handle(&mut self, event: Self::Event, meta: &Meta) -> Result<()>;
+    /// async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
+    ///     match envelope.event() {
+    ///         MyEvent::Foo(x) => self.handle_foo(x).await,
+    ///         MyEvent::Bar => {
+    ///             // Access metadata when needed
+    ///             println!("Bar from {}", envelope.meta.actor_name());
+    ///             Ok(())
+    ///         }
+    ///     }
+    /// }
     /// ```
     ///
     /// Called for every event routed to this actor. Return `Ok(())` when
     /// processing succeeds, or an error to signal failure. Use `Context::send`
     /// to emit follow-up events as needed.
-    fn handle(
+    fn handle_event(
         &mut self,
-        event: &Self::Event,
-        meta: &Meta,
+        envelope: &Envelope<Self::Event>,
     ) -> impl Future<Output = Result<()>> + Send {
+        let _ = envelope;
         async { Ok(()) }
     }
 
@@ -94,11 +105,8 @@ pub trait Actor: Send + 'static {
     ///
     /// The default implementation returns a pending future that never completes,
     /// making the actor purely event-driven with no periodic work.
-    fn tick(&mut self) -> impl Future<Output = Result<()>> + Send {
-        async {
-            std::future::pending::<()>().await;
-            Ok(())
-        }
+    fn step(&mut self) -> impl Future<Output = Result<StepAction>> + Send {
+        async { Ok(StepAction::Never) }
     }
 
     /// Lifecycle hook called once before the event loop starts.

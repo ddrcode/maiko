@@ -13,6 +13,7 @@ mod envelope;
 mod error;
 mod event;
 mod meta;
+mod step_action;
 mod supervisor;
 mod topic;
 
@@ -26,9 +27,10 @@ pub use envelope::Envelope;
 pub use error::Error;
 pub use event::Event;
 pub use meta::Meta;
+pub use step_action::StepAction;
 pub use supervisor::Supervisor;
 pub use topic::{DefaultTopic, Topic};
 
 pub use maiko_macros::Event;
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T = ()> = std::result::Result<T, Error>;

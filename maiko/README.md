@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Event-driven actors for Tokio**
+**Topic-based pub/sub for Tokio**
 
 [![Crates.io](https://img.shields.io/crates/v/maiko.svg)](https://crates.io/crates/maiko)
 [![Documentation](https://docs.rs/maiko/badge.svg)](https://docs.rs/maiko)
@@ -14,7 +14,9 @@
 
 ## What is Maiko?
 
-**Maiko** is a lightweight actor runtime for building event-driven concurrent systems in Rust. Unlike traditional actor frameworks (usually inspired by Erlang), Maiko actors communicate through **topic-based pub/sub** rather than direct addressing, making them loosely coupled and ideal for stream processing workloads.
+**Maiko** is an in-process event bus for Tokio applications. It provides topic-based pub/sub routing where independent handlers ("actors") subscribe to event topics and communicate through a central broker—similar to Kafka, but lightweight and embedded in your application.
+
+> **Not a traditional actor framework.** Unlike Actix or Ractor (which use addressable actors with request-response messaging), Maiko actors are anonymous, loosely coupled, and communicate only through unidirectional event streams. There are no actor addresses, no supervision trees, and no request-response patterns.
 
 ### The Problem Maiko Solves
 
@@ -66,13 +68,14 @@ Maiko manages the entire channel topology internally, letting you focus on busin
 
 ## When to Use Maiko
 
-Maiko excels at processing **unidirectional event streams** where actors don't need to know about each other:
+Maiko excels at **unidirectional event pipelines** where components don't need to know about each other:
 
-- **System event processing** - inotify, epoll, signals, device monitoring
-- **Data stream handling** - stock ticks, sensor data, telemetry pipelines
-- **Network event processing** - packet handling, protocol parsing
-- **Reactive architectures** - event sourcing, CQRS patterns
-- **Game engines** - entity systems, event-driven gameplay
+- **System event processing** — device monitoring, signals, inotify
+- **Data pipelines** — sensor data, stock ticks, telemetry
+- **Game engines** — entity systems, input handling
+- **Reactive architectures** — event sourcing, CQRS
+
+**Not ideal for:** Request-response APIs, RPC-style communication, complex supervision hierarchies.
 
 ### Maiko vs Alternatives
 
@@ -104,23 +107,19 @@ cargo add maiko
 ```rust
 use maiko::*;
 
-// Define your events
 #[derive(Event, Clone, Debug)]
 enum MyEvent {
     Hello(String),
 }
 
-// Create an actor
 struct Greeter;
 
 impl Actor for Greeter {
     type Event = MyEvent;
 
-    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
-        match event {
-            MyEvent::Hello(name) => {
-                println!("Hello, {}! (from {})", name, meta.actor_name());
-            }
+    async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
+        if let MyEvent::Hello(name) = envelope.event() {
+            println!("Hello, {}!", name);
         }
         Ok(())
     }
@@ -129,15 +128,11 @@ impl Actor for Greeter {
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
-
-    // Add actor and subscribe it to all topics (DefaultTopic)
     sup.add_actor("greeter", |_ctx| Greeter, &[DefaultTopic])?;
+    
     sup.start().await?;
     sup.send(MyEvent::Hello("World".into())).await?;
-
-    // Graceful shutdown (it attempts to process all events already in the queue)
-    sup.stop().await?;
-    Ok(())
+    sup.stop().await
 }
 ```
 
@@ -203,70 +198,58 @@ sup.add_actor("processor", factory, &[DefaultTopic])?;
 
 ### 3. Actors
 
-Actors are independent units that process events asynchronously:
+Actors implement two core methods:
+
+- **`handle_event`** — Process incoming events
+- **`step`** — Produce events or perform periodic work
 
 ```rust
 struct PacketProcessor {
     ctx: Context<NetworkEvent>,
-    stats: PacketStats,
+    buffer: Vec<u8>,
 }
 
 impl Actor for PacketProcessor {
     type Event = NetworkEvent;
 
-    async fn on_start(&mut self) -> Result<()> {
-        println!("Processor starting...");
-        Ok(())
-    }
-
-    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
-        match event {
+    async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
+        match envelope.event() {
             NetworkEvent::PacketReceived(data) => {
-                self.stats.increment();
-                self.process_packet(data).await?;
+                self.buffer.extend(data);
             }
             _ => {}
         }
         Ok(())
     }
 
-    async fn tick(&mut self) -> Result<()> {
-        // Called periodically when no events are queued
-        // Useful for polling external sources, timeouts, housekeeping, etc.
-        if self.stats.should_report() {
-            println!("Processed {} packets", self.stats.count);
+    async fn step(&mut self) -> Result<StepAction> {
+        // Called in select! loop alongside event handling
+        if self.buffer.len() > 1000 {
+            self.flush_buffer().await?;
         }
-        Ok(())
+        Ok(StepAction::AwaitEvent)  // Wait for next event
     }
 
-    async fn on_stop(&mut self) -> Result<()> {
-        println!("Final count: {}", self.stats.count);
+    async fn on_start(&mut self) -> Result<()> {
+        println!("Processor starting...");
         Ok(())
     }
 }
 ```
-
-The `tick()` method runs when the event queue is empty, making it perfect for:
-- Polling external sources (WebSockets, file descriptors, system APIs)
-- Periodic tasks (metrics reporting, health checks)
-- Timeout logic (detecting stale connections)
-- Housekeeping (buffer flushing, cache cleanup)
 
 ### 4. Context
 
 The `Context` provides actors with capabilities:
 
 ```rust
-// Send events to topics
+// Send events
 ctx.send(NetworkEvent::PacketReceived(data)).await?;
 
 // Send with correlation (for tracking related events)
-ctx.send_child_event(NetworkEvent::Response(data)).await?;
+ctx.send_child_event(ResponseEvent::Ok, &envelope.meta).await?;
 
-// Check if system is still running
-if !ctx.is_alive() {
-    return Ok(());
-}
+// Stop this actor
+ctx.stop();
 
 // Get actor's name
 let name = ctx.name();
@@ -307,52 +290,37 @@ sup.stop().await?;
 ```
 
 
-### 6. Actor Patterns: Handle vs Tick
+### 6. StepAction
 
-Maiko actors typically follow one of two patterns:
+The `step()` method returns `StepAction` to control scheduling:
 
-**Handle-Heavy Actors** (Event Processors):
+| Action | Behavior |
+|--------|----------|
+| `StepAction::Continue` | Run step again immediately |
+| `StepAction::Yield` | Yield to runtime, then run again |
+| `StepAction::AwaitEvent` | Pause until next event arrives |
+| `StepAction::Backoff(Duration)` | Sleep, then run again |
+| `StepAction::Never` | Disable step permanently (default) |
+
+**Common patterns:**
+
 ```rust
-// Telemetry actor - processes many incoming events
-impl Actor for TelemetryCollector {
-    type Event = MetricEvent;
-
-    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
-        // Main logic here - process incoming metrics
-        self.export_to_otel(event).await?;
-        self.aggregate(event);
-        Ok(())
-    }
-
-    async fn tick(&mut self) -> Result<()> {
-        // Minimal - just periodic cleanup
-        self.flush_buffer().await
-    }
+// Event producer with interval
+async fn step(&mut self) -> Result<StepAction> {
+    self.ctx.send(HeartbeatEvent).await?;
+    Ok(StepAction::Backoff(Duration::from_secs(5)))
 }
-```
 
-**Tick-Heavy Actors** (Event Producers):
-```rust
-// Stock data reader - polls external source, emits many events
-impl Actor for StockReader {
-    type Event = StockEvent;
+// External I/O source (WebSocket, device, etc.)
+async fn step(&mut self) -> Result<StepAction> {
+    let data = self.websocket.read().await?;
+    self.ctx.send(DataEvent(data)).await?;
+    Ok(StepAction::Continue)
+}
 
-    async fn handle(&mut self, event: &Self::Event, _meta: &Meta) -> Result<()> {
-        // Rarely receives events - maybe just control messages
-        if let StockEvent::Stop = event {
-            self.websocket.close().await?;
-        }
-        Ok(())
-    }
-
-    async fn tick(&mut self) -> Result<()> {
-        // Main logic here - poll WebSocket and emit events
-        if let Some(tick) = self.websocket.next().await {
-            let event = StockEvent::Tick(tick.symbol, tick.price);
-            self.ctx.send(event).await?;
-        }
-        Ok(())
-    }
+// Pure event processor (no step logic needed)
+async fn step(&mut self) -> Result<StepAction> {
+    Ok(StepAction::Never)  // Default behavior
 }
 ```
 
@@ -393,77 +361,25 @@ That means Maiko may be not best suited for **request-response** patterns. Altho
 
 ## Advanced Features
 
-### Tick Patterns
+### Envelope & Metadata
 
-The `tick()` method runs in a `select!` loop alongside event reception. What you `.await` inside determines when your actor wakes:
-
-**Pattern 1: Time-Based Producer**
-```rust
-impl Actor for HeartbeatActor {
-    async fn tick(&mut self) -> Result<()> {
-        tokio::time::sleep(Duration::from_secs(5)).await;  // Wakes every 5s
-        self.ctx.send(HeartbeatEvent).await
-    }
-}
-```
-
-**Pattern 2: External Event Source**
-```rust
-impl Actor for WebSocketReader {
-    async fn tick(&mut self) -> Result<()> {
-        let frame = self.socket.read().await?;  // Wakes when data arrives
-        self.ctx.send(FrameEvent(frame)).await
-    }
-}
-```
-
-**Pattern 3: Pure Event Processor**
-```rust
-impl Actor for EventLogger {
-    async fn tick(&mut self) -> Result<()> {
-        self.ctx.pending().await  // Never wakes - only handles events (default behavior)
-    }
-
-    async fn handle(&mut self, event: &Event, _meta: &Meta) -> Result<()> {
-        log::info!("Event: {:?}", event);  // All logic in handle()
-        Ok(())
-    }
-}
-```
-
-**Pattern 4: Housekeeping After Events**
-```rust
-impl Actor for BufferedWriter {
-    async fn tick(&mut self) -> Result<()> {
-        // Returns immediately - called after processing event batches
-        if self.buffer.len() > 100 {
-            self.flush().await?;
-        }
-        Ok(())
-    }
-
-    async fn handle(&mut self, event: &Event, _meta: &Meta) -> Result<()> {
-        self.buffer.push(event.clone());
-        Ok(())
-    }
-}
-```
-
-**Key insight:** `ctx.pending()` is more ergonomic than `std::future::pending()` since it returns `Result<()>` to match the trait signature.
-
-### Correlation IDs
-
-Track related events across actors:
+Events arrive wrapped in an `Envelope` containing metadata:
 
 ```rust
-async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
-    if let Some(correlation_id) = meta.correlation_id() {
-        println!("Event chain: {}", correlation_id);
+async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
+    // Access the event
+    match envelope.event() {
+        MyEvent::Data(x) => self.process(x).await?,
+        _ => {}
     }
-
-    // Child events inherit correlation
-    self.ctx.send_child_event(ResponseEvent::Ok).await?;
-
+    
+    // Access metadata when needed
+    let sender = envelope.meta.actor_name();
+    let correlation = envelope.meta.correlation_id();
+    
+    // Send correlated child event
+    self.ctx.send_child_event(ResponseEvent::Ok, &envelope.meta).await?;
+    
     Ok(())
 }
 ```
@@ -507,26 +423,15 @@ let mut sup = Supervisor::new(config);
 
 ## Roadmap
 
-### Next Goal - Supervision & Control
-- Actor restart policies and strategies
-- Supervisor metrics and monitoring
-- Dynamic actor spawning at runtime
-- Backpressure configuration
-- Enhanced error recovery
+**Near-term:**
+- Dynamic actor spawning/removal at runtime
+- Actor introspection and metrics
+- Enhanced error handling strategies
 
-### Long-Term Vision: Cross-Process Communication
-- IPC bridge actors (Unix sockets, TCP)
-- Event serialization framework (bincode, JSON, protobuf)
-- Remote topic subscriptions
-- Multi-supervisor coordination
-- Process-level fault isolation
-
-### independent work: Ready-to-Use Actor Library
-- **Inter-supervisor communication** - Unix socket, gRPC bridge actors
-- **Networking actors** - HTTP client/server, WebSocket, TCP/UDP handlers
-- **Telemetry actors** - OpenTelemetry integration, metrics exporters
-- **Storage actors** - Database connectors, file watchers, cache adapters
-- Authentication and encryption for network bridges
+**Future:**
+- `maiko-actors` crate with reusable actors (IPC bridges, WebSocket, OpenTelemetry)
+- Cross-process communication via bridge actors
+- Embassy port for embedded systems
 
 ---
 
@@ -550,7 +455,7 @@ We believe in:
 
 Contributors are expected to write their own code. AI may assist with reviews, discussions, and documentation, but implementations should reflect your own understanding and skills.
 
-Miako is built with ❤️ and by humans, for humans 🦀
+Maiko is built with ❤️ by humans, for humans 🦀
 
 ---
 

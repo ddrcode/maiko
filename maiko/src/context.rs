@@ -56,7 +56,7 @@ impl<E: Event> Context<E> {
     }
 
     #[inline]
-    async fn send_envelope(&self, envelope: Envelope<E>) -> Result<()> {
+    pub async fn send_envelope(&self, envelope: Envelope<E>) -> Result<()> {
         self.sender.send(Arc::new(envelope)).await?;
         Ok(())
     }
@@ -71,6 +71,11 @@ impl<E: Event> Context<E> {
     #[inline]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    #[inline]
+    pub fn clone_name(&self) -> Arc<str> {
+        self.name.clone()
     }
 
     /// Whether the actor is considered alive by the runtime.

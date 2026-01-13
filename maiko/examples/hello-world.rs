@@ -12,10 +12,10 @@ struct Greeter;
 impl Actor for Greeter {
     type Event = MyEvent;
 
-    async fn handle(&mut self, event: &Self::Event, meta: &Meta) -> Result<()> {
-        match event {
+    async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
+        match envelope.event() {
             MyEvent::Hello(name) => {
-                println!("Hello, {}! (from {})", name, meta.actor_name());
+                println!("Hello, {}! (from {})", name, envelope.meta().actor_name());
             }
         }
         Ok(())

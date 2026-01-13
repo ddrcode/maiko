@@ -3,7 +3,10 @@ use std::sync::Arc;
 use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, Context, Envelope, Result};
+use crate::{
+    Actor, Context, Envelope, Result, StepAction,
+    internal::{StepHandler, StepPause},
+};
 
 pub(crate) struct ActorHandler<A: Actor> {
     pub(crate) actor: A,
@@ -17,6 +20,7 @@ impl<A: Actor> ActorHandler<A> {
     pub async fn run(&mut self) -> Result<()> {
         self.actor.on_start().await?;
         let token = self.cancel_token.clone();
+        let mut step_handler = StepHandler::default();
         while self.ctx.is_alive() {
             select! {
                 biased;
@@ -27,28 +31,47 @@ impl<A: Actor> ActorHandler<A> {
                 },
 
                 Some(event) = self.receiver.recv() => {
-                    let res = self.actor.handle(&event.event, &event.meta).await;
+                    let res = self.actor.handle_event(&event).await;
                     self.handle_error(res)?;
 
                     let mut cnt = 1;
                     while let Ok(event) = self.receiver.try_recv() {
-                        let res = self.actor.handle(&event.event, &event.meta).await;
+                        let res = self.actor.handle_event(&event).await;
                         self.handle_error(res)?;
                         cnt += 1;
                         if cnt == self.max_events_per_tick {
                             break;
                         }
                     }
-                    if cnt > 0 {
-                        tokio::task::yield_now().await;
+                    if step_handler.pause == StepPause::AwaitEvent {
+                        step_handler.pause = StepPause::None;
                     }
                 }
 
-                tick = self.actor.tick() => {
-                    self.handle_error(tick)?;
-                    tokio::task::yield_now().await;
+                _ = async {
+                    if let Some(backoff_sleep) = step_handler.backoff.as_mut() {
+                        backoff_sleep.as_mut().await;
+                    }
+                }, if step_handler.is_delayed() => {
+                    let _ = step_handler.backoff.take();
+                    match self.actor.step().await {
+                        Ok(action) => handle_step_action(action, &mut step_handler).await,
+                        Err(e) => {
+                            self.actor.on_error(e)?;
+                            step_handler.reset();
+                        }
+                     }
                 }
 
+                res = self.actor.step(), if step_handler.can_step() => {
+                     match res {
+                        Ok(action) => handle_step_action(action, &mut step_handler).await,
+                        Err(e) => {
+                            self.actor.on_error(e)?;
+                            step_handler.reset();
+                        }
+                     }
+                }
             }
         }
 
@@ -56,10 +79,29 @@ impl<A: Actor> ActorHandler<A> {
     }
 
     #[inline]
-    fn handle_error(&self, result: Result<()>) -> Result<()> {
+    fn handle_error<T>(&self, result: Result<T>) -> Result<()> {
         if let Err(e) = result {
             self.actor.on_error(e)?;
         }
         Ok(())
     }
+}
+
+async fn handle_step_action(step_action: StepAction, step_handler: &mut StepHandler) {
+    let pause = match step_action {
+        crate::StepAction::Continue => StepPause::None,
+        crate::StepAction::Yield => {
+            tokio::task::yield_now().await;
+            StepPause::None
+        }
+        crate::StepAction::AwaitEvent => StepPause::AwaitEvent,
+        crate::StepAction::Backoff(duration) => {
+            step_handler
+                .backoff
+                .replace(Box::pin(tokio::time::sleep(duration)));
+            StepPause::None
+        }
+        crate::StepAction::Never => StepPause::Suppressed,
+    };
+    step_handler.pause = pause;
 }

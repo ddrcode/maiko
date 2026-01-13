@@ -15,10 +15,11 @@ use uuid::Uuid;
 /// For example, an actor may choose to set the `correlation_id` of child events, but
 /// it may also have another meaning in a different context.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Meta {
     id: u128,
     timestamp: u64,
-    pub(crate) actor_name: Arc<str>,
+    pub(crate) actor_name: Arc<str>, // FIXME used by broker
     correlation_id: Option<u128>,
 }
 

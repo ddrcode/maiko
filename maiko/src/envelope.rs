@@ -8,9 +8,14 @@ use crate::{Event, Meta};
 /// - `meta`: `Meta` describing who emitted the event and when.
 ///   Includes `actor_name` and optional `correlation_id` for linking related events.
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(bound = "")
+)]
 pub struct Envelope<E: Event> {
-    pub meta: Meta,
-    pub event: E,
+    meta: Meta,
+    event: E,
 }
 
 impl<E: Event> Envelope<E> {
@@ -36,5 +41,44 @@ impl<E: Event> Envelope<E> {
             meta: Meta::new(actor_name.into(), Some(correlation_id)),
             event,
         }
+    }
+
+    /// Returns a reference to the event payload.
+    ///
+    /// This is a convenience method for pattern matching. For method calls,
+    /// you can also use `Deref` (e.g., `envelope.some_event_method()`).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// match envelope.event() {
+    ///     MyEvent::Foo(x) => handle_foo(x),
+    ///     MyEvent::Bar => handle_bar(),
+    /// }
+    /// ```
+    #[inline]
+    pub fn event(&self) -> &E {
+        &self.event
+    }
+
+    #[inline]
+    pub fn meta(&self) -> &Meta {
+        &self.meta
+    }
+}
+
+impl<E: Event> From<(&E, &Meta)> for Envelope<E> {
+    fn from((event, meta): (&E, &Meta)) -> Self {
+        Envelope::<E> {
+            meta: meta.clone(),
+            event: event.clone(),
+        }
+    }
+}
+
+impl<E: Event> std::ops::Deref for Envelope<E> {
+    type Target = E;
+    fn deref(&self) -> &E {
+        &self.event
     }
 }

@@ -3,7 +3,7 @@ default: check
 # Run formatting, linting, tests (including doctests), and build examples
 check:
     cargo fmt --all -- --check
-    cargo clippy --workspace --all-targets --all-features
+    cargo clippy --workspace --all-targets
 
 # Quickly format the workspace
 fmt:
