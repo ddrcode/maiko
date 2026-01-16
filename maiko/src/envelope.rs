@@ -65,6 +65,11 @@ impl<E: Event> Envelope<E> {
     pub fn meta(&self) -> &Meta {
         &self.meta
     }
+
+    #[inline]
+    pub fn id(&self) -> u128 {
+        self.meta.id()
+    }
 }
 
 impl<E: Event> From<(&E, &Meta)> for Envelope<E> {

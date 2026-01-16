@@ -19,6 +19,9 @@ mod topic;
 
 mod internal;
 
+#[cfg(feature = "test-harness")]
+pub mod test_harness;
+
 pub use actor::Actor;
 pub use actor_builder::ActorBuilder;
 pub use config::Config;
@@ -31,6 +34,7 @@ pub use step_action::StepAction;
 pub use supervisor::Supervisor;
 pub use topic::{DefaultTopic, Topic};
 
+#[cfg(feature = "macros")]
 pub use maiko_macros::Event;
 
 pub type Result<T = ()> = std::result::Result<T, Error>;

@@ -6,11 +6,17 @@ use tokio_util::sync::CancellationToken;
 use super::Subscriber;
 use crate::{Config, Envelope, Error, Event, Result, Topic};
 
+#[cfg(feature = "test-harness")]
+use crate::test_harness::{EventEntry, TestEvent};
+
 pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Arc<Envelope<E>>>,
     subscribers: Vec<Subscriber<E, T>>,
     cancel_token: Arc<CancellationToken>,
     config: Arc<Config>,
+
+    #[cfg(feature = "test-harness")]
+    test_sender: Option<tokio::sync::mpsc::Sender<TestEvent<E, T>>>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
@@ -24,6 +30,8 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             subscribers: Vec::new(),
             cancel_token,
             config,
+            #[cfg(feature = "test-harness")]
+            test_sender: None,
         }
     }
 
@@ -42,7 +50,15 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .filter(|s| s.topics.contains(&topic))
             .filter(|s| !s.sender.is_closed())
             .filter(|s| !Arc::ptr_eq(&s.name, &e.meta().actor_name))
-            .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
+            .try_for_each(|subscriber| {
+                let res = subscriber.sender.try_send(e.clone());
+                #[cfg(feature = "test-harness")]
+                if let Some(ref sender) = self.test_sender {
+                    let _ = sender
+                        .try_send(TestEvent::Event(EventEntry::new(e.clone(), topic.clone())));
+                }
+                res
+            })?;
         Ok(())
     }
 
@@ -98,7 +114,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Event, Topic, internal::broker::Broker};
+    use crate::{Event, Topic, internal::broker::Broker, test_harness::init_harness};
     use std::{collections::HashSet, sync::Arc};
     use tokio::sync::mpsc;
     use tokio_util::sync::CancellationToken;
@@ -129,7 +145,8 @@ mod tests {
         let (tx, rx) = mpsc::channel(10);
         let config = Arc::new(crate::Config::default());
         let cancel_token = Arc::new(CancellationToken::new());
-        let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config);
+        let (harness, harness_tx) = init_harness();
+        let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config, harness_tx);
         let subscriber = super::Subscriber::new(
             Arc::from("subscriber1"),
             HashSet::from([TestTopic::A]),

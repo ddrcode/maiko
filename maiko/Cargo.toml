@@ -18,6 +18,7 @@ exclude = [".gitignore", ".github/"]
 default = ["macros"]
 macros = ["dep:maiko-macros"]
 serde = ["dep:serde"]
+test-harness = []
 
 [dependencies]
 maiko-macros = { path="../maiko-macros", version="0.2.0", optional = true }

@@ -54,6 +54,9 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
     start_notifier: Arc<Notify>,
+
+    #[cfg(feature = "test-harness")]
+    harness: Option<crate::test_harness::TestHarness<E, T>>,
 }
 
 impl<E: Event, T: Topic<E>> Supervisor<E, T> {
@@ -64,6 +67,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let cancel_token = Arc::new(CancellationToken::new());
         let broker_cancel_token = Arc::new(CancellationToken::new());
         let broker = Broker::new(rx, broker_cancel_token.clone(), config.clone());
+
         Self {
             broker: Arc::new(Mutex::new(broker)),
             config,
@@ -72,6 +76,9 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             cancel_token,
             broker_cancel_token,
             start_notifier: Arc::new(Notify::new()),
+
+            #[cfg(feature = "test-harness")]
+            harness: None,
         }
     }
 
@@ -228,6 +235,11 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let timeout = Duration::from_millis(10);
         let max = self.sender.max_capacity();
 
+        #[cfg(feature = "test-harness")]
+        if let Some(harness) = self.harness.as_ref() {
+            harness.stop().await;
+        }
+
         // 1. Wait for the main channle to drain
         while start.elapsed() < timeout {
             if self.sender.capacity() == max {
@@ -250,6 +262,15 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
     pub fn config(&self) -> &Config {
         self.config.as_ref()
+    }
+
+    #[cfg(feature = "test-harness")]
+    pub async fn init_test_harness(&mut self) -> &mut crate::test_harness::TestHarness<E, T> {
+        let (harness, mut collector) =
+            crate::test_harness::init_harness::<E, T>(self.sender.clone());
+        self.tasks.spawn(async move { collector.run().await });
+        self.harness = Some(harness);
+        self.harness.as_mut().unwrap()
     }
 }
 

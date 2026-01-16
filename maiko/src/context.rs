@@ -28,6 +28,14 @@ pub struct Context<E: Event> {
 }
 
 impl<E: Event> Context<E> {
+    pub fn new(name: Arc<str>, sender: Sender<Arc<Envelope<E>>>, alive: Arc<AtomicBool>) -> Self {
+        Self {
+            name,
+            sender,
+            alive,
+        }
+    }
+
     /// Send an event to the broker. The envelope will carry this actor's name.
     /// This awaits channel capacity (backpressure) to avoid silent drops.
     pub async fn send(&self, event: E) -> Result<()> {
