@@ -54,8 +54,11 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 let res = subscriber.sender.try_send(e.clone());
                 #[cfg(feature = "test-harness")]
                 if let Some(ref sender) = self.test_sender {
-                    let _ = sender
-                        .try_send(TestEvent::Event(EventEntry::new(e.clone(), topic.clone())));
+                    let _ = sender.try_send(TestEvent::Event(EventEntry::new(
+                        e.clone(),
+                        topic.clone(),
+                        subscriber.name.clone(),
+                    )));
                 }
                 res
             })?;

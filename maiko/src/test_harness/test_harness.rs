@@ -40,12 +40,42 @@ impl<E: Event, T: Topic<E>> TestHarness<E, T> {
 
         Ok(())
     }
+
+    pub async fn spy_event(&self, id: &u128) -> EventSpy<E, T> {
+        let entries = self.entries.lock().await;
+        EventSpy::new(&entries, id)
+    }
 }
 
-
 pub struct EventSpy<E: Event, T: Topic<E>> {
-    fn new(entries: &Vec<EventEntry<E,T>>, id: &u128) -> Self {
-        entries.iter().filter(|e| *e.id() == *id);
-        Self{}
+    data: Vec<EventEntry<E, T>>,
+}
+
+impl<E: Event, T: Topic<E>> EventSpy<E, T> {
+    pub(crate) fn new(entries: &[EventEntry<E, T>], id: &u128) -> Self {
+        let data = entries
+            .iter()
+            .filter(|e| *id == e.event.id())
+            .cloned()
+            .collect();
+        Self { data }
+    }
+
+    pub fn was_delivered(&self) -> bool {
+        !self.data.is_empty()
+    }
+
+    pub fn was_delivered_to(&self, actor_name: &str) -> bool {
+        self.data
+            .iter()
+            .any(|e| e.actor_name.as_ref() == actor_name)
+    }
+
+    pub fn receivers_count(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn receivers(&self) -> Vec<&str> {
+        self.data.iter().map(|e| e.actor_name.as_ref()).collect()
     }
 }
