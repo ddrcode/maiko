@@ -1,10 +1,10 @@
-mod actor_handler;
+mod actor_controller;
 mod broker;
 mod step_handler;
 mod step_pause;
 mod subscriber;
 
-pub(crate) use actor_handler::ActorHandler;
+pub(crate) use actor_controller::ActorController;
 pub(crate) use broker::Broker;
 pub(crate) use step_handler::StepHandler;
 pub(crate) use step_pause::StepPause;

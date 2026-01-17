@@ -7,6 +7,7 @@
 
 mod actor;
 mod actor_builder;
+mod actor_handle;
 mod config;
 mod context;
 mod envelope;
@@ -24,6 +25,7 @@ pub mod test_harness;
 
 pub use actor::Actor;
 pub use actor_builder::ActorBuilder;
+pub use actor_handle::ActorHandle;
 pub use config::Config;
 pub use context::Context;
 pub use envelope::Envelope;

@@ -1,6 +1,9 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use tokio::sync::{Mutex, mpsc::Sender};
+use tokio::{
+    sync::{Mutex, mpsc::Sender},
+    time::sleep,
+};
 
 use crate::{
     Envelope, Event, Topic,
@@ -34,11 +37,21 @@ impl<E: Event, T: Topic<E>> TestHarness<E, T> {
         let _ = self.test_sender.send(TestEvent::Exit).await;
     }
 
-    pub async fn send_as(&self, actor_name: &str, event: E) -> crate::Result {
-        let envelope = Envelope::new(event, actor_name);
-        self.actor_sender.send(Arc::new(envelope)).await?;
+    pub async fn settle(&self) {
+        // FIXME: This is a naive implementation.
+        sleep(Duration::from_millis(500)).await
+    }
 
-        Ok(())
+    pub async fn send_as<'a, N>(&self, actor_name: N, event: E) -> crate::Result<EventSpy<E, T>>
+    where
+        N: Into<&'a str>,
+    {
+        let envelope = Envelope::new(event, actor_name.into());
+        let id = envelope.id();
+        self.actor_sender.send(Arc::new(envelope)).await?;
+        self.settle().await;
+
+        Ok(self.spy_event(&id).await)
     }
 
     pub async fn spy_event(&self, id: &u128) -> EventSpy<E, T> {
@@ -66,6 +79,7 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     }
 
     pub fn was_delivered_to(&self, actor_name: &str) -> bool {
+        println!("Spy entries for event {}", self.data.len());
         self.data
             .iter()
             .any(|e| e.actor_name.as_ref() == actor_name)

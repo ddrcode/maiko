@@ -12,10 +12,10 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{Actor, ActorBuilder, Config, Context, Envelope, Error, Event, Result, Topic};
 use crate::{
-    DefaultTopic,
-    internal::{ActorHandler, Broker, Subscriber},
+    Actor, ActorBuilder, ActorHandle, Config, Context, DefaultTopic, Envelope, Error, Event,
+    Result, Topic,
+    internal::{ActorController, Broker, Subscriber},
 };
 
 /// Coordinates actors and the broker, and owns the top-level runtime.
@@ -102,7 +102,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     ///     &[MyTopic::Data, MyTopic::Control]
     /// )?;
     /// ```
-    pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: &[T]) -> Result<()>
+    pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: &[T]) -> Result<ActorHandle>
     where
         A: Actor<Event = E>,
         F: FnOnce(Context<E>) -> A,
@@ -143,7 +143,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         ctx: Context<E>,
         actor: A,
         topics: HashSet<T>,
-    ) -> Result<()>
+    ) -> Result<ActorHandle>
     where
         A: Actor<Event = E>,
     {
@@ -156,8 +156,9 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         let subscriber = Subscriber::<E, T>::new(ctx.clone_name(), topics, tx);
         broker.add_subscriber(subscriber)?;
+        let handle = ActorHandle::new(ctx.clone_name());
 
-        let mut handler = ActorHandler {
+        let mut controller = ActorController {
             actor,
             receiver: rx,
             ctx,
@@ -168,10 +169,10 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let notified = self.start_notifier.clone().notified_owned();
         self.tasks.spawn(async move {
             notified.await;
-            handler.run().await
+            controller.run().await
         });
 
-        Ok(())
+        Ok(handle)
     }
 
     /// Create a new Context for an actor.
@@ -265,12 +266,13 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     }
 
     #[cfg(feature = "test-harness")]
-    pub async fn init_test_harness(&mut self) -> &mut crate::test_harness::TestHarness<E, T> {
+    pub async fn init_test_harness(&mut self) -> crate::test_harness::TestHarness<E, T> {
         let (harness, mut collector) =
             crate::test_harness::init_harness::<E, T>(self.sender.clone());
         self.tasks.spawn(async move { collector.run().await });
-        self.harness = Some(harness);
-        self.harness.as_mut().unwrap()
+        // self.harness = Some(harness);
+        // self.harness.as_mut().unwrap()
+        harness
     }
 }
 
