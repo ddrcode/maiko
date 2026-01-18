@@ -8,10 +8,13 @@ use crate::{Event, Meta};
 /// - `meta`: `Meta` describing who emitted the event and when.
 ///   Includes `actor_name` and optional `correlation_id` for linking related events.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "")
+    serde(bound(
+        serialize = "E: serde::Serialize",
+        deserialize = "E: serde::de::DeserializeOwned"
+    ))
 )]
 pub struct Envelope<E: Event> {
     meta: Meta,

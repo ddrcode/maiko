@@ -1,4 +1,4 @@
-use crate::{Event, Topic, test_harness::EventEntry};
+use crate::{Event, Topic, testing::EventEntry};
 
 pub struct ActorSpy<E: Event, T: Topic<E>> {
     received_data: Vec<EventEntry<E, T>>,

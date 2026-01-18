@@ -4,7 +4,7 @@ use tokio::sync::{Mutex, mpsc::Receiver};
 
 use crate::{
     Event, Topic,
-    test_harness::{EventEntry, TestEvent},
+    testing::{EventEntry, TestEvent},
 };
 
 pub struct EventCollector<E: Event, T: Topic<E>> {

@@ -8,10 +8,4 @@
 ///
 /// The broker wraps events in an `Envelope` carrying metadata
 /// such as sender name and timestamp.
-#[cfg(not(feature = "serde"))]
 pub trait Event: Send + Sync + Clone + 'static {}
-#[cfg(feature = "serde")]
-pub trait Event:
-    Send + Sync + Clone + serde::Serialize + for<'a> serde::Deserialize<'a> + 'static
-{
-}

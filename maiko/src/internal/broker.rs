@@ -7,7 +7,7 @@ use super::Subscriber;
 use crate::{Config, Envelope, Error, Event, Result, Topic};
 
 #[cfg(feature = "test-harness")]
-use crate::test_harness::{EventEntry, TestEvent};
+use crate::testing::{EventEntry, TestEvent};
 
 pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Arc<Envelope<E>>>,

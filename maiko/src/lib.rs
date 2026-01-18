@@ -21,7 +21,7 @@ mod topic;
 mod internal;
 
 #[cfg(feature = "test-harness")]
-pub mod test_harness;
+pub mod testing;
 
 pub use actor::Actor;
 pub use actor_builder::ActorBuilder;

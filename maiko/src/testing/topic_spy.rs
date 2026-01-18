@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{Event, Topic, test_harness::EventEntry};
+use crate::{Event, Topic, testing::EventEntry};
 
 pub struct TopicSpy<E: Event, T: Topic<E>> {
     data: Vec<EventEntry<E, T>>,

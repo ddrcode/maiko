@@ -7,16 +7,16 @@ use tokio::{
 
 use crate::{
     Envelope, Event, Topic,
-    test_harness::{ActorSpy, EventEntry, EventSpy, TestEvent, TopicSpy},
+    testing::{ActorSpy, EventEntry, EventSpy, TestEvent, TopicSpy},
 };
 
-pub struct TestHarness<E: Event, T: Topic<E>> {
+pub struct Harness<E: Event, T: Topic<E>> {
     pub(crate) test_sender: Sender<TestEvent<E, T>>,
     actor_sender: Sender<Arc<Envelope<E>>>,
     entries: Arc<Mutex<Vec<EventEntry<E, T>>>>,
 }
 
-impl<E: Event, T: Topic<E>> TestHarness<E, T> {
+impl<E: Event, T: Topic<E>> Harness<E, T> {
     pub fn new(
         test_sender: Sender<TestEvent<E, T>>,
         actor_sender: Sender<Arc<Envelope<E>>>,

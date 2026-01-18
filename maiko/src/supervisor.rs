@@ -56,7 +56,7 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     start_notifier: Arc<Notify>,
 
     #[cfg(feature = "test-harness")]
-    harness: Option<crate::test_harness::TestHarness<E, T>>,
+    harness: Option<crate::testing::Harness<E, T>>,
 }
 
 impl<E: Event, T: Topic<E>> Supervisor<E, T> {
@@ -266,9 +266,8 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     }
 
     #[cfg(feature = "test-harness")]
-    pub async fn init_test_harness(&mut self) -> crate::test_harness::TestHarness<E, T> {
-        let (harness, mut collector) =
-            crate::test_harness::init_harness::<E, T>(self.sender.clone());
+    pub async fn init_test_harness(&mut self) -> crate::testing::Harness<E, T> {
+        let (harness, mut collector) = crate::testing::init_harness::<E, T>(self.sender.clone());
         self.tasks.spawn(async move { collector.run().await });
         self.broker
             .lock()
