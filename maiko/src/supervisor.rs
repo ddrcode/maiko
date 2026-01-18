@@ -270,6 +270,10 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let (harness, mut collector) =
             crate::test_harness::init_harness::<E, T>(self.sender.clone());
         self.tasks.spawn(async move { collector.run().await });
+        self.broker
+            .lock()
+            .await
+            .set_test_sender(harness.test_sender.clone());
         // self.harness = Some(harness);
         // self.harness.as_mut().unwrap()
         harness

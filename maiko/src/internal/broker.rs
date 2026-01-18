@@ -89,6 +89,11 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     async fn shutdown(&mut self) {
         use tokio::time::*;
 
+        #[cfg(feature = "test-harness")]
+        if let Some(ref sender) = self.test_sender {
+            let _ = sender.send(TestEvent::Exit).await;
+        }
+
         // Send messages that were in the queue at the time of shutdown
         for _ in 0..self.receiver.len() {
             if let Ok(e) = self.receiver.try_recv() {
@@ -112,6 +117,11 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         self.subscribers
             .iter()
             .all(|s| s.sender.is_closed() || s.sender.capacity() == s.sender.max_capacity())
+    }
+
+    #[cfg(feature = "test-harness")]
+    pub(crate) fn set_test_sender(&mut self, sender: tokio::sync::mpsc::Sender<TestEvent<E, T>>) {
+        self.test_sender = Some(sender);
     }
 }
 

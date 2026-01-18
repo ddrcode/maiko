@@ -219,6 +219,9 @@ async fn main() -> maiko::Result {
 
     assert!(spy.was_delivered_to("Normalizer"));
 
+    println!("Receivers: {:?}", spy.receivers());
+
+    test.stop();
     sup.stop().await?;
 
     Ok(())

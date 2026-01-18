@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub struct TestHarness<E: Event, T: Topic<E>> {
-    test_sender: Sender<TestEvent<E, T>>,
+    pub(crate) test_sender: Sender<TestEvent<E, T>>,
     actor_sender: Sender<Arc<Envelope<E>>>,
     entries: Arc<Mutex<Vec<EventEntry<E, T>>>>,
 }
@@ -39,7 +39,7 @@ impl<E: Event, T: Topic<E>> TestHarness<E, T> {
 
     pub async fn settle(&self) {
         // FIXME: This is a naive implementation.
-        sleep(Duration::from_millis(500)).await
+        sleep(Duration::from_millis(20)).await
     }
 
     pub async fn send_as<'a, N>(&self, actor_name: N, event: E) -> crate::Result<EventSpy<E, T>>
@@ -79,7 +79,6 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     }
 
     pub fn was_delivered_to(&self, actor_name: &str) -> bool {
-        println!("Spy entries for event {}", self.data.len());
         self.data
             .iter()
             .any(|e| e.actor_name.as_ref() == actor_name)
