@@ -7,7 +7,7 @@ use tokio::{
 
 use crate::{
     Envelope, Event, Topic,
-    test_harness::{EventEntry, TestEvent},
+    test_harness::{ActorSpy, EventEntry, EventSpy, TestEvent, TopicSpy},
 };
 
 pub struct TestHarness<E: Event, T: Topic<E>> {
@@ -51,44 +51,24 @@ impl<E: Event, T: Topic<E>> TestHarness<E, T> {
         self.actor_sender.send(Arc::new(envelope)).await?;
         self.settle().await;
 
-        Ok(self.spy_event(&id).await)
+        Ok(self.event(&id).await)
     }
 
-    pub async fn spy_event(&self, id: &u128) -> EventSpy<E, T> {
+    pub async fn event(&self, id: &u128) -> EventSpy<E, T> {
         let entries = self.entries.lock().await;
         EventSpy::new(&entries, id)
     }
-}
 
-pub struct EventSpy<E: Event, T: Topic<E>> {
-    data: Vec<EventEntry<E, T>>,
-}
-
-impl<E: Event, T: Topic<E>> EventSpy<E, T> {
-    pub(crate) fn new(entries: &[EventEntry<E, T>], id: &u128) -> Self {
-        let data = entries
-            .iter()
-            .filter(|e| *id == e.event.id())
-            .cloned()
-            .collect();
-        Self { data }
+    pub async fn topic(&self, topic: &T) -> TopicSpy<E, T> {
+        let entries = self.entries.lock().await;
+        TopicSpy::new(&entries, topic)
     }
 
-    pub fn was_delivered(&self) -> bool {
-        !self.data.is_empty()
-    }
-
-    pub fn was_delivered_to(&self, actor_name: &str) -> bool {
-        self.data
-            .iter()
-            .any(|e| e.actor_name.as_ref() == actor_name)
-    }
-
-    pub fn receivers_count(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn receivers(&self) -> Vec<&str> {
-        self.data.iter().map(|e| e.actor_name.as_ref()).collect()
+    pub async fn actor<'a, N>(&self, actor_name: N) -> ActorSpy<E, T>
+    where
+        N: Into<&'a str>,
+    {
+        let entries = self.entries.lock().await;
+        ActorSpy::new(&entries, actor_name)
     }
 }

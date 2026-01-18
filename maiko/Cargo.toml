@@ -44,5 +44,5 @@ name = "guesser"
 required-features = ["default"]
 
 [[example]]
-name = "test-harness"
+name = "arbitrage"
 required-features = ["default", "test-harness"]

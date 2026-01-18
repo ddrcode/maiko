@@ -194,10 +194,10 @@ async fn main() -> maiko::Result {
 
     let alpha = sup.add_actor("AlphaTicker", |_ctx| Ticker, &[Order(Alpha)])?;
     sup.add_actor("BetaTicker", |_ctx| Ticker, &[Order(Beta)])?;
-    sup.add_actor("Normalizer", |ctx| Normalizer { ctx }, &[RawData])?;
+    let normalizer = sup.add_actor("Normalizer", |ctx| Normalizer { ctx }, &[RawData])?;
     sup.add_actor("Trader", Trader::new, &[NormalizedData])?;
     sup.add_actor("Database", |_ctx| Database, &[NormalizedData])?;
-    sup.add_actor(
+    let telemetry = sup.add_actor(
         "Telemetry",
         |_ctx| Telemetry,
         &[RawData, NormalizedData, Order(Alpha), Order(Beta)],
@@ -217,11 +217,27 @@ async fn main() -> maiko::Result {
         .await?;
     test.settle().await;
 
-    assert!(spy.was_delivered_to("Normalizer"));
+    assert!(spy.was_delivered_to(&normalizer));
+    assert_eq!(2, spy.receivers_count());
 
-    println!("Receivers: {:?}", spy.receivers());
+    let spy = test.actor(&normalizer).await;
+    assert_eq!(
+        1,
+        spy.received_events_count(),
+        "Normalizer should receive 1 event (from Alpha)"
+    );
+    assert_eq!(
+        3,
+        spy.sent_events_count(),
+        "Normalizer should send event to 3 actors (Telemetry, Trader, Database)"
+    );
 
-    test.stop();
+    assert_eq!(2, test.actor(&telemetry).await.received_events_count());
+
+    let spy = test.topic(&MarketTopic::NormalizedData).await;
+    assert_eq!(3, spy.publish_count());
+
+    test.stop().await;
     sup.stop().await?;
 
     Ok(())
