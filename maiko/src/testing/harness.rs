@@ -6,7 +6,7 @@ use tokio::{
 };
 
 use crate::{
-    Envelope, Event, Topic,
+    Envelope, Event, EventId, Topic,
     testing::{ActorSpy, EventEntry, EventSpy, TestEvent, TopicSpy},
 };
 
@@ -42,19 +42,20 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         sleep(Duration::from_millis(20)).await
     }
 
-    pub async fn send_as<'a, N>(&self, actor_name: N, event: E) -> crate::Result<EventSpy<E, T>>
-    where
-        N: Into<&'a str>,
-    {
+    pub async fn send_as<'a>(
+        &self,
+        actor_name: impl Into<&'a str>,
+        event: E,
+    ) -> crate::Result<EventSpy<E, T>> {
         let envelope = Envelope::new(event, actor_name.into());
         let id = envelope.id();
         self.actor_sender.send(Arc::new(envelope)).await?;
         self.settle().await;
 
-        Ok(self.event(&id).await)
+        Ok(self.event(id).await)
     }
 
-    pub async fn event(&self, id: &u128) -> EventSpy<E, T> {
+    pub async fn event(&self, id: EventId) -> EventSpy<E, T> {
         let entries = self.entries.lock().await;
         EventSpy::new(&entries, id)
     }
@@ -64,10 +65,7 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         TopicSpy::new(&entries, topic)
     }
 
-    pub async fn actor<'a, N>(&self, actor_name: N) -> ActorSpy<E, T>
-    where
-        N: Into<&'a str>,
-    {
+    pub async fn actor<'a>(&self, actor_name: impl Into<&'a str>) -> ActorSpy<E, T> {
         let entries = self.entries.lock().await;
         ActorSpy::new(&entries, actor_name)
     }

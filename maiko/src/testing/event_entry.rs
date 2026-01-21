@@ -17,4 +17,14 @@ impl<E: Event, T: Topic<E>> EventEntry<E, T> {
             actor_name,
         }
     }
+
+    #[inline]
+    pub fn actor_eq<'a>(&self, actor_name: impl Into<&'a str>) -> bool {
+        self.actor_name.as_ref() == actor_name.into()
+    }
+
+    #[inline]
+    pub fn sender_actor_eq<'a>(&self, actor_name: impl Into<&'a str>) -> bool {
+        self.event.meta().actor_name() == actor_name.into()
+    }
 }

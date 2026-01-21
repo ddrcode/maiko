@@ -5,7 +5,7 @@ use std::sync::{
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{Envelope, Event, Meta, Result};
+use crate::{Envelope, Event, EventId, Meta, Result};
 
 /// Runtime-provided context for an actor to interact with the system.
 ///
@@ -39,12 +39,12 @@ impl<E: Event> Context<E> {
     /// Send an event to the broker. The envelope will carry this actor's name.
     /// This awaits channel capacity (backpressure) to avoid silent drops.
     pub async fn send(&self, event: E) -> Result<()> {
-        self.send_envelope(Envelope::new(event, self.name.clone()))
-            .await
+        let envelope = Envelope::new(event, self.name.clone());
+        self.send_envelope(envelope).await
     }
 
     /// Send an event with an explicit correlation id.
-    pub async fn send_with_correlation(&self, event: E, correlation_id: u128) -> Result<()> {
+    pub async fn send_with_correlation(&self, event: E, correlation_id: EventId) -> Result<()> {
         self.send_envelope(Envelope::with_correlation(
             event,
             self.name.clone(),

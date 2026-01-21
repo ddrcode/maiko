@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{Event, Meta};
+use crate::{Event, EventId, Meta};
 
 /// Event plus metadata used by the broker for routing and observability.
 ///
@@ -23,10 +23,7 @@ pub struct Envelope<E: Event> {
 
 impl<E: Event> Envelope<E> {
     /// Create a new envelope tagging the event with the given actor name.
-    pub fn new<N>(event: E, actor_name: N) -> Self
-    where
-        N: Into<Arc<str>>,
-    {
+    pub fn new(event: E, actor_name: impl Into<Arc<str>>) -> Self {
         Self {
             meta: Meta::new(actor_name.into(), None),
             event,
@@ -36,10 +33,11 @@ impl<E: Event> Envelope<E> {
     /// Create a new envelope with an explicit correlation id.
     ///
     /// Use this to link child events to a parent or to group related flows.
-    pub fn with_correlation<N>(event: E, actor_name: N, correlation_id: u128) -> Self
-    where
-        N: Into<Arc<str>>,
-    {
+    pub fn with_correlation(
+        event: E,
+        actor_name: impl Into<Arc<str>>,
+        correlation_id: EventId,
+    ) -> Self {
         Self {
             meta: Meta::new(actor_name.into(), Some(correlation_id)),
             event,
@@ -70,7 +68,7 @@ impl<E: Event> Envelope<E> {
     }
 
     #[inline]
-    pub fn id(&self) -> u128 {
+    pub fn id(&self) -> EventId {
         self.meta.id()
     }
 }

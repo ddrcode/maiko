@@ -1,8 +1,11 @@
 mod actor_spy;
 mod event_collector;
 mod event_entry;
+mod event_handle;
+mod event_query;
 mod event_spy;
 mod harness;
+pub(crate) mod spy_utils;
 mod test_event;
 mod topic_spy;
 
@@ -11,6 +14,8 @@ use std::sync::Arc;
 pub use actor_spy::ActorSpy;
 pub(crate) use event_collector::EventCollector;
 pub(crate) use event_entry::EventEntry;
+pub use event_handle::EventHandle;
+pub use event_query::EventQuery;
 pub use event_spy::EventSpy;
 pub use harness::Harness;
 pub(crate) use test_event::TestEvent;

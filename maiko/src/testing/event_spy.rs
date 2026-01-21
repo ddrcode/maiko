@@ -1,19 +1,18 @@
-use std::collections::HashSet;
-
-use crate::{Event, Topic, testing::EventEntry};
+use crate::{
+    Event, EventId, Topic,
+    testing::{EventEntry, EventHandle, spy_utils},
+};
 
 pub struct EventSpy<E: Event, T: Topic<E>> {
+    id: EventId,
     data: Vec<EventEntry<E, T>>,
 }
 
 impl<E: Event, T: Topic<E>> EventSpy<E, T> {
-    pub(crate) fn new(entries: &[EventEntry<E, T>], id: &u128) -> Self {
-        let data = entries
-            .iter()
-            .filter(|e| *id == e.event.id())
-            .cloned()
-            .collect();
-        Self { data }
+    pub(crate) fn new(entries: &[EventEntry<E, T>], id: impl Into<EventId>) -> Self {
+        let id = id.into();
+        let data = spy_utils::filter_clone(entries, |e| id == e.event.id());
+        Self { id, data }
     }
 
     pub fn was_delivered(&self) -> bool {
@@ -28,15 +27,24 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     }
 
     pub fn receivers_count(&self) -> usize {
-        self.data.len()
+        spy_utils::receivers_count(&self.data)
     }
 
     pub fn receivers(&self) -> Vec<&str> {
+        spy_utils::receivers(&self.data)
+    }
+
+    pub fn children(&self) -> Vec<EventHandle<E, T>> {
         self.data
             .iter()
-            .map(|e| e.actor_name.as_ref())
-            .collect::<HashSet<_>>()
-            .into_iter()
+            .filter(|e| {
+                if let Some(cid) = e.event.meta().correlation_id() {
+                    cid == self.id
+                } else {
+                    false
+                }
+            })
+            .map(|e| EventHandle::from(e))
             .collect()
     }
 }

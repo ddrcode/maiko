@@ -219,6 +219,7 @@ async fn main() -> maiko::Result {
 
     assert!(spy.was_delivered_to(&normalizer));
     assert_eq!(2, spy.receivers_count());
+    assert_eq!(1, spy.children().len());
 
     let spy = test.actor(&normalizer).await;
     assert_eq!(
@@ -226,16 +227,13 @@ async fn main() -> maiko::Result {
         spy.received_events_count(),
         "Normalizer should receive 1 event (from Alpha)"
     );
-    assert_eq!(
-        3,
-        spy.sent_events_count(),
-        "Normalizer should send event to 3 actors (Telemetry, Trader, Database)"
-    );
+    assert_eq!(1, spy.sent_events_count(), "Normalizer should send 1 event");
 
     assert_eq!(2, test.actor(&telemetry).await.received_events_count());
 
     let spy = test.topic(&MarketTopic::NormalizedData).await;
-    assert_eq!(3, spy.publish_count());
+    assert_eq!(3, spy.event_count());
+    let query = spy.events();
 
     test.stop().await;
     sup.stop().await?;
