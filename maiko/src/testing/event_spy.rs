@@ -1,6 +1,6 @@
 use crate::{
     Event, EventId, Topic,
-    testing::{EventEntry, EventHandle, spy_utils},
+    testing::{EventEntry, EventQuery, spy_utils},
 };
 
 pub struct EventSpy<E: Event, T: Topic<E>> {
@@ -34,17 +34,7 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
         spy_utils::receivers(&self.data)
     }
 
-    pub fn children(&self) -> Vec<EventHandle<E, T>> {
-        self.data
-            .iter()
-            .filter(|e| {
-                if let Some(cid) = e.event.meta().correlation_id() {
-                    cid == self.id
-                } else {
-                    false
-                }
-            })
-            .map(|e| EventHandle::from(e))
-            .collect()
+    pub fn children(&self) -> Vec<EventQuery<E, T>> {
+        todo!("Return event query here")
     }
 }

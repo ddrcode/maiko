@@ -1,34 +1,139 @@
 use crate::{
     Event, Topic,
-    testing::{EventEntry, EventHandle},
+    testing::{EventEntry, EventRecords},
 };
 
-pub struct EventQuery<'a, E: Event, T: Topic<E>> {
-    events: &'a [EventEntry<E, T>],
+pub type Filters<E, T> = Vec<Box<dyn Fn(&EventEntry<E, T>) -> bool>>;
+
+pub struct EventQuery<E: Event, T: Topic<E>> {
+    events: EventRecords<E, T>,
+    filters: Filters<E, T>,
 }
 
-impl<'a, E: Event, T: Topic<E>> EventQuery<'a, E, T> {
-    pub(crate) fn new(events: &'a [EventEntry<E, T>]) -> Self {
-        Self { events }
+impl<E: Event, T: Topic<E>> EventQuery<E, T> {
+    pub(crate) fn new(events: EventRecords<E, T>) -> Self {
+        Self {
+            events,
+            filters: Vec::new(),
+        }
+    }
+
+    pub(crate) fn with_filter<F>(events: EventRecords<E, T>, filter: F) -> Self
+    where
+        F: 'static + Fn(&EventEntry<E, T>) -> bool,
+    {
+        let filters: Filters<E, T> = vec![Box::new(filter)];
+        Self { events, filters }
+    }
+
+    fn add_filter<F>(&mut self, filter: F)
+    where
+        F: 'static + Fn(&EventEntry<E, T>) -> bool,
+    {
+        self.filters.push(Box::new(filter));
+    }
+
+    fn apply_filters(&self) -> Vec<&EventEntry<E, T>> {
+        self.events
+            .iter()
+            .filter(|e| {
+                for filter in &self.filters {
+                    if !filter(e) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect()
     }
 
     pub fn count(&self) -> usize {
-        self.events.len()
+        self.apply_filters().len()
     }
 
-    pub fn sent_by<N>(&self, actor: N) -> bool
+    pub fn first(&self) -> Option<EventEntry<E, T>> {
+        self.apply_filters().into_iter().next().cloned()
+    }
+
+    pub fn last(&self) -> Option<EventEntry<E, T>> {
+        self.apply_filters().into_iter().last().cloned()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = EventEntry<E, T>> + '_ {
+        self.apply_filters().into_iter().cloned()
+    }
+
+    pub fn collect(&self) -> Vec<EventEntry<E, T>> {
+        self.apply_filters().into_iter().cloned().collect()
+    }
+
+    pub fn all(&self, predicate: impl Fn(&EventEntry<E, T>) -> bool) -> bool {
+        self.apply_filters().into_iter().all(predicate)
+    }
+
+    pub fn any(&self, predicate: impl Fn(&EventEntry<E, T>) -> bool) -> bool {
+        self.apply_filters().into_iter().any(predicate)
+    }
+
+    pub fn sent_by<N>(self, actor: N) -> Self
     where
         N: for<'b> Into<&'b str>,
     {
         let actor = actor.into();
-        self.events.iter().any(|e| e.sender_actor_eq(actor))
+        let mut res = self;
+        res.add_filter(move |e| e.sender_actor_eq(actor));
+        res
     }
 
-    pub fn received_by<N>(&self, actor: N) -> bool
+    pub fn received_by<N>(self, actor: N) -> Self
     where
         N: for<'b> Into<&'b str>,
     {
         let actor = actor.into();
-        self.events.iter().any(|e| e.actor_eq(actor))
+        let mut res = self;
+        res.add_filter(move |e| e.actor_eq(actor));
+        res
+    }
+
+    pub fn with_topic(self, topic: T) -> Self {
+        let mut res = self;
+        res.add_filter(move |e| e.topic == topic);
+        res
+    }
+
+    pub fn matching<F>(self, predicate: F) -> Self
+    where
+        F: 'static + Fn(&EventEntry<E, T>) -> bool,
+    {
+        let mut res = self;
+        res.add_filter(predicate);
+        res
+    }
+
+    pub fn after(self, event: &EventEntry<E, T>) -> Self {
+        let timestamp = event.event.meta().timestamp();
+        let mut res = self;
+        res.add_filter(move |e| e.event.meta().timestamp() > timestamp);
+        res
+    }
+
+    pub fn before(self, event: &EventEntry<E, T>) -> Self {
+        let timestamp = event.event.meta().timestamp();
+        let mut res = self;
+        res.add_filter(move |e| e.event.meta().timestamp() < timestamp);
+        res
+    }
+
+    pub fn correlated_with(self, event: &EventEntry<E, T>) -> Self {
+        let correlation_id = event.event.id();
+        let mut res = self;
+        res.add_filter(move |e| {
+            if let Some(cid) = e.event.meta().correlation_id() {
+                cid == correlation_id
+            } else {
+                false
+            }
+        });
+        res
     }
 }

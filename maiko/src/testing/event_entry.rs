@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{Envelope, Event, Topic};
+use crate::{Envelope, Event, EventId, Meta, Topic};
 
 #[derive(Debug, Clone)]
 pub struct EventEntry<E: Event, T: Topic<E>> {
@@ -16,6 +16,19 @@ impl<E: Event, T: Topic<E>> EventEntry<E, T> {
             topic,
             actor_name,
         }
+    }
+
+    #[inline]
+    pub fn id(&self) -> EventId {
+        self.event.id()
+    }
+
+    pub fn payload(&self) -> &E {
+        self.event.event()
+    }
+
+    pub fn meta(&self) -> &Meta {
+        self.event.meta()
     }
 
     #[inline]

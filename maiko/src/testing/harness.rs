@@ -60,9 +60,9 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         EventSpy::new(&entries, id)
     }
 
-    pub async fn topic(&self, topic: &T) -> TopicSpy<E, T> {
+    pub async fn topic(&self, topic: T) -> TopicSpy<E, T> {
         let entries = self.entries.lock().await;
-        TopicSpy::new(&entries, topic)
+        TopicSpy::new(Arc::new(entries.clone()), topic)
     }
 
     pub async fn actor<'a>(&self, actor_name: impl Into<&'a str>) -> ActorSpy<E, T> {

@@ -1,7 +1,6 @@
 mod actor_spy;
 mod event_collector;
 mod event_entry;
-mod event_handle;
 mod event_query;
 mod event_spy;
 mod harness;
@@ -14,7 +13,6 @@ use std::sync::Arc;
 pub use actor_spy::ActorSpy;
 pub(crate) use event_collector::EventCollector;
 pub(crate) use event_entry::EventEntry;
-pub use event_handle::EventHandle;
 pub use event_query::EventQuery;
 pub use event_spy::EventSpy;
 pub use harness::Harness;
@@ -23,6 +21,8 @@ use tokio::sync::{Mutex, mpsc::Sender};
 pub use topic_spy::TopicSpy;
 
 use crate::{Envelope, Event, Topic};
+
+type EventRecords<E, T> = Arc<Vec<EventEntry<E, T>>>;
 
 pub(crate) fn init_harness<E: Event, T: Topic<E>>(
     actor_sender: Sender<Arc<Envelope<E>>>,
