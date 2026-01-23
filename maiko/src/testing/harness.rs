@@ -57,7 +57,7 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
 
     pub async fn event(&self, id: EventId) -> EventSpy<E, T> {
         let entries = self.entries.lock().await;
-        EventSpy::new(&entries, id)
+        EventSpy::new(Arc::new(entries.clone()), id)
     }
 
     pub async fn topic(&self, topic: T) -> TopicSpy<E, T> {

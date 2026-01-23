@@ -1,5 +1,5 @@
 use crate::{
-    Event, Topic,
+    Event, EventId, Topic,
     testing::{EventEntry, EventRecords},
 };
 
@@ -47,8 +47,16 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
             .collect()
     }
 
+    pub(crate) fn records(&self) -> EventRecords<E, T> {
+        self.events.clone()
+    }
+
     pub fn count(&self) -> usize {
         self.apply_filters().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.count() == 0
     }
 
     pub fn first(&self) -> Option<EventEntry<E, T>> {
@@ -59,8 +67,12 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         self.apply_filters().into_iter().last().cloned()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = EventEntry<E, T>> + '_ {
+    pub fn into_iter(&self) -> impl Iterator<Item = EventEntry<E, T>> + '_ {
         self.apply_filters().into_iter().cloned()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &EventEntry<E, T>> + '_ {
+        self.apply_filters().into_iter()
     }
 
     pub fn collect(&self) -> Vec<EventEntry<E, T>> {
@@ -101,6 +113,13 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         res
     }
 
+    pub fn with_event(self, id: impl Into<EventId>) -> Self {
+        let id = id.into();
+        let mut res = self;
+        res.add_filter(move |e| e.event.id() == id);
+        res
+    }
+
     pub fn matching<F>(self, predicate: F) -> Self
     where
         F: 'static + Fn(&EventEntry<E, T>) -> bool,
@@ -124,8 +143,8 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         res
     }
 
-    pub fn correlated_with(self, event: &EventEntry<E, T>) -> Self {
-        let correlation_id = event.event.id();
+    pub fn correlated_with(self, id: impl Into<EventId>) -> Self {
+        let correlation_id = id.into();
         let mut res = self;
         res.add_filter(move |e| {
             if let Some(cid) = e.event.meta().correlation_id() {

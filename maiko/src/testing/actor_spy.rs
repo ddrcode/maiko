@@ -40,7 +40,8 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
     }
 
     pub fn senders(&self) -> Vec<&str> {
-        spy_utils::distinct(&self.received_data, |e| e.event.meta().actor_name())
+        // spy_utils::distinct(&self.received_data, |e| e.event.meta().actor_name())
+        todo!()
     }
 
     pub fn receivers(&self) -> Vec<&str> {
