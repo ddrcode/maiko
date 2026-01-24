@@ -11,9 +11,9 @@ pub struct TopicSpy<E: Event, T: Topic<E>> {
 }
 
 impl<E: Event, T: Topic<E>> TopicSpy<E, T> {
-    pub(crate) fn new(entries: EventRecords<E, T>, topic: T) -> Self {
+    pub(crate) fn new(records: EventRecords<E, T>, topic: T) -> Self {
         Self {
-            query: EventQuery::new(entries).with_topic(topic.clone()),
+            query: EventQuery::new(records).with_topic(topic.clone()),
             topic,
         }
     }

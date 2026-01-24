@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    Event, EventId, Topic,
+    ActorHandle, Event, EventId, Topic,
     testing::{EventQuery, EventRecords, spy_utils},
 };
 
@@ -30,9 +30,8 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
             .expect("sender must exist in EventSpy")
     }
 
-    pub fn was_delivered_to<'a, N: Into<&'a str>>(&self, actor_name: N) -> bool {
-        let actor_name = actor_name.into();
-        self.query.any(|e| e.actor_name.as_ref() == actor_name)
+    pub fn was_delivered_to(&self, actor: &ActorHandle) -> bool {
+        self.query.any(|e| e.actor_name.as_ref() == actor.name())
     }
 
     pub fn receivers_count(&self) -> usize {

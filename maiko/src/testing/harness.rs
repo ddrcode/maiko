@@ -6,8 +6,8 @@ use tokio::{
 };
 
 use crate::{
-    Envelope, Event, EventId, Topic,
-    testing::{ActorSpy, EventEntry, EventSpy, TestEvent, TopicSpy},
+    ActorHandle, Envelope, Event, EventId, Topic,
+    testing::{ActorSpy, EventEntry, EventRecords, EventSpy, TestEvent, TopicSpy},
 };
 
 pub struct Harness<E: Event, T: Topic<E>> {
@@ -29,6 +29,11 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         }
     }
 
+    async fn records(&self) -> EventRecords<E, T> {
+        let entries = self.entries.lock().await;
+        Arc::new(entries.clone())
+    }
+
     pub async fn reset(&self) {
         let _ = self.test_sender.send(TestEvent::Reset).await;
     }
@@ -42,12 +47,8 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         sleep(Duration::from_millis(20)).await
     }
 
-    pub async fn send_as<'a>(
-        &self,
-        actor_name: impl Into<&'a str>,
-        event: E,
-    ) -> crate::Result<EventSpy<E, T>> {
-        let envelope = Envelope::new(event, actor_name.into());
+    pub async fn send_as(&self, actor: &ActorHandle, event: E) -> crate::Result<EventSpy<E, T>> {
+        let envelope = Envelope::new(event, actor.name());
         let id = envelope.id();
         self.actor_sender.send(Arc::new(envelope)).await?;
         self.settle().await;
@@ -56,17 +57,17 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     }
 
     pub async fn event(&self, id: EventId) -> EventSpy<E, T> {
-        let entries = self.entries.lock().await;
-        EventSpy::new(Arc::new(entries.clone()), id)
+        let records = self.records().await;
+        EventSpy::new(records, id)
     }
 
     pub async fn topic(&self, topic: T) -> TopicSpy<E, T> {
-        let entries = self.entries.lock().await;
-        TopicSpy::new(Arc::new(entries.clone()), topic)
+        let records = self.records().await;
+        TopicSpy::new(records, topic)
     }
 
-    pub async fn actor<'a>(&self, actor_name: impl Into<&'a str>) -> ActorSpy<E, T> {
-        let entries = self.entries.lock().await;
-        ActorSpy::new(&entries, actor_name)
+    pub async fn actor(&self, actor: &ActorHandle) -> ActorSpy<E, T> {
+        let records = self.records().await;
+        ActorSpy::new(records, actor.clone())
     }
 }

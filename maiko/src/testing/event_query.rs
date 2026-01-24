@@ -1,5 +1,5 @@
 use crate::{
-    Event, EventId, Topic,
+    ActorHandle, Event, EventId, Topic,
     testing::{EventEntry, EventRecords},
 };
 
@@ -87,23 +87,15 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         self.apply_filters().into_iter().any(predicate)
     }
 
-    pub fn sent_by<N>(self, actor: N) -> Self
-    where
-        N: for<'b> Into<&'b str>,
-    {
-        let actor = actor.into();
+    pub fn sent_by(self, actor: ActorHandle) -> Self {
         let mut res = self;
-        res.add_filter(move |e| e.sender_actor_eq(actor));
+        res.add_filter(move |e| e.sender_actor_eq(actor.name()));
         res
     }
 
-    pub fn received_by<N>(self, actor: N) -> Self
-    where
-        N: for<'b> Into<&'b str>,
-    {
-        let actor = actor.into();
+    pub fn received_by(self, actor: ActorHandle) -> Self {
         let mut res = self;
-        res.add_filter(move |e| e.actor_eq(actor));
+        res.add_filter(move |e| e.actor_eq(actor.name()));
         res
     }
 
