@@ -30,6 +30,11 @@ impl<E: Event, T: Topic<E>> EventCollector<E, T> {
                 while is_alive {
                     match event {
                         TestEvent::Event(entry) if recording => records.push(entry),
+                        TestEvent::Flush(responder) => {
+                            // All prior events have been processed (we're here),
+                            // signal the harness to continue
+                            let _ = responder.send(());
+                        }
                         TestEvent::Exit => is_alive = false,
                         TestEvent::Reset => records.clear(),
                         TestEvent::StartRecording => recording = true,

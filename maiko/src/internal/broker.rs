@@ -7,7 +7,10 @@ use super::Subscriber;
 use crate::{Config, Envelope, Error, Event, Result, Topic};
 
 #[cfg(feature = "test-harness")]
-use crate::testing::{EventEntry, TestEvent};
+use std::sync::atomic::Ordering;
+
+#[cfg(feature = "test-harness")]
+use crate::testing::{EventEntry, RecordingFlag, TestEvent};
 
 pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Arc<Envelope<E>>>,
@@ -17,6 +20,9 @@ pub struct Broker<E: Event, T: Topic<E>> {
 
     #[cfg(feature = "test-harness")]
     test_sender: Option<tokio::sync::mpsc::Sender<TestEvent<E, T>>>,
+
+    #[cfg(feature = "test-harness")]
+    recording: Option<RecordingFlag>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
@@ -32,6 +38,8 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             config,
             #[cfg(feature = "test-harness")]
             test_sender: None,
+            #[cfg(feature = "test-harness")]
+            recording: None,
         }
     }
 
@@ -45,6 +53,14 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<()> {
         let topic = Topic::from_event(e.event());
+
+        #[cfg(feature = "test-harness")]
+        let is_recording = self
+            .recording
+            .as_ref()
+            .map(|r| r.load(Ordering::Acquire))
+            .unwrap_or(false);
+
         self.subscribers
             .iter()
             .filter(|s| s.topics.contains(&topic))
@@ -53,12 +69,14 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .try_for_each(|subscriber| {
                 let res = subscriber.sender.try_send(e.clone());
                 #[cfg(feature = "test-harness")]
-                if let Some(ref sender) = self.test_sender {
-                    let _ = sender.try_send(TestEvent::Event(EventEntry::new(
-                        e.clone(),
-                        topic.clone(),
-                        subscriber.name.clone(),
-                    )));
+                if is_recording {
+                    if let Some(ref sender) = self.test_sender {
+                        let _ = sender.try_send(TestEvent::Event(EventEntry::new(
+                            e.clone(),
+                            topic.clone(),
+                            subscriber.name.clone(),
+                        )));
+                    }
                 }
                 res
             })?;
@@ -120,8 +138,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     #[cfg(feature = "test-harness")]
-    pub(crate) fn set_test_sender(&mut self, sender: tokio::sync::mpsc::Sender<TestEvent<E, T>>) {
+    pub(crate) fn set_test_sender(
+        &mut self,
+        sender: tokio::sync::mpsc::Sender<TestEvent<E, T>>,
+        recording: RecordingFlag,
+    ) {
         self.test_sender = Some(sender);
+        self.recording = Some(recording);
     }
 }
 

@@ -265,16 +265,41 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         self.config.as_ref()
     }
 
+    /// Initialize the test harness for observing event flow.
+    ///
+    /// This should be called before [`start()`](Self::start). The harness enables
+    /// event recording, injection, and assertions for testing.
+    ///
+    /// If called multiple times, returns a clone of the existing harness.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mut sup = Supervisor::<MyEvent>::default();
+    /// sup.add_actor("test", |ctx| MyActor::new(ctx), &[DefaultTopic])?;
+    ///
+    /// let mut test = sup.init_test_harness().await;
+    /// sup.start().await?;
+    ///
+    /// test.start_recording().await;
+    /// // ... run test ...
+    /// test.stop_recording().await;
+    /// ```
     #[cfg(feature = "test-harness")]
     pub async fn init_test_harness(&mut self) -> crate::testing::Harness<E, T> {
-        let (harness, mut collector) = crate::testing::init_harness::<E, T>(self.sender.clone());
+        // Return existing harness if already initialized
+        if let Some(ref harness) = self.harness {
+            return harness.clone();
+        }
+
+        let (harness, mut collector, recording) =
+            crate::testing::init_harness::<E, T>(self.sender.clone());
         self.tasks.spawn(async move { collector.run().await });
         self.broker
             .lock()
             .await
-            .set_test_sender(harness.test_sender.clone());
-        // self.harness = Some(harness);
-        // self.harness.as_mut().unwrap()
+            .set_test_sender(harness.test_sender.clone(), recording);
+        self.harness = Some(harness.clone());
         harness
     }
 }
