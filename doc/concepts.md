@@ -240,6 +240,41 @@ async fn step(&mut self) -> Result<StepAction> {
 }
 ```
 
+## ActorId
+
+`ActorId` uniquely identifies a registered actor. It is returned by `Supervisor::add_actor()` and used throughout the system for:
+
+- **Event metadata** — every envelope carries the sender's `ActorId`
+- **Test assertions** — verify which actors sent/received events
+- **Correlation** — track event flow between specific actors
+
+```rust
+// Returned when registering an actor
+let producer: ActorId = sup.add_actor("producer", |ctx| Producer::new(ctx), &[DefaultTopic])?;
+
+// Access sender from event metadata
+async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
+    let sender: &ActorId = envelope.meta().actor_id();
+    println!("Event from: {}", sender.name());
+    Ok(())
+}
+
+// Use in test harness
+assert!(test.event(id).was_delivered_to(&consumer));
+```
+
+### Serialization
+
+`ActorId` supports serialization (with the `serde` feature) and works correctly across IPC boundaries. Equality uses string comparison with a fast-path for pointer equality when IDs share the same memory allocation:
+
+```rust
+// Same-process: pointer comparison (O(1))
+// Cross-process (after deserialization): string comparison
+assert_eq!(local_id, deserialized_id);  // Works correctly in both cases
+```
+
+This makes `ActorId` suitable for distributed scenarios where actor references need to survive serialization.
+
 ## Envelope & Metadata
 
 Events arrive wrapped in an `Envelope` containing metadata:

@@ -1,14 +1,17 @@
 use std::{hash::Hash, ops::Deref, sync::Arc};
 
-/// A lightweight handle to a registered actor.
+/// Unique identifier for a registered actor.
 ///
 /// Returned by [`Supervisor::add_actor`](crate::Supervisor::add_actor) and
-/// [`ActorBuilder::build`](crate::ActorBuilder::build). Use handles to:
+/// [`ActorBuilder::build`](crate::ActorBuilder::build). Use `ActorId` to:
 ///
-/// - Identify actors in test assertions
-/// - Reference actors for event injection in tests
+/// - Identify actors in event metadata (sender information)
+/// - Reference actors in test harness assertions
+/// - Track event flow between specific actors
 ///
-/// Handles are cheap to clone and can be stored for later use.
+/// `ActorId` is cheap to clone and safe to serialize. Equality works correctly
+/// across serialization boundaries (uses string comparison with a fast-path
+/// for pointer equality when IDs share the same allocation).
 ///
 /// # Example
 ///
@@ -16,10 +19,13 @@ use std::{hash::Hash, ops::Deref, sync::Arc};
 /// let producer = sup.add_actor("producer", |ctx| Producer::new(ctx), &[DefaultTopic])?;
 /// let consumer = sup.add_actor("consumer", |ctx| Consumer::new(ctx), &[DefaultTopic])?;
 ///
-/// // Use handles in test harness
+/// // Use in test harness
 /// let mut test = sup.init_test_harness().await;
 /// test.send_as(&producer, MyEvent::Data(42)).await?;
 /// assert!(test.actor(&consumer).inbound_count() > 0);
+///
+/// // Access sender from event metadata
+/// let sender: &ActorId = envelope.meta().actor_id();
 /// ```
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -39,7 +45,7 @@ impl ActorId {
 
 impl PartialEq for ActorId {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
+        Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
     }
 }
 

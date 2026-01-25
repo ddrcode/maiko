@@ -50,7 +50,7 @@
 //! | [`Supervisor`] | Manages actor lifecycles and runtime |
 //! | [`Context`] | Allows actors to send events and interact with runtime |
 //! | [`Envelope`] | Wraps events with metadata (sender, correlation ID) |
-//! | [`ActorHandle`] | Lightweight reference to a registered actor |
+//! | [`ActorId`] | Unique identifier for a registered actor |
 //!
 //! ## Topic-Based Routing
 //!

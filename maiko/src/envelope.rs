@@ -98,6 +98,8 @@ impl<E: Event + std::fmt::Debug> std::fmt::Debug for Envelope<E> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     #[derive(Clone, Debug)]
@@ -107,7 +109,8 @@ mod tests {
 
     #[test]
     fn envelope_debug() {
-        let envelope = Envelope::new(TestEvent(42), "test-actor");
+        let actor = ActorId::new(Arc::from("test-actor"));
+        let envelope = Envelope::new(TestEvent(42), actor);
         let debug_str = format!("{:?}", envelope);
 
         assert!(debug_str.contains("TestEvent"));

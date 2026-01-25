@@ -65,7 +65,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .iter()
             .filter(|s| s.topics.contains(&topic))
             .filter(|s| !s.sender.is_closed())
-            .filter(|s| s.actor_id == *e.meta().actor_id())
+            .filter(|s| s.actor_id != *e.meta().actor_id())
             .try_for_each(|subscriber| {
                 let res = subscriber.sender.try_send(e.clone());
                 #[cfg(feature = "test-harness")]
@@ -196,18 +196,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_subscriber() {
+        use crate::ActorId;
+
         let (tx, rx) = mpsc::channel(10);
         let config = Arc::new(crate::Config::default());
         let cancel_token = Arc::new(CancellationToken::new());
         let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config);
+        let actor_id = ActorId::new(Arc::from("subscriber1"));
         let subscriber = super::Subscriber::new(
-            Arc::from("subscriber1"),
+            actor_id.clone(),
             HashSet::from([TestTopic::A]),
             tx.clone(),
         );
         assert!(broker.add_subscriber(subscriber).is_ok());
         let duplicate_subscriber = super::Subscriber::new(
-            Arc::from("subscriber1"),
+            actor_id,
             HashSet::from([TestTopic::B]),
             tx.clone(),
         );
