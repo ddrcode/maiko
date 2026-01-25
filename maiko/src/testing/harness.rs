@@ -70,4 +70,17 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         let records = self.records().await;
         ActorSpy::new(records, actor.clone())
     }
+
+    pub async fn dump(&self) {
+        let records = self.records().await;
+        for (i, entry) in records.iter().enumerate() {
+            println!(
+                "{}: [{}] -> [{}]: {}",
+                i,
+                entry.event.meta().actor_name(),
+                entry.actor_name,
+                entry.event.id()
+            );
+        }
+    }
 }

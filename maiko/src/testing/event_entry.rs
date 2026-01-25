@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{Envelope, Event, EventId, Meta, Topic};
+use crate::{ActorHandle, Envelope, Event, EventId, Meta, Topic};
 
 #[derive(Debug, Clone)]
 pub struct EventEntry<E: Event, T: Topic<E>> {
@@ -32,12 +32,12 @@ impl<E: Event, T: Topic<E>> EventEntry<E, T> {
     }
 
     #[inline]
-    pub fn actor_eq<'a>(&self, actor_name: impl Into<&'a str>) -> bool {
-        self.actor_name.as_ref() == actor_name.into()
+    pub fn receiver_actor_eq(&self, actor_handle: &ActorHandle) -> bool {
+        self.actor_name == actor_handle.name
     }
 
     #[inline]
-    pub fn sender_actor_eq<'a>(&self, actor_name: impl Into<&'a str>) -> bool {
-        self.event.meta().actor_name() == actor_name.into()
+    pub fn sender_actor_eq(&self, actor_handle: &ActorHandle) -> bool {
+        self.event.meta().actor_name == actor_handle.name
     }
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct ActorHandle {
-    name: Arc<str>,
+    pub(crate) name: Arc<str>,
 }
 
 impl ActorHandle {

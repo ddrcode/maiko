@@ -87,15 +87,17 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         self.apply_filters().into_iter().any(predicate)
     }
 
-    pub fn sent_by(self, actor: ActorHandle) -> Self {
+    pub fn sent_by(self, actor: &ActorHandle) -> Self {
         let mut res = self;
-        res.add_filter(move |e| e.sender_actor_eq(actor.name()));
+        let actor = actor.clone();
+        res.add_filter(move |e| e.sender_actor_eq(&actor));
         res
     }
 
-    pub fn received_by(self, actor: ActorHandle) -> Self {
+    pub fn received_by(self, actor: &ActorHandle) -> Self {
         let mut res = self;
-        res.add_filter(move |e| e.actor_eq(actor.name()));
+        let actor = actor.clone();
+        res.add_filter(move |e| e.receiver_actor_eq(&actor));
         res
     }
 

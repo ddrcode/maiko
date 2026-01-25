@@ -15,8 +15,8 @@ pub struct ActorSpy<E: Event, T: Topic<E>> {
 impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
     pub(crate) fn new(records: EventRecords<E, T>, actor_handle: ActorHandle) -> Self {
         let actor = actor_handle;
-        let receivers = EventQuery::new(records.clone()).received_by(actor.clone());
-        let senders = EventQuery::new(records.clone()).sent_by(actor.clone());
+        let receivers = EventQuery::new(records.clone()).received_by(&actor.clone());
+        let senders = EventQuery::new(records.clone()).sent_by(&actor.clone());
 
         Self {
             actor,
@@ -34,12 +34,35 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
         spy_utils::distinct(self.senders.iter(), |e| e.event.id()).len()
     }
 
-    pub fn senders(&self) -> Vec<Arc<str>> {
-        // spy_utils::distinct(&self.received_data, |e| e.event.meta().actor_name())
-        todo!()
+    pub fn receivers(&self) -> Vec<Arc<str>> {
+        spy_utils::distinct(self.senders.iter(), |e| e.actor_name.clone())
     }
 
-    pub fn receivers(&self) -> Vec<Arc<str>> {
-        todo!()
+    pub fn senders(&self) -> Vec<Arc<str>> {
+        spy_utils::distinct(self.receivers.iter(), |e| e.event.meta().actor_name.clone())
+    }
+
+    pub fn receivers_count(&self) -> usize {
+        self.receivers().len()
+    }
+
+    pub fn senders_count(&self) -> usize {
+        self.senders().len()
+    }
+
+    pub fn received_events(&self) -> EventQuery<E, T> {
+        EventQuery::new(self.records.clone()).received_by(&self.actor.clone())
+    }
+
+    pub fn sent_events(&self) -> EventQuery<E, T> {
+        EventQuery::new(self.records.clone()).sent_by(&self.actor.clone())
+    }
+
+    pub fn last_received(&self) -> Option<EventEntry<E, T>> {
+        self.receivers.last()
+    }
+
+    pub fn last_sent(&self) -> Option<EventEntry<E, T>> {
+        self.senders.last()
     }
 }
