@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{ActorHandle, Envelope, Event, EventId, Meta, Topic};
+use crate::{ActorId, Envelope, Event, EventId, Meta, Topic};
 
 /// A record of an event delivery from one actor to another.
 ///
@@ -16,15 +16,15 @@ use crate::{ActorHandle, Envelope, Event, EventId, Meta, Topic};
 pub struct EventEntry<E: Event, T: Topic<E>> {
     pub(crate) event: Arc<Envelope<E>>,
     pub(crate) topic: T,
-    pub(crate) actor_name: Arc<str>,
+    pub(crate) actor_id: ActorId,
 }
 
 impl<E: Event, T: Topic<E>> EventEntry<E, T> {
-    pub(crate) fn new(event: Arc<Envelope<E>>, topic: T, actor_name: Arc<str>) -> Self {
+    pub(crate) fn new(event: Arc<Envelope<E>>, topic: T, actor_id: ActorId) -> Self {
         Self {
             event,
             topic,
-            actor_name,
+            actor_id,
         }
     }
 
@@ -60,20 +60,20 @@ impl<E: Event, T: Topic<E>> EventEntry<E, T> {
 
     /// Returns the name of the actor that received this event.
     #[inline]
-    pub fn receiver(&self) -> &str {
-        &self.actor_name
+    pub fn receiver(&self) -> &ActorId {
+        &self.actor_id
     }
 
     /// Returns true if this event was received by the specified actor.
     #[inline]
-    pub(crate) fn receiver_actor_eq(&self, actor_handle: &ActorHandle) -> bool {
-        self.actor_name == actor_handle.name
+    pub(crate) fn receiver_actor_eq(&self, actor_id: &ActorId) -> bool {
+        self.actor_id == *actor_id
     }
 
     /// Returns true if this event was sent by the specified actor.
     #[inline]
-    pub(crate) fn sender_actor_eq(&self, actor_handle: &ActorHandle) -> bool {
-        self.meta().actor_name == actor_handle.name
+    pub(crate) fn sender_actor_eq(&self, actor_id: &ActorId) -> bool {
+        self.meta().actor_id() == actor_id
     }
 }
 
@@ -86,65 +86,66 @@ mod tests {
     struct TestEvent(i32);
     impl Event for TestEvent {}
 
-    fn make_entry() -> EventEntry<TestEvent, DefaultTopic> {
-        let envelope = Arc::new(Envelope::new(TestEvent(42), "sender-actor"));
-        EventEntry::new(envelope, DefaultTopic, Arc::from("receiver-actor"))
+    fn make_entry() -> (EventEntry<TestEvent, DefaultTopic>, ActorId, ActorId) {
+        let sender_id = ActorId::new(Arc::from("sender-actor"));
+        let receiver_id = ActorId::new(Arc::from("receiver-actor"));
+        let envelope = Arc::new(Envelope::new(TestEvent(42), sender_id.clone()));
+        let entry = EventEntry::new(envelope, DefaultTopic, receiver_id.clone());
+        (entry, sender_id, receiver_id)
     }
 
     #[test]
     fn id_returns_envelope_id() {
-        let entry = make_entry();
+        let (entry, _, _) = make_entry();
         // ID should be non-zero (generated)
         assert_ne!(entry.id(), 0);
     }
 
     #[test]
     fn payload_returns_event() {
-        let entry = make_entry();
+        let (entry, _, _) = make_entry();
         assert_eq!(entry.payload().0, 42);
     }
 
     #[test]
     fn meta_returns_envelope_meta() {
-        let entry = make_entry();
+        let (entry, _, _) = make_entry();
         assert_eq!(entry.meta().actor_name(), "sender-actor");
     }
 
     #[test]
     fn topic_returns_routing_topic() {
-        let entry = make_entry();
+        let (entry, _, _) = make_entry();
         assert_eq!(*entry.topic(), DefaultTopic);
     }
 
     #[test]
     fn sender_returns_sender_name() {
-        let entry = make_entry();
+        let (entry, _, _) = make_entry();
         assert_eq!(entry.sender(), "sender-actor");
     }
 
     #[test]
     fn receiver_returns_receiver_name() {
-        let entry = make_entry();
-        assert_eq!(entry.receiver(), "receiver-actor");
+        let (entry, _, _) = make_entry();
+        assert_eq!(entry.receiver().name(), "receiver-actor");
     }
 
     #[test]
     fn receiver_actor_eq_matches_correctly() {
-        let entry = make_entry();
-        let matching = ActorHandle::new(Arc::from("receiver-actor"));
-        let not_matching = ActorHandle::new(Arc::from("other-actor"));
+        let (entry, _, receiver_id) = make_entry();
+        let not_matching = ActorId::new(Arc::from("other-actor"));
 
-        assert!(entry.receiver_actor_eq(&matching));
+        assert!(entry.receiver_actor_eq(&receiver_id));
         assert!(!entry.receiver_actor_eq(&not_matching));
     }
 
     #[test]
     fn sender_actor_eq_matches_correctly() {
-        let entry = make_entry();
-        let matching = ActorHandle::new(Arc::from("sender-actor"));
-        let not_matching = ActorHandle::new(Arc::from("other-actor"));
+        let (entry, sender_id, _) = make_entry();
+        let not_matching = ActorId::new(Arc::from("other-actor"));
 
-        assert!(entry.sender_actor_eq(&matching));
+        assert!(entry.sender_actor_eq(&sender_id));
         assert!(!entry.sender_actor_eq(&not_matching));
     }
 }

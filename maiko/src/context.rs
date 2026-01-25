@@ -5,7 +5,7 @@ use std::sync::{
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{Envelope, Event, EventId, Meta, Result};
+use crate::{ActorId, Envelope, Event, EventId, Meta, Result};
 
 /// Runtime-provided context for an actor to interact with the system.
 ///
@@ -22,15 +22,19 @@ use crate::{Envelope, Event, EventId, Meta, Result};
 /// See also: [`Envelope`], [`Meta`], [`crate::Supervisor`].
 #[derive(Clone)]
 pub struct Context<E: Event> {
-    pub(crate) name: Arc<str>,
+    pub(crate) actor_id: ActorId,
     pub(crate) sender: Sender<Arc<Envelope<E>>>,
     pub(crate) alive: Arc<AtomicBool>,
 }
 
 impl<E: Event> Context<E> {
-    pub fn new(name: Arc<str>, sender: Sender<Arc<Envelope<E>>>, alive: Arc<AtomicBool>) -> Self {
+    pub fn new(
+        actor_id: ActorId,
+        sender: Sender<Arc<Envelope<E>>>,
+        alive: Arc<AtomicBool>,
+    ) -> Self {
         Self {
-            name,
+            actor_id,
             sender,
             alive,
         }
@@ -39,7 +43,7 @@ impl<E: Event> Context<E> {
     /// Send an event to the broker. The envelope will carry this actor's name.
     /// This awaits channel capacity (backpressure) to avoid silent drops.
     pub async fn send(&self, event: E) -> Result<()> {
-        let envelope = Envelope::new(event, self.name.clone());
+        let envelope = Envelope::new(event, self.actor_id.clone());
         self.send_envelope(envelope).await
     }
 
@@ -47,7 +51,7 @@ impl<E: Event> Context<E> {
     pub async fn send_with_correlation(&self, event: E, correlation_id: EventId) -> Result<()> {
         self.send_envelope(Envelope::with_correlation(
             event,
-            self.name.clone(),
+            self.actor_id.clone(),
             correlation_id,
         ))
         .await
@@ -57,7 +61,7 @@ impl<E: Event> Context<E> {
     pub async fn send_child_event(&self, event: E, meta: &Meta) -> Result<()> {
         self.send_envelope(Envelope::with_correlation(
             event,
-            self.name.clone(),
+            self.actor_id.clone(),
             meta.id(),
         ))
         .await
@@ -75,15 +79,15 @@ impl<E: Event> Context<E> {
         self.alive.store(false, Ordering::Release);
     }
 
-    /// The actor's name as registered with the supervisor.
     #[inline]
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn actor_id(&self) -> &ActorId {
+        &self.actor_id
     }
 
+    /// The actor's name as registered with the supervisor.
     #[inline]
-    pub fn clone_name(&self) -> Arc<str> {
-        self.name.clone()
+    pub fn actor_name(&self) -> &str {
+        &self.actor_id.name()
     }
 
     /// Whether the actor is considered alive by the runtime.

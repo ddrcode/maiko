@@ -1,6 +1,4 @@
-use std::{fmt, sync::Arc};
-
-use crate::{Event, EventId, Meta};
+use crate::{ActorId, Event, EventId, Meta};
 
 /// Event plus metadata used by the broker for routing and observability.
 ///
@@ -23,9 +21,9 @@ pub struct Envelope<E: Event> {
 
 impl<E: Event> Envelope<E> {
     /// Create a new envelope tagging the event with the given actor name.
-    pub fn new(event: E, actor_name: impl Into<Arc<str>>) -> Self {
+    pub fn new(event: E, actor_id: ActorId) -> Self {
         Self {
-            meta: Meta::new(actor_name.into(), None),
+            meta: Meta::new(actor_id, None),
             event,
         }
     }
@@ -33,13 +31,9 @@ impl<E: Event> Envelope<E> {
     /// Create a new envelope with an explicit correlation id.
     ///
     /// Use this to link child events to a parent or to group related flows.
-    pub fn with_correlation(
-        event: E,
-        actor_name: impl Into<Arc<str>>,
-        correlation_id: EventId,
-    ) -> Self {
+    pub fn with_correlation(event: E, actor_id: ActorId, correlation_id: EventId) -> Self {
         Self {
-            meta: Meta::new(actor_name.into(), Some(correlation_id)),
+            meta: Meta::new(actor_id, Some(correlation_id)),
             event,
         }
     }
@@ -92,8 +86,8 @@ impl<E: Event> std::ops::Deref for Envelope<E> {
 // Debug is implemented only when E: Debug.
 // This allows Envelope to be used with non-Debug events while still providing
 // full debug output when the event type supports it.
-impl<E: Event + fmt::Debug> fmt::Debug for Envelope<E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<E: Event + std::fmt::Debug> std::fmt::Debug for Envelope<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Envelope")
             .field("id", &self.meta.id())
             .field("sender", &self.meta.actor_name())
@@ -104,6 +98,8 @@ impl<E: Event + fmt::Debug> fmt::Debug for Envelope<E> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     #[derive(Clone, Debug)]
@@ -113,7 +109,8 @@ mod tests {
 
     #[test]
     fn envelope_debug() {
-        let envelope = Envelope::new(TestEvent(42), "test-actor");
+        let actor = ActorId::new(Arc::from("test-actor"));
+        let envelope = Envelope::new(TestEvent(42), actor);
         let debug_str = format!("{:?}", envelope);
 
         assert!(debug_str.contains("TestEvent"));

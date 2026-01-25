@@ -50,7 +50,7 @@
 //! | [`Supervisor`] | Manages actor lifecycles and runtime |
 //! | [`Context`] | Allows actors to send events and interact with runtime |
 //! | [`Envelope`] | Wraps events with metadata (sender, correlation ID) |
-//! | [`ActorHandle`] | Lightweight reference to a registered actor |
+//! | [`ActorId`] | Unique identifier for a registered actor |
 //!
 //! ## Topic-Based Routing
 //!
@@ -88,7 +88,7 @@
 
 mod actor;
 mod actor_builder;
-mod actor_handle;
+mod actor_id;
 mod config;
 mod context;
 mod envelope;
@@ -106,7 +106,7 @@ pub mod testing;
 
 pub use actor::Actor;
 pub use actor_builder::ActorBuilder;
-pub use actor_handle::ActorHandle;
+pub use actor_id::ActorId;
 pub use config::Config;
 pub use context::Context;
 pub use envelope::Envelope;

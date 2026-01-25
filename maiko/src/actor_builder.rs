@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{Actor, ActorHandle, Context, Error, Event, Result, Supervisor, Topic};
+use crate::{Actor, ActorId, Context, Error, Event, Result, Supervisor, Topic};
 
 /// Builder for configuring and registering actors with the supervisor.
 ///
@@ -89,7 +89,7 @@ impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
     /// - [`Error::ActorBuilderError`] if actor was not provided
     /// - [`Error::BrokerAlreadyStarted`] if supervisor was already started
     /// - [`Error::SubscriberAlreadyExists`] if an actor with the same name exists
-    pub fn build(mut self) -> Result<ActorHandle> {
+    pub fn build(mut self) -> Result<ActorId> {
         let actor = self
             .actor
             .take()

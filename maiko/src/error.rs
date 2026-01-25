@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::error::{SendError, TrySendError};
 
-use crate::{Envelope, Event};
+use crate::{ActorId, Envelope, Event};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -22,7 +22,7 @@ pub enum Error {
     ChannelIsFull,
 
     #[error("Subscriber with name '{0}' already exists.")]
-    SubscriberAlreadyExists(Arc<str>),
+    SubscriberAlreadyExists(ActorId),
 
     #[error("Adding new actor failed. {0}")]
     ActorBuilderError(Arc<str>),

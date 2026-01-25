@@ -112,6 +112,7 @@ cargo run --example guesser
 | **Context** | Provides actors with `send()`, `stop()`, and metadata access |
 | **Supervisor** | Manages actor lifecycles and runtime |
 | **Envelope** | Wraps events with metadata (sender, correlation ID) |
+| **ActorId** | Unique identifier for actors, serializable across IPC boundaries |
 
 For detailed documentation, see **[Core Concepts](doc/concepts.md)**.
 
