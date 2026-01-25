@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{ActorHandle, Envelope, Event, EventId, Meta, Topic};
+use crate::{ActorId, Envelope, Event, EventId, Meta, Topic};
 
 /// A record of an event delivery from one actor to another.
 ///
@@ -16,15 +16,15 @@ use crate::{ActorHandle, Envelope, Event, EventId, Meta, Topic};
 pub struct EventEntry<E: Event, T: Topic<E>> {
     pub(crate) event: Arc<Envelope<E>>,
     pub(crate) topic: T,
-    pub(crate) actor_name: Arc<str>,
+    pub(crate) actor_id: ActorId,
 }
 
 impl<E: Event, T: Topic<E>> EventEntry<E, T> {
-    pub(crate) fn new(event: Arc<Envelope<E>>, topic: T, actor_name: Arc<str>) -> Self {
+    pub(crate) fn new(event: Arc<Envelope<E>>, topic: T, actor_id: ActorId) -> Self {
         Self {
             event,
             topic,
-            actor_name,
+            actor_id,
         }
     }
 
@@ -60,20 +60,20 @@ impl<E: Event, T: Topic<E>> EventEntry<E, T> {
 
     /// Returns the name of the actor that received this event.
     #[inline]
-    pub fn receiver(&self) -> &str {
-        &self.actor_name
+    pub fn receiver(&self) -> &ActorId {
+        &self.actor_id
     }
 
     /// Returns true if this event was received by the specified actor.
     #[inline]
-    pub(crate) fn receiver_actor_eq(&self, actor_handle: &ActorHandle) -> bool {
-        self.actor_name == actor_handle.name
+    pub(crate) fn receiver_actor_eq(&self, actor_id: &ActorId) -> bool {
+        self.actor_id == *actor_id
     }
 
     /// Returns true if this event was sent by the specified actor.
     #[inline]
-    pub(crate) fn sender_actor_eq(&self, actor_handle: &ActorHandle) -> bool {
-        self.meta().actor_name == actor_handle.name
+    pub(crate) fn sender_actor_eq(&self, actor_id: &ActorId) -> bool {
+        self.meta().actor_id() == actor_id
     }
 }
 

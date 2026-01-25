@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::{
-    ActorHandle, Event, Topic,
+    ActorId, Event, Topic,
     testing::{EventEntry, EventQuery, EventRecords},
 };
 
@@ -13,13 +11,13 @@ use crate::{
 /// - Which actors this actor communicated with
 pub struct ActorSpy<E: Event, T: Topic<E>> {
     #[allow(dead_code)]
-    actor: ActorHandle,
+    actor: ActorId,
     inbound: EventQuery<E, T>,
     outbound: EventQuery<E, T>,
 }
 
 impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
-    pub(crate) fn new(records: EventRecords<E, T>, actor: ActorHandle) -> Self {
+    pub(crate) fn new(records: EventRecords<E, T>, actor: ActorId) -> Self {
         let inbound = EventQuery::new(records.clone()).received_by(&actor);
         let outbound = EventQuery::new(records).sent_by(&actor);
 
@@ -50,8 +48,8 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
     }
 
     /// Returns the names of actors that sent events to this actor.
-    pub fn received_from(&self) -> Vec<Arc<str>> {
-        distinct_by(&self.inbound, |e| e.meta().actor_name.clone())
+    pub fn received_from(&self) -> Vec<ActorId> {
+        distinct_by(&self.inbound, |e| e.meta().actor_id.clone())
     }
 
     /// Returns the count of distinct actors that sent events to this actor.
@@ -82,8 +80,8 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
     }
 
     /// Returns the names of actors that received events from this actor.
-    pub fn sent_to(&self) -> Vec<Arc<str>> {
-        distinct_by(&self.outbound, |e| e.actor_name.clone())
+    pub fn sent_to(&self) -> Vec<ActorId> {
+        distinct_by(&self.outbound, |e| e.actor_id.clone())
     }
 
     /// Returns the count of distinct actors that received events from this actor.

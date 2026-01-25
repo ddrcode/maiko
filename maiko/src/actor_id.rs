@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{hash::Hash, ops::Deref, sync::Arc};
 
 /// A lightweight handle to a registered actor.
 ///
@@ -23,36 +23,43 @@ use std::sync::Arc;
 /// ```
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct ActorHandle {
-    pub(crate) id: u64,
-    pub(crate) name: Arc<str>,
-}
+pub struct ActorId(Arc<str>);
 
-impl ActorHandle {
-    pub(crate) fn new(id: u64, name: Arc<str>) -> Self {
-        Self { id, name }
-    }
-
-    #[inline(always)]
-    pub fn id(&self) -> u64 {
-        self.id
+impl ActorId {
+    pub(crate) fn new(id: Arc<str>) -> Self {
+        Self(id)
     }
 
     /// Returns the actor's name as registered with the supervisor.
     #[inline]
     pub fn name(&self) -> &str {
-        &self.name
+        &self.0
     }
 }
 
-impl PartialEq for ActorHandle {
+impl PartialEq for ActorId {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
-impl std::fmt::Display for ActorHandle {
+impl Eq for ActorId {}
+
+impl std::fmt::Display for ActorId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Hash for ActorId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl Deref for ActorId {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

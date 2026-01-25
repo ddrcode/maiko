@@ -45,9 +45,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     pub(crate) fn add_subscriber(&mut self, subscriber: Subscriber<E, T>) -> Result<()> {
         if self.subscribers.iter().any(|s| *s == subscriber) {
-            return Err(Error::SubscriberAlreadyExists(
-                subscriber.handle.name.clone(),
-            ));
+            return Err(Error::SubscriberAlreadyExists(subscriber.actor_id.clone()));
         }
         self.subscribers.push(subscriber);
         Ok(())
@@ -67,7 +65,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .iter()
             .filter(|s| s.topics.contains(&topic))
             .filter(|s| !s.sender.is_closed())
-            .filter(|s| !Arc::ptr_eq(&s.name, &e.meta().actor_name))
+            .filter(|s| s.actor_id == *e.meta().actor_id())
             .try_for_each(|subscriber| {
                 let res = subscriber.sender.try_send(e.clone());
                 #[cfg(feature = "test-harness")]
@@ -76,7 +74,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                         let _ = sender.try_send(TestEvent::Event(EventEntry::new(
                             e.clone(),
                             topic.clone(),
-                            subscriber.name.clone(),
+                            subscriber.actor_id.clone(),
                         )));
                     }
                 }

@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::{
-    Event, Topic,
+    ActorId, Event, Topic,
     testing::{EventQuery, EventRecords},
 };
 
@@ -34,11 +32,11 @@ impl<E: Event, T: Topic<E>> TopicSpy<E, T> {
     }
 
     /// Returns the names of actors that received events on this topic.
-    pub fn receivers(&self) -> Vec<Arc<str>> {
+    pub fn receivers(&self) -> Vec<ActorId> {
         use std::collections::HashSet;
         self.query
             .iter()
-            .map(|e| e.actor_name.clone())
+            .map(|e| e.actor_id.clone())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect()

@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-    ActorHandle, Event, EventId, Topic,
+    ActorId, Event, EventId, Topic,
     testing::{EventEntry, EventRecords},
 };
 
@@ -100,15 +100,15 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
     // ==================== Filter Operations ====================
 
     /// Filter to events sent by the specified actor.
-    pub fn sent_by(mut self, actor: &ActorHandle) -> Self {
-        let actor = actor.clone();
+    pub fn sent_by(mut self, actor_id: &ActorId) -> Self {
+        let actor = actor_id.clone();
         self.add_filter(move |e| e.sender_actor_eq(&actor));
         self
     }
 
     /// Filter to events received by the specified actor.
-    pub fn received_by(mut self, actor: &ActorHandle) -> Self {
-        let actor = actor.clone();
+    pub fn received_by(mut self, actor_id: &ActorId) -> Self {
+        let actor = actor_id.clone();
         self.add_filter(move |e| e.receiver_actor_eq(&actor));
         self
     }

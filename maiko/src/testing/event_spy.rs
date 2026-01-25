@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::{
-    ActorHandle, Event, EventId, Topic,
+    ActorId, Event, EventId, Topic,
     testing::{EventQuery, EventRecords},
 };
 
@@ -29,15 +27,15 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     }
 
     /// Returns true if the event was delivered to the specified actor.
-    pub fn was_delivered_to(&self, actor: &ActorHandle) -> bool {
-        self.query.clone().received_by(actor).count() > 0
+    pub fn was_delivered_to(&self, actor_id: &ActorId) -> bool {
+        self.query.clone().received_by(actor_id).count() > 0
     }
 
     /// Returns the name of the actor that sent this event.
-    pub fn sender(&self) -> Arc<str> {
+    pub fn sender(&self) -> ActorId {
         self.query
             .first()
-            .map(|e| e.meta().actor_name.clone())
+            .map(|e| e.meta().actor_id.clone())
             .expect("EventSpy must have at least one delivery record")
     }
 
@@ -47,11 +45,11 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     }
 
     /// Returns the names of actors that received this event.
-    pub fn receivers(&self) -> Vec<Arc<str>> {
+    pub fn receivers(&self) -> Vec<ActorId> {
         use std::collections::HashSet;
         self.query
             .iter()
-            .map(|e| e.actor_name.clone())
+            .map(|e| e.actor_id.clone())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect()

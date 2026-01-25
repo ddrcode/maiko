@@ -60,7 +60,7 @@ impl Actor for PingPong {
         println!(
             "Event: {:?} received by {} actor",
             envelope.event(),
-            self.ctx.name()
+            self.ctx.actor_name()
         );
         let response = match envelope.event() {
             PingPongEvent::Ping => PingPongEvent::Pong,

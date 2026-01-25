@@ -13,8 +13,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Actor, ActorBuilder, ActorHandle, Config, Context, DefaultTopic, Envelope, Error, Event,
-    Result, Topic,
+    Actor, ActorBuilder, ActorId, Config, Context, DefaultTopic, Envelope, Error, Event, Result,
+    Topic,
     internal::{ActorController, Broker, Subscriber},
 };
 
@@ -54,7 +54,7 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
     start_notifier: Arc<Notify>,
-    last_actor_id: u64,
+    supervisor_id: ActorId,
 
     #[cfg(feature = "test-harness")]
     harness: Option<crate::testing::Harness<E, T>>,
@@ -77,7 +77,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             cancel_token,
             broker_cancel_token,
             start_notifier: Arc::new(Notify::new()),
-            last_actor_id: 0,
+            supervisor_id: ActorId::new(Arc::from("supervisor")),
 
             #[cfg(feature = "test-harness")]
             harness: None,
@@ -104,7 +104,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     ///     &[MyTopic::Data, MyTopic::Control]
     /// )?;
     /// ```
-    pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: &[T]) -> Result<ActorHandle>
+    pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: &[T]) -> Result<ActorId>
     where
         A: Actor<Event = E>,
         F: FnOnce(Context<E>) -> A,
@@ -145,10 +145,12 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         ctx: Context<E>,
         actor: A,
         topics: HashSet<T>,
-    ) -> Result<ActorHandle>
+    ) -> Result<ActorId>
     where
         A: Actor<Event = E>,
     {
+        let actor_id = ctx.actor_id().clone();
+
         let mut broker = self
             .broker
             .try_lock()
@@ -156,13 +158,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
 
-        let handle = {
-            self.last_actor_id += 1;
-            let id = self.last_actor_id;
-            ActorHandle::new(id, ctx.clone_name())
-        };
-
-        let subscriber = Subscriber::<E, T>::new(handle.clone(), topics, tx);
+        let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics, tx);
         broker.add_subscriber(subscriber)?;
 
         let mut controller = ActorController {
@@ -179,7 +175,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             controller.run().await
         });
 
-        Ok(handle)
+        Ok(actor_id)
     }
 
     /// Create a new Context for an actor.
@@ -187,7 +183,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     /// Internal helper used by `add_actor` and `ActorBuilder` to create actor contexts.
     pub(crate) fn create_context(&self, name: &str) -> Context<E> {
         Context::<E> {
-            name: Arc::<str>::from(name),
+            actor_id: ActorId::new(Arc::<str>::from(name)),
             sender: self.sender.clone(),
             alive: Arc::new(AtomicBool::new(true)),
         }
@@ -225,7 +221,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     /// Emit an event into the broker from the supervisor.
     pub async fn send(&self, event: E) -> Result<()> {
         self.sender
-            .send(Envelope::new(event, "supervisor").into())
+            .send(Envelope::new(event, self.supervisor_id.clone()).into())
             .await?;
         Ok(())
     }

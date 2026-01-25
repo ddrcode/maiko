@@ -9,7 +9,7 @@ use tokio::{
 };
 
 use crate::{
-    ActorHandle, Envelope, Event, EventId, Topic,
+    ActorId, Envelope, Event, EventId, Topic,
     testing::{
         ActorSpy, EventEntry, EventQuery, EventRecords, EventSpy, RecordingFlag, TestEvent,
         TopicSpy,
@@ -143,8 +143,8 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     ///
     /// Returns the event ID which can be used with [`event`](Self::event) to
     /// inspect delivery.
-    pub async fn send_as(&self, actor: &ActorHandle, event: E) -> crate::Result<EventId> {
-        let envelope = Envelope::new(event, actor.name());
+    pub async fn send_as(&self, actor: &ActorId, event: E) -> crate::Result<EventId> {
+        let envelope = Envelope::new(event, actor.clone());
         let id = envelope.id();
         self.actor_sender.send(Arc::new(envelope)).await?;
         Ok(id)
@@ -179,7 +179,7 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     /// Returns a spy for observing events from a specific actor's perspective.
     ///
     /// Use this to inspect what an actor sent and received.
-    pub fn actor(&self, actor: &ActorHandle) -> ActorSpy<E, T> {
+    pub fn actor(&self, actor: &ActorId) -> ActorSpy<E, T> {
         ActorSpy::new(self.snapshot.clone(), actor.clone())
     }
 

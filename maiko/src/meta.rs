@@ -1,8 +1,8 @@
-use std::{sync::Arc, time::SystemTime};
+use std::time::SystemTime;
 
 use uuid::Uuid;
 
-use crate::{ActorHandle, EventId};
+use crate::{ActorId, EventId};
 
 /// Metadata attached to every event envelope.
 ///
@@ -21,20 +21,20 @@ use crate::{ActorHandle, EventId};
 pub struct Meta {
     id: EventId,
     timestamp: u64,
-    pub(crate) actor_handle: ActorHandle, // FIXME used by broker
+    pub(crate) actor_id: ActorId, // FIXME used by broker
     correlation_id: Option<EventId>,
 }
 
 impl Meta {
     /// Construct metadata for a given actor name and optional correlation id.
-    pub fn new(actor_handle: ActorHandle, correlation_id: Option<EventId>) -> Self {
+    pub fn new(actor_id: ActorId, correlation_id: Option<EventId>) -> Self {
         Self {
             id: Uuid::new_v4().as_u128(),
             timestamp: SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .expect("SystemTime before Unix epoch")
                 .as_nanos() as u64,
-            actor_handle,
+            actor_id,
             correlation_id,
         }
     }
@@ -51,11 +51,11 @@ impl Meta {
 
     /// Name of actor that sent the event.
     pub fn actor_name(&self) -> &str {
-        self.actor_handle.name()
+        self.actor_id.name()
     }
 
-    pub fn actor_handle(&self) -> &ActorHandle {
-        &self.actor_handle
+    pub fn actor_id(&self) -> &ActorId {
+        &self.actor_id
     }
 
     /// Optional value of correlation data.
