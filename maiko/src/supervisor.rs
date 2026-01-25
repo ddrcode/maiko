@@ -238,7 +238,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         #[cfg(feature = "test-harness")]
         if let Some(harness) = self.harness.as_ref() {
-            harness.stop().await;
+            harness.exit().await;
         }
 
         // 1. Wait for the main channle to drain

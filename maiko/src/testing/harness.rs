@@ -14,6 +14,7 @@ pub struct Harness<E: Event, T: Topic<E>> {
     pub(crate) test_sender: Sender<TestEvent<E, T>>,
     actor_sender: Sender<Arc<Envelope<E>>>,
     entries: Arc<Mutex<Vec<EventEntry<E, T>>>>,
+    snapshot: EventRecords<E, T>,
 }
 
 impl<E: Event, T: Topic<E>> Harness<E, T> {
@@ -26,7 +27,12 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
             test_sender,
             actor_sender,
             entries,
+            snapshot: Arc::new(Vec::new()),
         }
+    }
+
+    pub async fn exit(&self) {
+        let _ = self.test_sender.send(TestEvent::Exit).await;
     }
 
     async fn records(&self) -> EventRecords<E, T> {
@@ -34,12 +40,19 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         Arc::new(entries.clone())
     }
 
-    pub async fn reset(&self) {
+    pub async fn reset(&mut self) {
         let _ = self.test_sender.send(TestEvent::Reset).await;
+        self.snapshot = Arc::new(Vec::new());
     }
 
-    pub async fn stop(&self) {
-        let _ = self.test_sender.send(TestEvent::Exit).await;
+    pub async fn start_recording(&mut self) {
+        let _ = self.test_sender.send(TestEvent::StartRecording).await;
+    }
+
+    pub async fn stop_recording(&mut self) {
+        self.settle().await;
+        self.snapshot = self.records().await;
+        let _ = self.test_sender.send(TestEvent::StopRecording).await;
     }
 
     pub async fn settle(&self) {
@@ -47,33 +60,27 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         sleep(Duration::from_millis(20)).await
     }
 
-    pub async fn send_as(&self, actor: &ActorHandle, event: E) -> crate::Result<EventSpy<E, T>> {
+    pub async fn send_as(&self, actor: &ActorHandle, event: E) -> crate::Result<EventId> {
         let envelope = Envelope::new(event, actor.name());
         let id = envelope.id();
         self.actor_sender.send(Arc::new(envelope)).await?;
-        self.settle().await;
-
-        Ok(self.event(id).await)
+        Ok(id)
     }
 
-    pub async fn event(&self, id: EventId) -> EventSpy<E, T> {
-        let records = self.records().await;
-        EventSpy::new(records, id)
+    pub fn event(&self, id: EventId) -> EventSpy<E, T> {
+        EventSpy::new(self.snapshot.clone(), id)
     }
 
-    pub async fn topic(&self, topic: T) -> TopicSpy<E, T> {
-        let records = self.records().await;
-        TopicSpy::new(records, topic)
+    pub fn topic(&self, topic: T) -> TopicSpy<E, T> {
+        TopicSpy::new(self.snapshot.clone(), topic)
     }
 
-    pub async fn actor(&self, actor: &ActorHandle) -> ActorSpy<E, T> {
-        let records = self.records().await;
-        ActorSpy::new(records, actor.clone())
+    pub fn actor(&self, actor: &ActorHandle) -> ActorSpy<E, T> {
+        ActorSpy::new(self.snapshot.clone(), actor.clone())
     }
 
-    pub async fn dump(&self) {
-        let records = self.records().await;
-        for (i, entry) in records.iter().enumerate() {
+    pub fn dump(&self) {
+        for (i, entry) in self.snapshot.iter().enumerate() {
             println!(
                 "{}: [{}] -> [{}]: {}",
                 i,

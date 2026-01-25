@@ -22,26 +22,32 @@ impl<E: Event, T: Topic<E>> EventCollector<E, T> {
 
     pub async fn run(&mut self) -> crate::Result {
         let mut is_alive = true;
+        let mut recording = false;
         while is_alive {
-            if let Some(event) = self.receiver.recv().await {
-                let events = &mut self.events.lock().await;
-                is_alive = Self::handle_event(events, event);
-                while let Ok(event) = self.receiver.try_recv()
-                    && is_alive
-                {
-                    is_alive = Self::handle_event(events, event);
+            if let Some(mut event) = self.receiver.recv().await {
+                let records = &mut self.events.lock().await;
+                let mut should_stop = false;
+                while is_alive {
+                    match event {
+                        TestEvent::Event(entry) if recording => records.push(entry),
+                        TestEvent::Exit => is_alive = false,
+                        TestEvent::Reset => records.clear(),
+                        TestEvent::StartRecording => recording = true,
+                        TestEvent::StopRecording => should_stop = true,
+                        _ => {}
+                    }
+                    if let Ok(next_event) = self.receiver.try_recv() {
+                        event = next_event;
+                    } else {
+                        break;
+                    }
+                }
+                if should_stop && recording {
+                    tokio::task::yield_now().await;
+                    recording = false;
                 }
             }
         }
         Ok(())
-    }
-
-    fn handle_event(events: &mut Vec<EventEntry<E, T>>, event: TestEvent<E, T>) -> bool {
-        match event {
-            TestEvent::Event(entry) => events.push(entry),
-            TestEvent::Exit => return false,
-            TestEvent::Reset => events.clear(),
-        }
-        true
     }
 }
