@@ -108,3 +108,154 @@ where
         .into_iter()
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DefaultTopic, Envelope, Event};
+
+    #[derive(Clone, Debug)]
+    struct TestEvent(i32);
+    impl Event for TestEvent {}
+
+    fn make_entry(
+        event: TestEvent,
+        sender: &str,
+        receiver: &str,
+    ) -> EventEntry<TestEvent, DefaultTopic> {
+        let envelope = Arc::new(Envelope::new(event, sender));
+        EventEntry::new(envelope, DefaultTopic, Arc::from(receiver))
+    }
+
+    fn sample_records() -> EventRecords<TestEvent, DefaultTopic> {
+        // Scenario: alice sends to bob and charlie, bob sends to alice
+        Arc::new(vec![
+            make_entry(TestEvent(1), "alice", "bob"),
+            make_entry(TestEvent(2), "alice", "charlie"),
+            make_entry(TestEvent(3), "bob", "alice"),
+            make_entry(TestEvent(4), "charlie", "alice"),
+        ])
+    }
+
+    // ==================== Inbound Tests ====================
+
+    #[test]
+    fn inbound_returns_events_received_by_actor() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        assert_eq!(spy.inbound().count(), 2); // received from bob and charlie
+    }
+
+    #[test]
+    fn inbound_count_returns_received_event_count() {
+        let bob = ActorHandle::new(Arc::from("bob"));
+        let spy = ActorSpy::new(sample_records(), bob);
+        assert_eq!(spy.inbound_count(), 1); // received from alice
+    }
+
+    #[test]
+    fn last_received_returns_most_recent_inbound() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        let last = spy.last_received().unwrap();
+        assert_eq!(last.payload().0, 4); // from charlie
+    }
+
+    #[test]
+    fn last_received_returns_none_when_no_inbound() {
+        let unknown = ActorHandle::new(Arc::from("unknown"));
+        let spy = ActorSpy::new(sample_records(), unknown);
+        assert!(spy.last_received().is_none());
+    }
+
+    #[test]
+    fn received_from_returns_unique_senders() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        let senders = spy.received_from();
+        assert_eq!(senders.len(), 2);
+        assert!(senders.iter().any(|s| &**s == "bob"));
+        assert!(senders.iter().any(|s| &**s == "charlie"));
+    }
+
+    #[test]
+    fn received_from_count_returns_unique_sender_count() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        assert_eq!(spy.received_from_count(), 2);
+    }
+
+    // ==================== Outbound Tests ====================
+
+    #[test]
+    fn outbound_returns_events_sent_by_actor() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        assert_eq!(spy.outbound().count(), 2); // sent to bob and charlie
+    }
+
+    #[test]
+    fn outbound_count_returns_unique_event_count() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        // 2 distinct events sent (different IDs)
+        assert_eq!(spy.outbound_count(), 2);
+    }
+
+    #[test]
+    fn outbound_count_deduplicates_same_event_to_multiple_receivers() {
+        // Same event delivered to multiple actors
+        let envelope = Arc::new(Envelope::new(TestEvent(1), "alice"));
+        let records = Arc::new(vec![
+            EventEntry::new(envelope.clone(), DefaultTopic, Arc::from("bob")),
+            EventEntry::new(envelope, DefaultTopic, Arc::from("charlie")),
+        ]);
+
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(records, alice);
+        // Only 1 unique event sent, even though delivered to 2 actors
+        assert_eq!(spy.outbound_count(), 1);
+    }
+
+    #[test]
+    fn last_sent_returns_most_recent_outbound() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        let last = spy.last_sent().unwrap();
+        assert_eq!(last.payload().0, 2); // to charlie
+    }
+
+    #[test]
+    fn last_sent_returns_none_when_no_outbound() {
+        let unknown = ActorHandle::new(Arc::from("unknown"));
+        let spy = ActorSpy::new(sample_records(), unknown);
+        assert!(spy.last_sent().is_none());
+    }
+
+    #[test]
+    fn sent_to_returns_unique_receivers() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        let receivers = spy.sent_to();
+        assert_eq!(receivers.len(), 2);
+        assert!(receivers.iter().any(|r| &**r == "bob"));
+        assert!(receivers.iter().any(|r| &**r == "charlie"));
+    }
+
+    #[test]
+    fn sent_to_count_returns_unique_receiver_count() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let spy = ActorSpy::new(sample_records(), alice);
+        assert_eq!(spy.sent_to_count(), 2);
+    }
+
+    #[test]
+    fn actor_with_no_activity_has_zero_counts() {
+        let unknown = ActorHandle::new(Arc::from("unknown"));
+        let spy = ActorSpy::new(sample_records(), unknown);
+        assert_eq!(spy.inbound_count(), 0);
+        assert_eq!(spy.outbound_count(), 0);
+        assert_eq!(spy.received_from_count(), 0);
+        assert_eq!(spy.sent_to_count(), 0);
+    }
+}
