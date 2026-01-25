@@ -446,16 +446,17 @@ Contributions are welcome! Please feel free to:
 
 ### Code Philosophy
 
-Maiko is **100% human-written code**, crafted with passion for Rust and genuine love for coding. While AI tools have been valuable for architectural discussions, code reviews, and documentation, every line of implementation code comes from human creativity and expertise.
+Maiko is developed through **human-AI collaboration**. The architecture, API design, and key decisions are human-driven, while AI serves as a capable pair programming partner - reviewing code, suggesting improvements, and helping implement well-specified designs.
 
 We believe in:
-- **Thoughtful design** over automated generation
-- **Deep understanding** of the code we write
-- **Human craftsmanship** in software engineering
+- **Thoughtful design** - humans set direction, AI helps refine
+- **Deep understanding** - code we ship is code we comprehend
+- **Quality over origin** - good code matters more than who typed it
+- **Honest attribution** - we acknowledge how our tools are built
 
-Contributors are expected to write their own code. AI may assist with reviews, discussions, and documentation, but implementations should reflect your own understanding and skills.
+The core runtime was hand-crafted with passion for Rust. The test harness was developed collaboratively with Claude, demonstrating that human creativity and AI capability can complement each other effectively.
 
-Maiko is built with ❤️ by humans, for humans 🦀
+Maiko is built with ❤️ and a little help from our AI friends 🦀🤖
 
 ---
 

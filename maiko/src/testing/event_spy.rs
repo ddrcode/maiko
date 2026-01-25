@@ -2,9 +2,14 @@ use std::sync::Arc;
 
 use crate::{
     ActorHandle, Event, EventId, Topic,
-    testing::{EventQuery, EventRecords, spy_utils},
+    testing::{EventQuery, EventRecords},
 };
 
+/// A spy for observing the delivery and effects of a specific event.
+///
+/// Provides methods to inspect:
+/// - Whether and where the event was delivered
+/// - Child events correlated to this event
 pub struct EventSpy<E: Event, T: Topic<E>> {
     id: EventId,
     records: EventRecords<E, T>,
@@ -14,34 +19,47 @@ pub struct EventSpy<E: Event, T: Topic<E>> {
 impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     pub(crate) fn new(records: EventRecords<E, T>, id: impl Into<EventId>) -> Self {
         let id = id.into();
-        let query = EventQuery::new(records.clone()).with_event(id);
+        let query = EventQuery::new(records.clone()).with_id(id);
         Self { id, records, query }
     }
 
+    /// Returns true if the event was delivered to at least one actor.
     pub fn was_delivered(&self) -> bool {
         !self.query.is_empty()
     }
 
+    /// Returns true if the event was delivered to the specified actor.
+    pub fn was_delivered_to(&self, actor: &ActorHandle) -> bool {
+        self.query.clone().received_by(actor).count() > 0
+    }
+
+    /// Returns the name of the actor that sent this event.
     pub fn sender(&self) -> Arc<str> {
         self.query
-            .iter()
-            .find(|e| self.id == e.event.id())
-            .map(|e| e.event.meta().actor_name.clone())
-            .expect("sender must exist in EventSpy")
+            .first()
+            .map(|e| e.meta().actor_name.clone())
+            .expect("EventSpy must have at least one delivery record")
     }
 
-    pub fn was_delivered_to(&self, actor: &ActorHandle) -> bool {
-        self.query.any(|e| e.actor_name.as_ref() == actor.name())
-    }
-
+    /// Returns the number of actors that received this event.
     pub fn receivers_count(&self) -> usize {
         self.receivers().len()
     }
 
+    /// Returns the names of actors that received this event.
     pub fn receivers(&self) -> Vec<Arc<str>> {
-        spy_utils::distinct(self.query.iter(), |e| e.actor_name.clone())
+        use std::collections::HashSet;
+        self.query
+            .iter()
+            .map(|e| e.actor_name.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect()
     }
 
+    /// Returns a query for child events (events correlated to this one).
+    ///
+    /// Child events are those whose `correlation_id` matches this event's `id`.
     pub fn children(&self) -> EventQuery<E, T> {
         EventQuery::new(self.records.clone()).correlated_with(self.id)
     }

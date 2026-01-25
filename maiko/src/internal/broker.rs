@@ -127,7 +127,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Event, Topic, internal::broker::Broker, test_harness::init_harness};
+    use crate::{Event, Topic, internal::broker::Broker};
     use std::{collections::HashSet, sync::Arc};
     use tokio::sync::mpsc;
     use tokio_util::sync::CancellationToken;
@@ -158,8 +158,7 @@ mod tests {
         let (tx, rx) = mpsc::channel(10);
         let config = Arc::new(crate::Config::default());
         let cancel_token = Arc::new(CancellationToken::new());
-        let (harness, harness_tx) = init_harness();
-        let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config, harness_tx);
+        let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config);
         let subscriber = super::Subscriber::new(
             Arc::from("subscriber1"),
             HashSet::from([TestTopic::A]),
