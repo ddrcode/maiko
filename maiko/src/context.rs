@@ -94,24 +94,18 @@ impl<E: Event> Context<E> {
 
     /// Returns a future that never completes.
     ///
-    /// Use this in [`Actor::tick`](crate::Actor::tick) when you don't need periodic logic
-    /// and want your actor to be purely event-driven:
+    /// **Note:** This method is largely obsolete. The default `step()` implementation
+    /// now returns `StepAction::Never`, which disables stepping entirely. You only need
+    /// `pending()` if you want to block inside a custom `step()` implementation.
     ///
     /// ```rust,ignore
-    /// impl Actor for MyEventProcessor {
-    ///     async fn tick(&mut self) -> Result<()> {
-    ///         self.ctx.pending().await  // Never returns - only reacts to events
-    ///     }
-    ///
-    ///     async fn handle(&mut self, event: &Event, meta: &Meta) -> Result<()> {
-    ///         // All logic here - purely reactive
-    ///         process(event).await
-    ///     }
+    /// // Prefer this (default behavior):
+    /// async fn step(&mut self) -> Result<StepAction> {
+    ///     Ok(StepAction::Never)
     /// }
-    /// ```
     ///
-    /// This is more ergonomic than `std::future::pending()` and matches the
-    /// `Result<()>` return type expected by `tick()`.
+    /// // Or simply don't implement step() at all - it defaults to Never
+    /// ```
     #[inline]
     pub async fn pending(&self) -> Result<()> {
         std::future::pending::<()>().await;

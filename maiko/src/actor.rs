@@ -5,20 +5,41 @@ use crate::{Envelope, Error, Event, Result, StepAction};
 
 /// Core trait implemented by user-defined actors.
 ///
-/// An actor processes incoming events and can optionally perform periodic
-/// work in `tick`, as well as lifecycle hooks in `on_start` and `on_shutdown`.
+/// Actors are independent units that encapsulate state and process events sequentially.
+/// Each actor has its own mailbox (channel) and processes one event at a time,
+/// eliminating the need for locks or shared state synchronization.
 ///
-/// Implementors typically hold any state they need, and use the runtime-provided
-/// `Context<E>` (via a constructor/factory passed to `Supervisor::add_actor`) to
-/// emit events and stop gracefully.
+/// # Core Methods
 ///
-/// Ergonomics:
-/// - Although the trait methods return futures, you can implement them as `async fn`
-///   with a simple `Result<()>` return. The compiler will produce the appropriate
-///   future type automatically.
-/// - No `#[async_trait]` is required.
+/// - [`handle_event`](Self::handle_event) — Process incoming events (reactive)
+/// - [`step`](Self::step) — Perform periodic work or produce events (proactive)
 ///
-/// See also: [`crate::Context`], [`crate::Supervisor`].
+/// # Lifecycle Hooks
+///
+/// - [`on_start`](Self::on_start) — Called once before the event loop starts
+/// - [`on_shutdown`](Self::on_shutdown) — Called once after the event loop stops
+/// - [`on_error`](Self::on_error) — Handle errors (swallow or propagate)
+///
+/// # Context (Optional)
+///
+/// Actors that need to send events or stop themselves should store a [`Context<E>`](crate::Context)
+/// received from their factory function. Pure event consumers don't need context:
+///
+/// ```ignore
+/// // Pure consumer - no context needed
+/// struct Logger;
+/// impl Actor for Logger { /* ... */ }
+///
+/// // Producer - stores context to send events
+/// struct Producer { ctx: Context<MyEvent> }
+/// ```
+///
+/// # Ergonomics
+///
+/// Methods return futures but can be implemented as `async fn` directly.
+/// No `#[async_trait]` macro is required.
+///
+/// See also: [`Context`](crate::Context), [`Supervisor`](crate::Supervisor), [`Envelope`](crate::Envelope).
 pub trait Actor: Send + 'static {
     type Event: Event + Send;
 
@@ -54,57 +75,47 @@ pub trait Actor: Send + 'static {
         async { Ok(()) }
     }
 
-    /// Optional periodic work called when the event queue is empty.
+    /// Optional periodic work or event production.
     ///
-    /// Equivalent to:
+    /// Returns a [`StepAction`] to control when `step` runs again:
     ///
-    /// ```ignore
-    /// async fn tick(&mut self) -> Result<()>;
-    /// ```
-    ///
-    /// This runs in a `select!` loop alongside event reception. What you `.await`
-    /// inside `tick()` determines when your actor wakes up.
+    /// | Action | Behavior |
+    /// |--------|----------|
+    /// | `StepAction::Continue` | Run step again immediately |
+    /// | `StepAction::Yield` | Yield to runtime, then run again |
+    /// | `StepAction::AwaitEvent` | Pause until next event arrives |
+    /// | `StepAction::Backoff(Duration)` | Sleep, then run again |
+    /// | `StepAction::Never` | Disable step permanently (default) |
     ///
     /// # Common Patterns
     ///
     /// **Time-Based Producer** (polls periodically):
     /// ```rust,ignore
-    /// async fn tick(&mut self) -> Result<()> {
-    ///     tokio::time::sleep(Duration::from_secs(1)).await;
-    ///     let data = generate_data();
-    ///     self.ctx.send(DataEvent(data)).await
+    /// async fn step(&mut self) -> Result<StepAction> {
+    ///     self.ctx.send(HeartbeatEvent).await?;
+    ///     Ok(StepAction::Backoff(Duration::from_secs(5)))
     /// }
     /// ```
     ///
     /// **External Event Source** (driven by I/O):
     /// ```rust,ignore
-    /// async fn tick(&mut self) -> Result<()> {
+    /// async fn step(&mut self) -> Result<StepAction> {
     ///     let frame = self.websocket.read().await?;
-    ///     self.ctx.send(WebSocketEvent(frame)).await
+    ///     self.ctx.send(WebSocketEvent(frame)).await?;
+    ///     Ok(StepAction::Continue)
     /// }
     /// ```
     ///
-    /// **Housekeeping Only** (runs after processing events):
+    /// **Pure Event Processor** (no step logic needed):
     /// ```rust,ignore
-    /// async fn tick(&mut self) -> Result<()> {
-    ///     if self.should_flush() {
-    ///         self.flush_buffer().await?;
-    ///     }
-    ///     Ok(())  // Returns immediately
-    /// }
-    /// ```
-    ///
-    /// **No Periodic Logic** (pure event processor):
-    /// ```rust,ignore
-    /// async fn tick(&mut self) -> Result<()> {
-    ///     self.ctx.pending().await  // Never returns - actor only reacts to events
+    /// async fn step(&mut self) -> Result<StepAction> {
+    ///     Ok(StepAction::Never)  // Default behavior
     /// }
     /// ```
     ///
     /// # Default Behavior
     ///
-    /// The default implementation returns a pending future that never completes,
-    /// making the actor purely event-driven with no periodic work.
+    /// Returns `StepAction::Never`, making the actor purely event-driven.
     fn step(&mut self) -> impl Future<Output = Result<StepAction>> + Send {
         async { Ok(StepAction::Never) }
     }
@@ -131,13 +142,7 @@ pub trait Actor: Send + 'static {
         async { Ok(()) }
     }
 
-    /// Called when an error is returned by [`handle`](Actor::handle) or [`tick`](Actor::tick).
-    ///
-    /// Equivalent to:
-    ///
-    /// ```ignore
-    /// async fn on_error(&self, error: Error) -> Result<()>;
-    /// ```
+    /// Called when an error is returned by [`handle_event`](Self::handle_event) or [`step`](Self::step).
     ///
     /// Return `Ok(())` to swallow the error and continue processing,
     /// or `Err(error)` to propagate and stop the actor.
@@ -147,7 +152,7 @@ pub trait Actor: Send + 'static {
     /// By default, all errors propagate (actor stops). Override this to implement
     /// custom error handling, logging, or recovery logic.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```rust
     /// use maiko::{Actor, Error, Event, Result};
