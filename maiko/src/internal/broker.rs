@@ -44,8 +44,10 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     pub(crate) fn add_subscriber(&mut self, subscriber: Subscriber<E, T>) -> Result<()> {
-        if self.subscribers.iter().any(|s| s.name == subscriber.name) {
-            return Err(Error::SubscriberAlreadyExists(subscriber.name.clone()));
+        if self.subscribers.iter().any(|s| *s == subscriber) {
+            return Err(Error::SubscriberAlreadyExists(
+                subscriber.handle.name.clone(),
+            ));
         }
         self.subscribers.push(subscriber);
         Ok(())

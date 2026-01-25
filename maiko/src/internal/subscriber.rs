@@ -2,25 +2,31 @@ use std::{collections::HashSet, sync::Arc};
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{Envelope, Event, Topic};
+use crate::{ActorHandle, Envelope, Event, Topic};
 
 #[derive(Debug)]
 pub(crate) struct Subscriber<E: Event, T: Topic<E>> {
-    pub name: Arc<str>,
+    pub handle: ActorHandle,
     pub topics: HashSet<T>,
     pub sender: Sender<Arc<Envelope<E>>>,
 }
 
 impl<E: Event, T: Topic<E>> Subscriber<E, T> {
     pub fn new(
-        name: Arc<str>,
+        handle: ActorHandle,
         topics: HashSet<T>,
         sender: Sender<Arc<Envelope<E>>>,
     ) -> Subscriber<E, T> {
         Subscriber {
-            name,
+            handle,
             topics,
             sender,
         }
+    }
+}
+
+impl<E: Event, T: Topic<E>> PartialEq for Subscriber<E, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.handle == other.handle
     }
 }

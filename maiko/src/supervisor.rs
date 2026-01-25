@@ -54,6 +54,7 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
     start_notifier: Arc<Notify>,
+    last_actor_id: u64,
 
     #[cfg(feature = "test-harness")]
     harness: Option<crate::testing::Harness<E, T>>,
@@ -76,6 +77,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             cancel_token,
             broker_cancel_token,
             start_notifier: Arc::new(Notify::new()),
+            last_actor_id: 0,
 
             #[cfg(feature = "test-harness")]
             harness: None,
@@ -154,9 +156,14 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
 
-        let subscriber = Subscriber::<E, T>::new(ctx.clone_name(), topics, tx);
+        let handle = {
+            self.last_actor_id += 1;
+            let id = self.last_actor_id;
+            ActorHandle::new(id, ctx.clone_name())
+        };
+
+        let subscriber = Subscriber::<E, T>::new(handle.clone(), topics, tx);
         broker.add_subscriber(subscriber)?;
-        let handle = ActorHandle::new(ctx.clone_name());
 
         let mut controller = ActorController {
             actor,
