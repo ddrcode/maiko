@@ -51,13 +51,13 @@ impl Config {
     ///
     /// This controls batching behavior in the actor event loop.
     /// After processing this many events, the actor yields to allow
-    /// other tasks to run and to call [`Actor::tick`].
+    /// other tasks to run and to call [`Actor::step`].
     ///
     /// Trade-offs:
-    /// - Lower values (1-5): Better fairness, more responsive `tick()`, higher overhead
-    /// - Higher values (50-100): Better throughput, potential starvation of `tick()`
+    /// - Lower values (1-5): Better fairness, more responsive `step()`, higher overhead
+    /// - Higher values (50-100): Better throughput, potential starvation of `step()`
     ///
-    /// [`Actor::tick`]: crate::Actor::tick
+    /// [`Actor::step`]: crate::Actor::step
     pub fn with_max_events_per_tick(mut self, limit: usize) -> Self {
         self.max_events_per_tick = limit;
         self

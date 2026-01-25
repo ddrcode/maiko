@@ -1,17 +1,20 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
-use crate::{Event, Meta};
+use crate::{Event, EventId, Meta};
 
 /// Event plus metadata used by the broker for routing and observability.
 ///
 /// - `event`: the user-defined payload implementing `Event`.
 /// - `meta`: `Meta` describing who emitted the event and when.
 ///   Includes `actor_name` and optional `correlation_id` for linking related events.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
     feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(bound = "")
+    serde(bound(
+        serialize = "E: serde::Serialize",
+        deserialize = "E: serde::de::DeserializeOwned"
+    ))
 )]
 pub struct Envelope<E: Event> {
     meta: Meta,
@@ -20,10 +23,7 @@ pub struct Envelope<E: Event> {
 
 impl<E: Event> Envelope<E> {
     /// Create a new envelope tagging the event with the given actor name.
-    pub fn new<N>(event: E, actor_name: N) -> Self
-    where
-        N: Into<Arc<str>>,
-    {
+    pub fn new(event: E, actor_name: impl Into<Arc<str>>) -> Self {
         Self {
             meta: Meta::new(actor_name.into(), None),
             event,
@@ -33,10 +33,11 @@ impl<E: Event> Envelope<E> {
     /// Create a new envelope with an explicit correlation id.
     ///
     /// Use this to link child events to a parent or to group related flows.
-    pub fn with_correlation<N>(event: E, actor_name: N, correlation_id: u128) -> Self
-    where
-        N: Into<Arc<str>>,
-    {
+    pub fn with_correlation(
+        event: E,
+        actor_name: impl Into<Arc<str>>,
+        correlation_id: EventId,
+    ) -> Self {
         Self {
             meta: Meta::new(actor_name.into(), Some(correlation_id)),
             event,
@@ -65,6 +66,11 @@ impl<E: Event> Envelope<E> {
     pub fn meta(&self) -> &Meta {
         &self.meta
     }
+
+    #[inline]
+    pub fn id(&self) -> EventId {
+        self.meta.id()
+    }
 }
 
 impl<E: Event> From<(&E, &Meta)> for Envelope<E> {
@@ -80,5 +86,38 @@ impl<E: Event> std::ops::Deref for Envelope<E> {
     type Target = E;
     fn deref(&self) -> &E {
         &self.event
+    }
+}
+
+// Debug is implemented only when E: Debug.
+// This allows Envelope to be used with non-Debug events while still providing
+// full debug output when the event type supports it.
+impl<E: Event + fmt::Debug> fmt::Debug for Envelope<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Envelope")
+            .field("id", &self.meta.id())
+            .field("sender", &self.meta.actor_name())
+            .field("event", &self.event)
+            .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Debug)]
+    #[allow(unused)]
+    struct TestEvent(i32);
+    impl Event for TestEvent {}
+
+    #[test]
+    fn envelope_debug() {
+        let envelope = Envelope::new(TestEvent(42), "test-actor");
+        let debug_str = format!("{:?}", envelope);
+
+        assert!(debug_str.contains("TestEvent"));
+        assert!(debug_str.contains("42"));
+        assert!(debug_str.contains("test-actor"));
     }
 }

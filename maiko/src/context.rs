@@ -5,7 +5,7 @@ use std::sync::{
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{Envelope, Event, Meta, Result};
+use crate::{Envelope, Event, EventId, Meta, Result};
 
 /// Runtime-provided context for an actor to interact with the system.
 ///
@@ -28,15 +28,23 @@ pub struct Context<E: Event> {
 }
 
 impl<E: Event> Context<E> {
+    pub fn new(name: Arc<str>, sender: Sender<Arc<Envelope<E>>>, alive: Arc<AtomicBool>) -> Self {
+        Self {
+            name,
+            sender,
+            alive,
+        }
+    }
+
     /// Send an event to the broker. The envelope will carry this actor's name.
     /// This awaits channel capacity (backpressure) to avoid silent drops.
     pub async fn send(&self, event: E) -> Result<()> {
-        self.send_envelope(Envelope::new(event, self.name.clone()))
-            .await
+        let envelope = Envelope::new(event, self.name.clone());
+        self.send_envelope(envelope).await
     }
 
     /// Send an event with an explicit correlation id.
-    pub async fn send_with_correlation(&self, event: E, correlation_id: u128) -> Result<()> {
+    pub async fn send_with_correlation(&self, event: E, correlation_id: EventId) -> Result<()> {
         self.send_envelope(Envelope::with_correlation(
             event,
             self.name.clone(),
@@ -86,24 +94,18 @@ impl<E: Event> Context<E> {
 
     /// Returns a future that never completes.
     ///
-    /// Use this in [`Actor::tick`](crate::Actor::tick) when you don't need periodic logic
-    /// and want your actor to be purely event-driven:
+    /// **Note:** This method is largely obsolete. The default `step()` implementation
+    /// now returns `StepAction::Never`, which disables stepping entirely. You only need
+    /// `pending()` if you want to block inside a custom `step()` implementation.
     ///
     /// ```rust,ignore
-    /// impl Actor for MyEventProcessor {
-    ///     async fn tick(&mut self) -> Result<()> {
-    ///         self.ctx.pending().await  // Never returns - only reacts to events
-    ///     }
-    ///
-    ///     async fn handle(&mut self, event: &Event, meta: &Meta) -> Result<()> {
-    ///         // All logic here - purely reactive
-    ///         process(event).await
-    ///     }
+    /// // Prefer this (default behavior):
+    /// async fn step(&mut self) -> Result<StepAction> {
+    ///     Ok(StepAction::Never)
     /// }
-    /// ```
     ///
-    /// This is more ergonomic than `std::future::pending()` and matches the
-    /// `Result<()>` return type expected by `tick()`.
+    /// // Or simply don't implement step() at all - it defaults to Never
+    /// ```
     #[inline]
     pub async fn pending(&self) -> Result<()> {
         std::future::pending::<()>().await;

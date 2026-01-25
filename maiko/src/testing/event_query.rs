@@ -1,0 +1,395 @@
+use std::rc::Rc;
+
+use crate::{
+    ActorHandle, Event, EventId, Topic,
+    testing::{EventEntry, EventRecords},
+};
+
+type Filter<E, T> = Rc<dyn Fn(&EventEntry<E, T>) -> bool>;
+
+/// A composable query builder for filtering and inspecting recorded events.
+///
+/// `EventQuery` provides a fluent API for filtering events by various criteria
+/// (sender, receiver, topic, correlation, timing) and terminal operations for
+/// inspection (count, iteration, assertions).
+///
+/// # Example
+///
+/// ```ignore
+/// let orders = test.events()
+///     .sent_by(&trader)
+///     .with_topic(MarketTopic::Order)
+///     .after(&initial_tick)
+///     .count();
+/// ```
+#[derive(Clone)]
+pub struct EventQuery<E: Event, T: Topic<E>> {
+    events: EventRecords<E, T>,
+    filters: Vec<Filter<E, T>>,
+}
+
+impl<E: Event, T: Topic<E>> EventQuery<E, T> {
+    pub(crate) fn new(events: EventRecords<E, T>) -> Self {
+        Self {
+            events,
+            filters: Vec::new(),
+        }
+    }
+
+    fn add_filter<F>(&mut self, filter: F)
+    where
+        F: Fn(&EventEntry<E, T>) -> bool + 'static,
+    {
+        self.filters.push(Rc::new(filter));
+    }
+
+    fn apply_filters(&self) -> Vec<&EventEntry<E, T>> {
+        self.events
+            .iter()
+            .filter(|e| self.filters.iter().all(|f| f(e)))
+            .collect()
+    }
+
+    // ==================== Terminal Operations ====================
+
+    /// Returns the number of events matching all filters.
+    pub fn count(&self) -> usize {
+        self.apply_filters().len()
+    }
+
+    /// Returns true if no events match the filters.
+    pub fn is_empty(&self) -> bool {
+        self.apply_filters().is_empty()
+    }
+
+    /// Returns the first matching event, if any.
+    pub fn first(&self) -> Option<EventEntry<E, T>> {
+        self.apply_filters().first().cloned().cloned()
+    }
+
+    /// Returns the last matching event, if any.
+    pub fn last(&self) -> Option<EventEntry<E, T>> {
+        self.apply_filters().last().cloned().cloned()
+    }
+
+    /// Returns the nth matching event (0-indexed), if any.
+    pub fn nth(&self, index: usize) -> Option<EventEntry<E, T>> {
+        self.apply_filters().get(index).cloned().cloned()
+    }
+
+    /// Collects all matching events into a Vec.
+    pub fn collect(&self) -> Vec<EventEntry<E, T>> {
+        self.apply_filters().into_iter().cloned().collect()
+    }
+
+    /// Returns true if all matching events satisfy the predicate.
+    pub fn all(&self, predicate: impl Fn(&EventEntry<E, T>) -> bool) -> bool {
+        self.apply_filters().into_iter().all(predicate)
+    }
+
+    /// Returns true if any matching event satisfies the predicate.
+    pub fn any(&self, predicate: impl Fn(&EventEntry<E, T>) -> bool) -> bool {
+        self.apply_filters().into_iter().any(predicate)
+    }
+
+    /// Returns an iterator over references to matching events.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &EventEntry<E, T>> {
+        self.apply_filters().into_iter()
+    }
+
+    // ==================== Filter Operations ====================
+
+    /// Filter to events sent by the specified actor.
+    pub fn sent_by(mut self, actor: &ActorHandle) -> Self {
+        let actor = actor.clone();
+        self.add_filter(move |e| e.sender_actor_eq(&actor));
+        self
+    }
+
+    /// Filter to events received by the specified actor.
+    pub fn received_by(mut self, actor: &ActorHandle) -> Self {
+        let actor = actor.clone();
+        self.add_filter(move |e| e.receiver_actor_eq(&actor));
+        self
+    }
+
+    /// Filter to events with the specified topic.
+    pub fn with_topic(mut self, topic: T) -> Self {
+        self.add_filter(move |e| e.topic == topic);
+        self
+    }
+
+    /// Filter to a specific event by ID.
+    pub fn with_id(mut self, id: impl Into<EventId>) -> Self {
+        let id = id.into();
+        self.add_filter(move |e| e.event.id() == id);
+        self
+    }
+
+    /// Filter using a custom predicate on the event entry.
+    pub fn matching<F>(mut self, predicate: F) -> Self
+    where
+        F: Fn(&EventEntry<E, T>) -> bool + 'static,
+    {
+        self.add_filter(predicate);
+        self
+    }
+
+    /// Filter using a custom predicate on the event payload.
+    ///
+    /// This is a convenience method for filtering by event content without
+    /// needing to navigate through the EventEntry structure.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let orders = test.events()
+    ///     .matching_event(|e| matches!(e, MarketEvent::Order(_)))
+    ///     .count();
+    /// ```
+    pub fn matching_event<F>(mut self, predicate: F) -> Self
+    where
+        F: Fn(&E) -> bool + 'static,
+    {
+        self.add_filter(move |entry| predicate(entry.payload()));
+        self
+    }
+
+    /// Filter to events occurring after the given event (by timestamp).
+    pub fn after(mut self, event: &EventEntry<E, T>) -> Self {
+        let timestamp = event.meta().timestamp();
+        self.add_filter(move |e| e.meta().timestamp() > timestamp);
+        self
+    }
+
+    /// Filter to events occurring before the given event (by timestamp).
+    pub fn before(mut self, event: &EventEntry<E, T>) -> Self {
+        let timestamp = event.meta().timestamp();
+        self.add_filter(move |e| e.meta().timestamp() < timestamp);
+        self
+    }
+
+    /// Filter to events correlated with the given event ID (children).
+    pub fn correlated_with(mut self, id: impl Into<EventId>) -> Self {
+        let parent_id = id.into();
+        self.add_filter(move |e| e.meta().correlation_id() == Some(parent_id));
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DefaultTopic, Envelope, Event};
+    use std::sync::Arc;
+
+    #[derive(Clone, Debug)]
+    enum TestEvent {
+        Ping,
+        Pong,
+        Data(i32),
+    }
+    impl Event for TestEvent {}
+
+    fn make_entry(
+        event: TestEvent,
+        sender: &str,
+        receiver: &str,
+    ) -> EventEntry<TestEvent, DefaultTopic> {
+        let envelope = Arc::new(Envelope::new(event, sender));
+        EventEntry::new(envelope, DefaultTopic, Arc::from(receiver))
+    }
+
+    fn sample_records() -> EventRecords<TestEvent, DefaultTopic> {
+        Arc::new(vec![
+            make_entry(TestEvent::Ping, "alice", "bob"),
+            make_entry(TestEvent::Pong, "bob", "alice"),
+            make_entry(TestEvent::Data(42), "alice", "bob"),
+            make_entry(TestEvent::Data(42), "alice", "charlie"),
+            make_entry(TestEvent::Ping, "charlie", "alice"),
+        ])
+    }
+
+    #[test]
+    fn count_returns_total_entries() {
+        let query = EventQuery::new(sample_records());
+        assert_eq!(query.count(), 5);
+    }
+
+    #[test]
+    fn is_empty_returns_false_when_records_exist() {
+        let query = EventQuery::new(sample_records());
+        assert!(!query.is_empty());
+    }
+
+    #[test]
+    fn is_empty_returns_true_for_empty_records() {
+        let query: EventQuery<TestEvent, DefaultTopic> = EventQuery::new(Arc::new(vec![]));
+        assert!(query.is_empty());
+    }
+
+    #[test]
+    fn first_returns_first_entry() {
+        let query = EventQuery::new(sample_records());
+        let first = query.first().unwrap();
+        assert_eq!(first.sender(), "alice");
+        assert_eq!(first.receiver(), "bob");
+        assert!(matches!(first.payload(), TestEvent::Ping));
+    }
+
+    #[test]
+    fn last_returns_last_entry() {
+        let query = EventQuery::new(sample_records());
+        let last = query.last().unwrap();
+        assert_eq!(last.sender(), "charlie");
+        assert_eq!(last.receiver(), "alice");
+    }
+
+    #[test]
+    fn nth_returns_correct_entry() {
+        let query = EventQuery::new(sample_records());
+        let second = query.nth(1).unwrap();
+        assert_eq!(second.sender(), "bob");
+        assert!(matches!(second.payload(), TestEvent::Pong));
+    }
+
+    #[test]
+    fn nth_returns_none_for_out_of_bounds() {
+        let query = EventQuery::new(sample_records());
+        assert!(query.nth(100).is_none());
+    }
+
+    #[test]
+    fn collect_returns_all_matching() {
+        let query = EventQuery::new(sample_records());
+        let all = query.collect();
+        assert_eq!(all.len(), 5);
+    }
+
+    #[test]
+    fn sent_by_filters_by_sender() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let query = EventQuery::new(sample_records()).sent_by(&alice);
+        assert_eq!(query.count(), 3);
+        assert!(query.all(|e| e.sender() == "alice"));
+    }
+
+    #[test]
+    fn received_by_filters_by_receiver() {
+        let bob = ActorHandle::new(Arc::from("bob"));
+        let query = EventQuery::new(sample_records()).received_by(&bob);
+        assert_eq!(query.count(), 2);
+        assert!(query.all(|e| e.receiver() == "bob"));
+    }
+
+    #[test]
+    fn with_topic_filters_by_topic() {
+        let query = EventQuery::new(sample_records()).with_topic(DefaultTopic);
+        // All entries have DefaultTopic
+        assert_eq!(query.count(), 5);
+    }
+
+    #[test]
+    fn with_id_filters_by_event_id() {
+        // Create same event delivered to multiple actors
+        let envelope = Arc::new(Envelope::new(TestEvent::Data(42), "alice"));
+        let target_id = envelope.id();
+        let records = Arc::new(vec![
+            make_entry(TestEvent::Ping, "bob", "charlie"),
+            EventEntry::new(envelope.clone(), DefaultTopic, Arc::from("bob")),
+            EventEntry::new(envelope, DefaultTopic, Arc::from("charlie")),
+        ]);
+        let query = EventQuery::new(records).with_id(target_id);
+        // Same event delivered to bob and charlie
+        assert_eq!(query.count(), 2);
+    }
+
+    #[test]
+    fn matching_applies_custom_predicate() {
+        let query = EventQuery::new(sample_records()).matching(|e| e.sender() == "bob");
+        assert_eq!(query.count(), 1);
+    }
+
+    #[test]
+    fn matching_event_filters_by_payload() {
+        let query =
+            EventQuery::new(sample_records()).matching_event(|e| matches!(e, TestEvent::Data(_)));
+        assert_eq!(query.count(), 2);
+    }
+
+    #[test]
+    fn all_returns_true_when_all_match() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let query = EventQuery::new(sample_records()).sent_by(&alice);
+        assert!(query.all(|e| e.sender() == "alice"));
+    }
+
+    #[test]
+    fn all_returns_false_when_any_doesnt_match() {
+        let query = EventQuery::new(sample_records());
+        assert!(!query.all(|e| e.sender() == "alice"));
+    }
+
+    #[test]
+    fn any_returns_true_when_some_match() {
+        let query = EventQuery::new(sample_records());
+        assert!(query.any(|e| matches!(e.payload(), TestEvent::Pong)));
+    }
+
+    #[test]
+    fn any_returns_false_when_none_match() {
+        let query = EventQuery::new(sample_records());
+        assert!(!query.any(|e| matches!(e.payload(), TestEvent::Data(999))));
+    }
+
+    #[test]
+    fn chained_filters_combine() {
+        let alice = ActorHandle::new(Arc::from("alice"));
+        let bob = ActorHandle::new(Arc::from("bob"));
+        let query = EventQuery::new(sample_records())
+            .sent_by(&alice)
+            .received_by(&bob);
+        assert_eq!(query.count(), 2);
+    }
+
+    #[test]
+    fn after_filters_by_timestamp() {
+        let records = sample_records();
+        let pivot = records[1].clone();
+        let query = EventQuery::new(records).after(&pivot);
+        // Events after the second one (indices 2, 3, 4)
+        assert_eq!(query.count(), 3);
+    }
+
+    #[test]
+    fn before_filters_by_timestamp() {
+        let records = sample_records();
+        let pivot = records[3].clone();
+        let query = EventQuery::new(records).before(&pivot);
+        // Events before index 3 (indices 0, 1, 2)
+        assert_eq!(query.count(), 3);
+    }
+
+    #[test]
+    fn correlated_with_filters_children() {
+        // Create a parent event and a child correlated to it
+        let parent_envelope = Arc::new(Envelope::new(TestEvent::Ping, "alice"));
+        let parent_id = parent_envelope.id();
+        let parent = EventEntry::new(parent_envelope, DefaultTopic, Arc::from("bob"));
+
+        let child_envelope = Arc::new(Envelope::with_correlation(
+            TestEvent::Pong,
+            "bob",
+            parent_id,
+        ));
+        let child = EventEntry::new(child_envelope, DefaultTopic, Arc::from("alice"));
+
+        let unrelated_envelope = Arc::new(Envelope::new(TestEvent::Data(1), "charlie"));
+        let unrelated = EventEntry::new(unrelated_envelope, DefaultTopic, Arc::from("alice"));
+
+        let records = Arc::new(vec![parent, child, unrelated]);
+        let query = EventQuery::new(records).correlated_with(parent_id);
+        assert_eq!(query.count(), 1);
+        assert!(query.first().unwrap().sender() == "bob");
+    }
+}

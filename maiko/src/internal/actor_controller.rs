@@ -8,7 +8,7 @@ use crate::{
     internal::{StepHandler, StepPause},
 };
 
-pub(crate) struct ActorHandler<A: Actor> {
+pub(crate) struct ActorController<A: Actor> {
     pub(crate) actor: A,
     pub(crate) receiver: Receiver<Arc<Envelope<A::Event>>>,
     pub(crate) ctx: Context<A::Event>,
@@ -16,7 +16,7 @@ pub(crate) struct ActorHandler<A: Actor> {
     pub(crate) cancel_token: Arc<CancellationToken>,
 }
 
-impl<A: Actor> ActorHandler<A> {
+impl<A: Actor> ActorController<A> {
     pub async fn run(&mut self) -> Result<()> {
         self.actor.on_start().await?;
         let token = self.cancel_token.clone();

@@ -6,11 +6,23 @@ use tokio_util::sync::CancellationToken;
 use super::Subscriber;
 use crate::{Config, Envelope, Error, Event, Result, Topic};
 
+#[cfg(feature = "test-harness")]
+use std::sync::atomic::Ordering;
+
+#[cfg(feature = "test-harness")]
+use crate::testing::{EventEntry, RecordingFlag, TestEvent};
+
 pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Arc<Envelope<E>>>,
     subscribers: Vec<Subscriber<E, T>>,
     cancel_token: Arc<CancellationToken>,
     config: Arc<Config>,
+
+    #[cfg(feature = "test-harness")]
+    test_sender: Option<tokio::sync::mpsc::Sender<TestEvent<E, T>>>,
+
+    #[cfg(feature = "test-harness")]
+    recording: Option<RecordingFlag>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
@@ -24,6 +36,10 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             subscribers: Vec::new(),
             cancel_token,
             config,
+            #[cfg(feature = "test-harness")]
+            test_sender: None,
+            #[cfg(feature = "test-harness")]
+            recording: None,
         }
     }
 
@@ -37,25 +53,64 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<()> {
         let topic = Topic::from_event(e.event());
+
+        #[cfg(feature = "test-harness")]
+        let is_recording = self
+            .recording
+            .as_ref()
+            .map(|r| r.load(Ordering::Acquire))
+            .unwrap_or(false);
+
         self.subscribers
             .iter()
             .filter(|s| s.topics.contains(&topic))
             .filter(|s| !s.sender.is_closed())
             .filter(|s| !Arc::ptr_eq(&s.name, &e.meta().actor_name))
-            .try_for_each(|subscriber| subscriber.sender.try_send(e.clone()))?;
+            .try_for_each(|subscriber| {
+                let res = subscriber.sender.try_send(e.clone());
+                #[cfg(feature = "test-harness")]
+                if is_recording {
+                    if let Some(ref sender) = self.test_sender {
+                        let _ = sender.try_send(TestEvent::Event(EventEntry::new(
+                            e.clone(),
+                            topic.clone(),
+                            subscriber.name.clone(),
+                        )));
+                    }
+                }
+                res
+            })?;
         Ok(())
     }
 
     pub async fn run(&mut self) -> Result<()> {
         let mut cleanup_interval = tokio::time::interval(self.config.maintenance_interval);
+        let mut idle_interval = if cfg!(feature = "test-harness") {
+            tokio::time::interval(tokio::time::Duration::from_millis(5))
+        } else {
+            tokio::time::interval(tokio::time::Duration::MAX)
+        };
+        #[cfg(feature = "test-harness")]
+        let mut idle = true;
         loop {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
+                    #[cfg(feature = "test-harness")]
+                    { idle = false; }
                     self.send_event(&e)?;
                 },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
+                }
+                _ = idle_interval.tick() => {
+                    #[cfg(feature = "test-harness")]
+                    if !idle && self.is_empty() {
+                        idle = true;
+                        if let Some(ref sender) = self.test_sender {
+                            let _ = sender.try_send(TestEvent::Idle);
+                        }
+                    }
                 }
             }
         }
@@ -69,6 +124,11 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     async fn shutdown(&mut self) {
         use tokio::time::*;
+
+        #[cfg(feature = "test-harness")]
+        if let Some(ref sender) = self.test_sender {
+            let _ = sender.send(TestEvent::Exit).await;
+        }
 
         // Send messages that were in the queue at the time of shutdown
         for _ in 0..self.receiver.len() {
@@ -93,6 +153,16 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         self.subscribers
             .iter()
             .all(|s| s.sender.is_closed() || s.sender.capacity() == s.sender.max_capacity())
+    }
+
+    #[cfg(feature = "test-harness")]
+    pub(crate) fn set_test_sender(
+        &mut self,
+        sender: tokio::sync::mpsc::Sender<TestEvent<E, T>>,
+        recording: RecordingFlag,
+    ) {
+        self.test_sender = Some(sender);
+        self.recording = Some(recording);
     }
 }
 

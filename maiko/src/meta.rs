@@ -2,6 +2,8 @@ use std::{sync::Arc, time::SystemTime};
 
 use uuid::Uuid;
 
+use crate::EventId;
+
 /// Metadata attached to every event envelope.
 ///
 /// - `id`: unique identifier for the envelope.
@@ -17,18 +19,15 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Meta {
-    id: u128,
+    id: EventId,
     timestamp: u64,
     pub(crate) actor_name: Arc<str>, // FIXME used by broker
-    correlation_id: Option<u128>,
+    correlation_id: Option<EventId>,
 }
 
 impl Meta {
     /// Construct metadata for a given actor name and optional correlation id.
-    pub fn new<N>(actor_name: N, correlation_id: Option<u128>) -> Self
-    where
-        N: Into<Arc<str>>,
-    {
+    pub fn new(actor_name: impl Into<Arc<str>>, correlation_id: Option<EventId>) -> Self {
         Self {
             id: Uuid::new_v4().as_u128(),
             timestamp: SystemTime::now()
@@ -41,7 +40,7 @@ impl Meta {
     }
 
     /// Unique identifier for this envelope.
-    pub fn id(&self) -> u128 {
+    pub fn id(&self) -> EventId {
         self.id
     }
 
@@ -57,7 +56,7 @@ impl Meta {
 
     /// Optional value of correlation data.
     /// It might by a parent event id, but it's up to the user to define its meaning.
-    pub fn correlation_id(&self) -> Option<u128> {
+    pub fn correlation_id(&self) -> Option<EventId> {
         self.correlation_id
     }
 }

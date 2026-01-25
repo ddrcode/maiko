@@ -14,40 +14,19 @@
 
 ## What is Maiko?
 
-**Maiko** is an in-process event bus for Tokio applications. It provides topic-based pub/sub routing where independent handlers ("actors") subscribe to event topics and communicate through a central broker—similar to Kafka, but lightweight and embedded in your application.
+**Maiko** is a lightweight actor runtime for Tokio applications. Actors are independent units that encapsulate state and communicate through asynchronous events—no shared memory, no locks, no channel wiring. Each actor processes messages sequentially from its own mailbox, making concurrent systems easier to reason about.
 
-> **Not a traditional actor framework.** Unlike Actix or Ractor (which use addressable actors with request-response messaging), Maiko actors are anonymous, loosely coupled, and communicate only through unidirectional event streams. There are no actor addresses, no supervision trees, and no request-response patterns.
+Maiko uses **topic-based routing**: actors subscribe to topics, and events are automatically delivered to all interested subscribers. This creates loose coupling—actors don't need to know about each other, only the events they care about.
+
+> **Different from Actix/Ractor.** Traditional actor frameworks use direct addressing (you send messages to a specific actor). Maiko uses pub/sub routing (you publish events to topics). There are no actor addresses, no supervision trees, and no request-response patterns. Think of it as an in-process event bus with actor semantics.
+
+### Why "Maiko"?
+
+**Maiko** (舞妓) are traditional Japanese performers known for their coordinated dances. Like maiko who respond to music and each other in harmony, Maiko actors coordinate through events in the Tokio runtime. And yes, "Maiko" sounds like "my ko" (コ) — a nod to Tokio.
 
 ### The Problem Maiko Solves
 
-Building complex Tokio applications often leads to **channel spaghetti**:
-
-```rust
-// Without Maiko: Manual channel orchestration
-let (tx1, rx1) = mpsc::channel(32);
-let (tx2, rx2) = mpsc::channel(32);
-let (tx3, rx3) = mpsc::channel(32);
-
-let tx1_clone = tx1.clone();
-let tx2_clone = tx2.clone();
-
-tokio::spawn(async move {
-    // Task A needs to send to B and C...
-    tx1_clone.send(data).await?;
-    tx2_clone.send(data).await?;
-});
-
-tokio::spawn(async move {
-    // Task B needs rx1 and tx3...
-    while let Some(msg) = rx1.recv().await {
-        tx3.send(process(msg)).await?;
-    }
-});
-
-// ... and it gets worse with more tasks
-```
-
-**With Maiko, channels disappear from your code:**
+Building concurrent Tokio applications often leads to **channel spaghetti**—manually creating, cloning, and wiring channels between tasks. With Maiko, channels disappear from your code:
 
 ```rust
 // Actors just subscribe to topics - Maiko handles all routing
@@ -58,15 +37,7 @@ sup.add_actor("task_c", |ctx| TaskC { ctx }, &[Topic::Input, Topic::Processed])?
 // No manual channel creation, cloning, or wiring needed!
 ```
 
-Maiko manages the entire channel topology internally, letting you focus on business logic instead of coordination.
-
-### Why "Maiko"?
-
-**Maiko** (舞妓) are traditional Japanese performers known for their coordinated dances and artistic discipline. Like maiko who respond to music and each other in harmony, Maiko actors coordinate through events in the Tokio runtime.
-
----
-
-## When to Use Maiko
+### When to Use Maiko
 
 Maiko excels at **unidirectional event pipelines** where components don't need to know about each other:
 
@@ -77,32 +48,13 @@ Maiko excels at **unidirectional event pipelines** where components don't need t
 
 **Not ideal for:** Request-response APIs, RPC-style communication, complex supervision hierarchies.
 
-### Maiko vs Alternatives
-
-**Feature Comparison:**
-
-| Feature | Maiko | Actix | Ractor | Tokio Channels |
-|---------|-------|-------|--------|----------------|
-| Pub/Sub Topics | ✅ | ❌ | ❌ | ❌ |
-| Actor Addressing | ❌ | ✅ | ✅ | N/A |
-| Supervision Trees | ❌ | ✅ | ✅ | N/A |
-| Loose Coupling | ✅ | ❌ | ❌ | ✅ |
-| Event Metadata | ✅ | ❌ | ❌ | ❌ |
-| Correlation Tracking | ✅ | ❌ | ❌ | ❌ |
-| Type-Safe Routing | ✅ | ✅ | ✅ | ✅ |
-| Learning Curve | Low | Medium | Low | Low |
-
 ---
 
 ## Quick Start
 
-Add Maiko to your `Cargo.toml`, by executing the following command:
-
 ```sh
 cargo add maiko
 ```
-
-### Hello World Example
 
 ```rust
 use maiko::*;
@@ -129,21 +81,19 @@ impl Actor for Greeter {
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
     sup.add_actor("greeter", |_ctx| Greeter, &[DefaultTopic])?;
-    
+
     sup.start().await?;
     sup.send(MyEvent::Hello("World".into())).await?;
     sup.stop().await
 }
 ```
 
-### Other Examples
+### Examples
 
 See the [`examples/`](maiko/examples/) directory for complete programs:
 
-- **[`pingpong.rs`](maiko/examples/pingpong.rs)** - Simple event exchange between actors
-- **[`guesser.rs`](maiko/examples/guesser.rs)** - Multi-actor game with topics and timing
-
-Run examples with:
+- **[`pingpong.rs`](maiko/examples/pingpong.rs)** — Simple event exchange between actors
+- **[`guesser.rs`](maiko/examples/guesser.rs)** — Multi-actor game with topics and timing
 
 ```bash
 cargo run --example pingpong
@@ -154,270 +104,54 @@ cargo run --example guesser
 
 ## Core Concepts
 
-### 1. Events
+| Concept | Description |
+|---------|-------------|
+| **Event** | Messages that flow through the system (`#[derive(Event)]`) |
+| **Topic** | Routes events to interested actors |
+| **Actor** | Processes events via `handle_event()` and produces events via `step()` |
+| **Context** | Provides actors with `send()`, `stop()`, and metadata access |
+| **Supervisor** | Manages actor lifecycles and runtime |
+| **Envelope** | Wraps events with metadata (sender, correlation ID) |
 
-Events are messages that flow through the system. They must implement the `Event` trait:
-
-```rust
-#[derive(Event, Clone, Debug)]
-enum NetworkEvent {
-    PacketReceived(Vec<u8>),
-    ConnectionClosed(u32),
-    Error(String),
-}
-```
-
-### 2. Topics
-
-Topics route events to interested actors. Define custom topics for fine-grained control:
-
-```rust
-#[derive(Debug, Hash, Eq, PartialEq, Clone)]
-enum NetworkTopic {
-    Ingress,
-    Egress,
-    Control,
-}
-
-impl Topic<NetworkEvent> for NetworkTopic {
-    fn from_event(event: &NetworkEvent) -> Self {
-        match event {
-            NetworkEvent::PacketReceived(_) => NetworkTopic::Ingress,
-            NetworkEvent::ConnectionClosed(_) => NetworkTopic::Control,
-            NetworkEvent::Error(_) => NetworkTopic::Control,
-        }
-    }
-}
-```
-
-Or use `DefaultTopic` to broadcast to all actors:
-
-```rust
-sup.add_actor("processor", factory, &[DefaultTopic])?;
-```
-
-### 3. Actors
-
-Actors implement two core methods:
-
-- **`handle_event`** — Process incoming events
-- **`step`** — Produce events or perform periodic work
-
-```rust
-struct PacketProcessor {
-    ctx: Context<NetworkEvent>,
-    buffer: Vec<u8>,
-}
-
-impl Actor for PacketProcessor {
-    type Event = NetworkEvent;
-
-    async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
-        match envelope.event() {
-            NetworkEvent::PacketReceived(data) => {
-                self.buffer.extend(data);
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    async fn step(&mut self) -> Result<StepAction> {
-        // Called in select! loop alongside event handling
-        if self.buffer.len() > 1000 {
-            self.flush_buffer().await?;
-        }
-        Ok(StepAction::AwaitEvent)  // Wait for next event
-    }
-
-    async fn on_start(&mut self) -> Result<()> {
-        println!("Processor starting...");
-        Ok(())
-    }
-}
-```
-
-### 4. Context
-
-The `Context` provides actors with capabilities:
-
-```rust
-// Send events
-ctx.send(NetworkEvent::PacketReceived(data)).await?;
-
-// Send with correlation (for tracking related events)
-ctx.send_child_event(ResponseEvent::Ok, &envelope.meta).await?;
-
-// Stop this actor
-ctx.stop();
-
-// Get actor's name
-let name = ctx.name();
-```
-
-### 5. Supervisor
-
-The `Supervisor` manages actor lifecycles and provides two registration APIs:
-
-**Simple API** (most common):
-```rust
-let mut sup = Supervisor::<NetworkEvent>::new();
-
-// Add actors with subscriptions
-sup.add_actor("ingress", |ctx| IngressActor::new(ctx), &[NetworkTopic::Ingress])?;
-sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
-sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[DefaultTopic])?;
-```
-
-**Builder API** (for advanced configuration):
-```rust
-// Fine-grained control over actor registration
-sup.build_actor::<IngressActor>("ingress")
-    .actor(|ctx| IngressActor::new(ctx))
-    .topics(&[NetworkTopic::Ingress])
-    .build()?;
-```
-
-**Runtime control:**
-```rust
-// Start all actors
-sup.start().await?;
-
-// ... application runs ...
-
-// Graceful shutdown
-sup.stop().await?;
-```
-
-
-### 6. StepAction
-
-The `step()` method returns `StepAction` to control scheduling:
-
-| Action | Behavior |
-|--------|----------|
-| `StepAction::Continue` | Run step again immediately |
-| `StepAction::Yield` | Yield to runtime, then run again |
-| `StepAction::AwaitEvent` | Pause until next event arrives |
-| `StepAction::Backoff(Duration)` | Sleep, then run again |
-| `StepAction::Never` | Disable step permanently (default) |
-
-**Common patterns:**
-
-```rust
-// Event producer with interval
-async fn step(&mut self) -> Result<StepAction> {
-    self.ctx.send(HeartbeatEvent).await?;
-    Ok(StepAction::Backoff(Duration::from_secs(5)))
-}
-
-// External I/O source (WebSocket, device, etc.)
-async fn step(&mut self) -> Result<StepAction> {
-    let data = self.websocket.read().await?;
-    self.ctx.send(DataEvent(data)).await?;
-    Ok(StepAction::Continue)
-}
-
-// Pure event processor (no step logic needed)
-async fn step(&mut self) -> Result<StepAction> {
-    Ok(StepAction::Never)  // Default behavior
-}
-```
-
+For detailed documentation, see **[Core Concepts](doc/concepts.md)**.
 
 ---
 
-## Design Philosophy
+## Test Harness
 
-### Loose Coupling Through Topics
-
-Maiko actors **don't know about each other**. They only know about:
-- Events they can send
-- Topics they subscribe to
-
-This is fundamentally different from Akka/Actix where actors have addresses:
+Maiko includes a test harness for observing and asserting on event flow:
 
 ```rust
-// Traditional actors (tight coupling)
-actor_ref.tell(message);  // Must know the actor's address
+#[tokio::test]
+async fn test_event_delivery() -> Result<()> {
+    let mut sup = Supervisor::<MyEvent>::default();
+    let producer = sup.add_actor("producer", |ctx| Producer::new(ctx), &[DefaultTopic])?;
+    let consumer = sup.add_actor("consumer", |ctx| Consumer::new(ctx), &[DefaultTopic])?;
 
-// Maiko (loose coupling)
-ctx.send(event).await?;   // Only knows about event types
+    let mut test = sup.init_test_harness().await;
+    sup.start().await?;
+
+    test.start_recording().await;
+    let id = test.send_as(&producer, MyEvent::Data(42)).await?;
+    test.stop_recording().await;
+
+    assert!(test.event(id).was_delivered_to(&consumer));
+    assert_eq!(1, test.actor(&consumer).inbound_count());
+
+    sup.stop().await
+}
 ```
 
-### Unidirectional Flow
-
-Events typically flow in one direction:
-
-```
-System Event → Parser → Validator → Processor → Logger
-```
-
-This makes Maiko ideal for **pipeline architectures** and **stream processing**.
-
-That means Maiko may be not best suited for **request-response** patterns. Although req-resp is possible in theory (with two separate event types), it's not the primary use case, and solutions like [Actix Web](https://actix.rs/) or [Ractor](https://docs.rs/ractor/latest/ractor/) are better suited for this.
+Enable with `features = ["test-harness"]`. See **[Test Harness Documentation](doc/testing.md)** for full details.
 
 ---
 
-## Advanced Features
+## Documentation
 
-### Envelope & Metadata
-
-Events arrive wrapped in an `Envelope` containing metadata:
-
-```rust
-async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()> {
-    // Access the event
-    match envelope.event() {
-        MyEvent::Data(x) => self.process(x).await?,
-        _ => {}
-    }
-    
-    // Access metadata when needed
-    let sender = envelope.meta.actor_name();
-    let correlation = envelope.meta.correlation_id();
-    
-    // Send correlated child event
-    self.ctx.send_child_event(ResponseEvent::Ok, &envelope.meta).await?;
-    
-    Ok(())
-}
-```
-
-### Error Handling
-
-Control error propagation:
-
-```rust
-impl Actor for MyActor {
-    // ...
-
-    fn on_error(&self, error: Error) -> Result<()> {
-        match error {
-            Error::Recoverable(_) => {
-                eprintln!("Warning: {}", error);
-                Ok(())  // Swallow error, continue
-            }
-            Error::Fatal(_) => {
-                eprintln!("Fatal: {}", error);
-                Err(error)  // Propagate error, stop actor
-            }
-        }
-    }
-}
-```
-
-### Custom Configuration
-
-Fine-tune actor behavior:
-
-```rust
-let config = Config::default()
-    .with_channel_size(100)           // Event queue size per actor
-    .with_max_events_per_tick(50);    // Events processed per tick cycle
-
-let mut sup = Supervisor::new(config);
-```
+- **[Core Concepts](doc/concepts.md)** — Events, Topics, Actors, Context, Supervisor
+- **[Test Harness](doc/testing.md)** — Recording, spies, queries, assertions
+- **[Advanced Topics](doc/advanced.md)** — Error handling, configuration, design philosophy
+- **[API Reference](https://docs.rs/maiko)** — Complete API documentation
 
 ---
 
@@ -437,34 +171,21 @@ let mut sup = Supervisor::new(config);
 
 ## Contributing
 
-Contributions are welcome! Please feel free to:
+Contributions welcome! Please feel free to:
 
 - Report bugs via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
 - Submit pull requests
 - Suggest features and improvements
-- Improve documentation
 
 ### Code Philosophy
 
-Maiko is **100% human-written code**, crafted with passion for Rust and genuine love for coding. While AI tools have been valuable for architectural discussions, code reviews, and documentation, every line of implementation code comes from human creativity and expertise.
-
-We believe in:
-- **Thoughtful design** over automated generation
-- **Deep understanding** of the code we write
-- **Human craftsmanship** in software engineering
-
-Contributors are expected to write their own code. AI may assist with reviews, discussions, and documentation, but implementations should reflect your own understanding and skills.
-
-Maiko is built with ❤️ by humans, for humans 🦀
+Maiko is developed through **human-AI collaboration**. The architecture, API design, and key decisions are human-driven, while AI serves as a capable pair programming partner—reviewing code, suggesting improvements, and helping implement well-specified designs.
 
 ---
 
 ## Acknowledgments
 
-Inspired by:
-- **Kafka** - Topic-based event streaming
-- **Akka Streams** - Reactive stream processing
-- **Tokio** - Async runtime foundation
+Inspired by [Kafka](https://kafka.apache.org/) (topic-based routing) and built on [Tokio](https://tokio.rs/) (async runtime).
 
 ---
 
