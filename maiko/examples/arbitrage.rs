@@ -34,6 +34,7 @@ enum Side {
 }
 
 #[derive(Clone, Debug)]
+#[allow(unused)]
 struct Tick {
     ex: Exchange,
     price: f64,
@@ -43,7 +44,12 @@ struct Tick {
 
 impl Tick {
     fn new(ex: Exchange, price: f64, size: usize, side: Side) -> Self {
-        Self { ex, price, size, side }
+        Self {
+            ex,
+            price,
+            size,
+            side,
+        }
     }
 }
 
@@ -62,7 +68,11 @@ enum MarketEvent {
     /// Raw tick from Alpha exchange
     AlphaTick { price: f64, quantity: u32 },
     /// Raw tick from Beta exchange
-    BetaTick { price: String, side: char, count: u64 },
+    BetaTick {
+        price: String,
+        side: char,
+        count: u64,
+    },
     /// Normalized tick (common format)
     MarketTick(Tick),
     /// Order to be executed
@@ -179,12 +189,17 @@ impl Actor for Trader {
                 };
 
                 // Place both legs of the arbitrage trade
-                self.ctx.send(MarketEvent::Order(
-                    Tick::new(buy_ex, price, 100, Side::Buy)
-                )).await?;
-                self.ctx.send(MarketEvent::Order(
-                    Tick::new(sell_ex, price, 100, Side::Sell)
-                )).await?;
+                self.ctx
+                    .send(MarketEvent::Order(Tick::new(buy_ex, price, 100, Side::Buy)))
+                    .await?;
+                self.ctx
+                    .send(MarketEvent::Order(Tick::new(
+                        sell_ex,
+                        price,
+                        100,
+                        Side::Sell,
+                    )))
+                    .await?;
             }
         }
         Ok(())
@@ -219,7 +234,7 @@ async fn main() -> maiko::Result {
     let beta_ticker = sup.add_actor("BetaTicker", |_| Ticker, &[Order(Beta)])?;
     let normalizer = sup.add_actor("Normalizer", |ctx| Normalizer { ctx }, &[RawData])?;
     let trader = sup.add_actor("Trader", Trader::new, &[NormalizedData])?;
-    let database = sup.add_actor("Database", |_| Database, &[NormalizedData])?;
+    let _database = sup.add_actor("Database", |_| Database, &[NormalizedData])?;
     let telemetry = sup.add_actor(
         "Telemetry",
         |_| Telemetry,
@@ -238,21 +253,35 @@ async fn main() -> maiko::Result {
     println!("--- Test 1: Basic Event Delivery ---");
 
     test.start_recording().await;
-    let tick_id = test.send_as(&alpha_ticker, MarketEvent::AlphaTick {
-        price: 100.0,
-        quantity: 50,
-    }).await?;
+    let tick_id = test
+        .send_as(
+            &alpha_ticker,
+            MarketEvent::AlphaTick {
+                price: 100.0,
+                quantity: 50,
+            },
+        )
+        .await?;
     test.stop_recording().await;
 
     // Use EventSpy to inspect the sent event
     let event_spy = test.event(tick_id);
     assert!(event_spy.was_delivered(), "Event should be delivered");
-    assert!(event_spy.was_delivered_to(&normalizer), "Should reach Normalizer");
-    assert!(event_spy.was_delivered_to(&telemetry), "Should reach Telemetry");
+    assert!(
+        event_spy.was_delivered_to(&normalizer),
+        "Should reach Normalizer"
+    );
+    assert!(
+        event_spy.was_delivered_to(&telemetry),
+        "Should reach Telemetry"
+    );
     assert_eq!(2, event_spy.receivers_count(), "Should have 2 receivers");
 
     println!("  AlphaTick delivered to: {:?}", event_spy.receivers());
-    println!("  Child events (correlated): {}", event_spy.children().count());
+    println!(
+        "  Child events (correlated): {}",
+        event_spy.children().count()
+    );
 
     // ========================================================================
     // Test 2: Actor Perspective
@@ -260,18 +289,45 @@ async fn main() -> maiko::Result {
     println!("\n--- Test 2: Actor Perspective (ActorSpy) ---");
 
     let normalizer_spy = test.actor(&normalizer);
-    println!("  Normalizer inbound count: {}", normalizer_spy.inbound_count());
-    println!("  Normalizer outbound count: {}", normalizer_spy.outbound_count());
-    println!("  Normalizer received from: {:?}", normalizer_spy.received_from());
+    println!(
+        "  Normalizer inbound count: {}",
+        normalizer_spy.inbound_count()
+    );
+    println!(
+        "  Normalizer outbound count: {}",
+        normalizer_spy.outbound_count()
+    );
+    println!(
+        "  Normalizer received from: {:?}",
+        normalizer_spy.received_from()
+    );
     println!("  Normalizer sent to: {:?}", normalizer_spy.sent_to());
 
-    assert_eq!(1, normalizer_spy.inbound_count(), "Normalizer should receive 1 event");
-    assert_eq!(1, normalizer_spy.outbound_count(), "Normalizer should send 1 event");
+    assert_eq!(
+        1,
+        normalizer_spy.inbound_count(),
+        "Normalizer should receive 1 event"
+    );
+    assert_eq!(
+        1,
+        normalizer_spy.outbound_count(),
+        "Normalizer should send 1 event"
+    );
 
     let telemetry_spy = test.actor(&telemetry);
-    println!("  Telemetry inbound count: {}", telemetry_spy.inbound_count());
-    println!("  Telemetry received from: {:?}", telemetry_spy.received_from());
-    assert_eq!(0, telemetry_spy.outbound_count(), "Telemetry is passive (no outbound)");
+    println!(
+        "  Telemetry inbound count: {}",
+        telemetry_spy.inbound_count()
+    );
+    println!(
+        "  Telemetry received from: {:?}",
+        telemetry_spy.received_from()
+    );
+    assert_eq!(
+        0,
+        telemetry_spy.outbound_count(),
+        "Telemetry is passive (no outbound)"
+    );
 
     // ========================================================================
     // Test 3: Topic Inspection
@@ -283,7 +339,10 @@ async fn main() -> maiko::Result {
     println!("  RawData receivers: {:?}", raw_topic.receivers());
 
     let normalized_topic = test.topic(NormalizedData);
-    println!("  NormalizedData event count: {}", normalized_topic.event_count());
+    println!(
+        "  NormalizedData event count: {}",
+        normalized_topic.event_count()
+    );
 
     // ========================================================================
     // Test 4: EventQuery for Complex Queries
@@ -291,23 +350,26 @@ async fn main() -> maiko::Result {
     println!("\n--- Test 4: Complex Queries (EventQuery) ---");
 
     // Find all events sent by Normalizer
-    let normalizer_events = test.events()
-        .sent_by(&normalizer)
-        .count();
+    let normalizer_events = test.events().sent_by(&normalizer).count();
     println!("  Events sent by Normalizer: {}", normalizer_events);
 
     // Find all MarketTick events
-    let market_ticks = test.events()
+    let market_ticks = test
+        .events()
         .matching_event(|e| matches!(e, MarketEvent::MarketTick(_)))
         .count();
     println!("  MarketTick events: {}", market_ticks);
 
     // Chain multiple filters
-    let trader_received_from_normalizer = test.events()
+    let trader_received_from_normalizer = test
+        .events()
         .sent_by(&normalizer)
         .received_by(&trader)
         .count();
-    println!("  Trader received from Normalizer: {}", trader_received_from_normalizer);
+    println!(
+        "  Trader received from Normalizer: {}",
+        trader_received_from_normalizer
+    );
 
     // ========================================================================
     // Test 5: Arbitrage Scenario
@@ -319,17 +381,25 @@ async fn main() -> maiko::Result {
 
     // Send ticks that will trigger arbitrage
     // Alpha: ask at 100
-    test.send_as(&alpha_ticker, MarketEvent::AlphaTick {
-        price: 100.0,
-        quantity: 100,
-    }).await?;
+    test.send_as(
+        &alpha_ticker,
+        MarketEvent::AlphaTick {
+            price: 100.0,
+            quantity: 100,
+        },
+    )
+    .await?;
 
     // Beta: bid at 105 (higher than Alpha ask = arbitrage opportunity!)
-    test.send_as(&beta_ticker, MarketEvent::BetaTick {
-        price: "105.0".to_string(),
-        side: 'B',
-        count: 100,
-    }).await?;
+    test.send_as(
+        &beta_ticker,
+        MarketEvent::BetaTick {
+            price: "105.0".to_string(),
+            side: 'B',
+            count: 100,
+        },
+    )
+    .await?;
 
     test.stop_recording().await;
 

@@ -10,7 +10,10 @@ use tokio::{
 
 use crate::{
     ActorHandle, Envelope, Event, EventId, Topic,
-    testing::{ActorSpy, EventEntry, EventQuery, EventRecords, EventSpy, RecordingFlag, TestEvent, TopicSpy},
+    testing::{
+        ActorSpy, EventEntry, EventQuery, EventRecords, EventSpy, RecordingFlag, TestEvent,
+        TopicSpy,
+    },
 };
 
 /// Test harness for observing and asserting on event flow in a Maiko system.
@@ -100,8 +103,6 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     /// For chatty actors that continuously produce events, use
     /// [`settle_with_timeout`](Self::settle_with_timeout) instead.
     pub async fn settle(&self) {
-        // Multiple rounds to catch cascading events (actor A receives event,
-        // processes it, sends new event to actor B, etc.)
         for _ in 0..3 {
             let (tx, rx) = oneshot::channel();
             let _ = self.test_sender.send(TestEvent::Flush(tx)).await;

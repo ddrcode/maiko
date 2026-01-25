@@ -172,9 +172,7 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
     /// Filter to events correlated with the given event ID (children).
     pub fn correlated_with(mut self, id: impl Into<EventId>) -> Self {
         let parent_id = id.into();
-        self.add_filter(move |e| {
-            e.meta().correlation_id() == Some(parent_id)
-        });
+        self.add_filter(move |e| e.meta().correlation_id() == Some(parent_id));
         self
     }
 }

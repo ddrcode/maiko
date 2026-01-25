@@ -15,6 +15,8 @@ pub enum TestEvent<E: Event, T: Topic<E>> {
     StartRecording,
     /// Stop recording events.
     StopRecording,
+    /// Notify all event queues are empty (up to this point).
+    Idle,
 }
 
 impl<E: Event, T: Topic<E>> std::fmt::Debug for TestEvent<E, T> {
@@ -26,6 +28,7 @@ impl<E: Event, T: Topic<E>> std::fmt::Debug for TestEvent<E, T> {
             TestEvent::Reset => write!(f, "Reset"),
             TestEvent::StartRecording => write!(f, "StartRecording"),
             TestEvent::StopRecording => write!(f, "StopRecording"),
+            TestEvent::Idle => write!(f, "Idle"),
         }
     }
 }

@@ -64,5 +64,9 @@ pub(crate) fn init_harness<E: Event, T: Topic<E>>(
     let events = Arc::new(Mutex::new(Vec::with_capacity(1024)));
     let recording = Arc::new(AtomicBool::new(false));
     let collector = EventCollector::new(rx, events.clone());
-    (Harness::new(tx, actor_sender, events, recording.clone()), collector, recording)
+    (
+        Harness::new(tx, actor_sender, events, recording.clone()),
+        collector,
+        recording,
+    )
 }

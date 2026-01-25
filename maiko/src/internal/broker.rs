@@ -85,14 +85,32 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     pub async fn run(&mut self) -> Result<()> {
         let mut cleanup_interval = tokio::time::interval(self.config.maintenance_interval);
+        let mut idle_interval = if cfg!(feature = "test-harness") {
+            tokio::time::interval(tokio::time::Duration::from_millis(5))
+        } else {
+            tokio::time::interval(tokio::time::Duration::MAX)
+        };
+        #[cfg(feature = "test-harness")]
+        let mut idle = true;
         loop {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
+                    #[cfg(feature = "test-harness")]
+                    { idle = false; }
                     self.send_event(&e)?;
                 },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
+                }
+                _ = idle_interval.tick() => {
+                    #[cfg(feature = "test-harness")]
+                    if !idle && self.is_empty() {
+                        idle = true;
+                        if let Some(ref sender) = self.test_sender {
+                            let _ = sender.try_send(TestEvent::Idle);
+                        }
+                    }
                 }
             }
         }
