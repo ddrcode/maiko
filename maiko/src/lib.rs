@@ -104,6 +104,9 @@ mod internal;
 #[cfg(feature = "test-harness")]
 pub mod testing;
 
+#[cfg(feature = "observing")]
+pub mod observing;
+
 pub use actor::Actor;
 pub use actor_builder::ActorBuilder;
 pub use actor_id::ActorId;
