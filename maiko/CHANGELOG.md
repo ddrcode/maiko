@@ -1,10 +1,14 @@
-# [0.2.0](https://github.com/ddrcode/maiko/compare/v0.1.1...v0.2.0) (January 13th, 2026)
+# [0.2.0](https://github.com/ddrcode/maiko/compare/v0.1.1...v0.2.0) (January 27th, 2026)
 
-** Breaking changes **
+** Contains Breaking changes **
+
+### Key new Features
 
 1. Adopted Maiko to work with project [Charon](https://github.com/ddrcode/charon)
-as a first library use case.
-2. Number of ergonomy improvements (API changes!)
+as a first library use case. [#23]
+2. Number of ergonomy improvements (API changes!) [#33], [#37]
+3. Monitoring API [#36]
+4. Test harness [#31]
 
 ### Added
 
@@ -18,7 +22,13 @@ as a first library use case.
 - Renamed `tick` to `step` in `Actor`
 - Renamed `handle` to `handle_event` in `Actor`
 - Fields of `Envelope` made private (use methods instead)
-- Implemented `Deref` for `Envelope` that makes it to dereference to event
+
+[#23]: https://github.com/ddrcode/maiko/pull/23
+[#31]: https://github.com/ddrcode/maiko/pull/31
+[#33]: https://github.com/ddrcode/maiko/pull/33
+[#36]: https://github.com/ddrcode/maiko/pull/36
+[#37]: https://github.com/ddrcode/maiko/pull/37
+
 
 ---
 

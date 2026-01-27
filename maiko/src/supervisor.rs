@@ -96,8 +96,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
     /// Register a new actor with a factory that receives a [`Context<E>`].
     ///
-    /// This is a convenience method that wraps the builder API. For advanced
-    /// configuration, use [`build_actor()`](Self::build_actor) instead.
+    /// This is the primary way to register actors with the supervisor.
     ///
     /// # Arguments
     ///
