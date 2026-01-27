@@ -72,10 +72,24 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let config = Arc::new(config);
         let (tx, rx) = channel::<Arc<Envelope<E>>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
-        let broker_cancel_token = Arc::new(CancellationToken::new());
-        let broker = Broker::new(rx, broker_cancel_token.clone(), config.clone());
 
-        let mut supervisor = Self {
+        #[cfg(feature = "monitoring")]
+        let monitoring = {
+            let mut monitoring = MonitorRegistry::new();
+            monitoring.start();
+            monitoring
+        };
+
+        let broker_cancel_token = Arc::new(CancellationToken::new());
+        let broker = Broker::new(
+            rx,
+            broker_cancel_token.clone(),
+            config.clone(),
+            #[cfg(feature = "monitoring")]
+            monitoring.provider(),
+        );
+
+        Self {
             broker: Arc::new(Mutex::new(broker)),
             config,
             sender: tx,
@@ -89,13 +103,8 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             harness: None,
 
             #[cfg(feature = "monitoring")]
-            monitoring: MonitorRegistry::new(),
-        };
-
-        #[cfg(feature = "monitoring")]
-        supervisor.monitoring.start();
-
-        supervisor
+            monitoring,
+        }
     }
 
     /// Register a new actor with a factory that receives a [`Context<E>`].
@@ -183,7 +192,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             cancel_token: self.cancel_token.clone(),
 
             #[cfg(feature = "monitoring")]
-            monitor_sender: self.monitoring.sender.clone(),
+            monitor: self.monitoring.provider(),
 
             _topic: std::marker::PhantomData,
         };
@@ -337,5 +346,18 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 impl<E: Event, T: Topic<E>> Default for Supervisor<E, T> {
     fn default() -> Self {
         Self::new(Config::default())
+    }
+}
+
+impl<E: Event, T: Topic<E>> Drop for Supervisor<E, T> {
+    fn drop(&mut self) {
+        if !self.cancel_token.is_cancelled() {
+            self.cancel_token.cancel();
+        }
+        if !self.broker_cancel_token.is_cancelled() {
+            self.broker_cancel_token.cancel();
+        }
+        #[cfg(feature = "monitoring")]
+        self.monitoring.cancel();
     }
 }

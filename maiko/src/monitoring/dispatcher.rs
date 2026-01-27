@@ -1,7 +1,10 @@
 use std::{
     collections::HashMap,
     panic::{AssertUnwindSafe, catch_unwind},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use tokio::{select, sync::mpsc::Receiver};
@@ -9,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     Event, Topic,
-    monitoring::{Monitor, MonitorCommand},
+    monitoring::{Monitor, MonitorCommand, MonitoringEvent},
 };
 
 pub(crate) struct MonitorDispatcher<E: Event, T: Topic<E>> {
@@ -19,12 +22,14 @@ pub(crate) struct MonitorDispatcher<E: Event, T: Topic<E>> {
     paused: bool,
     cancel_token: Arc<CancellationToken>,
     ids_to_remove: Vec<u8>,
+    is_active: Arc<AtomicBool>,
 }
 
 impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
     pub fn new(
         receiver: Receiver<MonitorCommand<E, T>>,
         cancel_token: Arc<CancellationToken>,
+        is_active: Arc<AtomicBool>,
     ) -> Self {
         Self {
             receiver,
@@ -33,7 +38,13 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             last_id: 0,
             paused: false,
             ids_to_remove: Vec::with_capacity(8),
+            is_active,
         }
+    }
+
+    fn update_is_active(&mut self) {
+        let active = !self.monitors.is_empty() && !self.paused;
+        self.is_active.store(active, Ordering::Relaxed);
     }
 
     pub async fn run(&mut self) {
@@ -43,29 +54,33 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
                     break;
                 }
                 Some(cmd) = self.receiver.recv() => {
-                    self.handle_command(cmd).await;
+                    self.handle_command(cmd)
                 }
             }
         }
     }
 
-    async fn handle_command(&mut self, cmd: MonitorCommand<E, T>) {
+    fn handle_command(&mut self, cmd: MonitorCommand<E, T>) {
         use MonitorCommand::*;
         match cmd {
             AddMonitor(monitor, resp) => {
                 let id = self.last_id;
                 self.monitors.insert(id, monitor);
                 self.last_id += 1;
+                self.update_is_active();
                 let _ = resp.send(id);
             }
             RemoveMonitor(id) => {
                 self.monitors.remove(&id);
+                self.update_is_active();
             }
             Pause => {
                 self.paused = true;
+                self.update_is_active();
             }
             Resume => {
                 self.paused = false;
+                self.update_is_active();
             }
             PauseOne(_id) => {
                 todo!("PauseOne handle not implemented");
@@ -73,23 +88,31 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             ResumeOne(_id) => {
                 todo!("ResumeOne handle not implemented");
             }
-            EventDispatched(envelope, topic, actor_id) if !self.paused => {
+            DispatchEvent(event) if self.is_active.load(Ordering::Relaxed) => {
+                self.handle_event(event);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_event(&mut self, event: MonitoringEvent<E, T>) {
+        use MonitoringEvent::*;
+        match event {
+            EventDispatched(envelope, topic, actor_id) => {
                 self.notify(|m| m.on_event_dispatched(&envelope, &topic, &actor_id));
             }
-            EventDelivered(envelope, actor_id) if !self.paused => {
+            EventDelivered(envelope, actor_id) => {
                 self.notify(|m| m.on_event_delivered(&envelope, &actor_id));
             }
-            EventHandled(envelope, actor_id) if !self.paused => {
+            EventHandled(envelope, actor_id) => {
                 self.notify(|m| m.on_event_handled(&envelope, &actor_id));
             }
-            Error(error, actor_id) if !self.paused => {
+            Error(error, actor_id) => {
                 self.notify(|m| m.on_error(&error, &actor_id));
             }
-            ActorStopped(actor_id) if !self.paused => {
+            ActorStopped(actor_id) => {
                 self.notify(|m| m.on_actor_stop(&actor_id));
             }
-
-            _ => {}
         }
     }
 }

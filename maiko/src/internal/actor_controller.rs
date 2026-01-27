@@ -9,10 +9,7 @@ use crate::{
 };
 
 #[cfg(feature = "monitoring")]
-use tokio::sync::mpsc::Sender;
-
-#[cfg(feature = "monitoring")]
-use crate::monitoring::MonitorCommand;
+use crate::monitoring::{MonitoringEvent, MonitoringProvider};
 
 pub(crate) struct ActorController<A: Actor, T: Topic<A::Event>> {
     pub(crate) actor: A,
@@ -22,7 +19,7 @@ pub(crate) struct ActorController<A: Actor, T: Topic<A::Event>> {
     pub(crate) cancel_token: Arc<CancellationToken>,
 
     #[cfg(feature = "monitoring")]
-    pub(crate) monitor_sender: Sender<crate::monitoring::MonitorCommand<A::Event, T>>,
+    pub(crate) monitor: MonitoringProvider<A::Event, T>,
 
     pub(crate) _topic: std::marker::PhantomData<fn() -> T>,
 }
@@ -136,36 +133,40 @@ async fn handle_step_action(step_action: StepAction, step_handler: &mut StepHand
 #[cfg(feature = "monitoring")]
 impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
     #[inline]
-    fn send_notification(&self, command: MonitorCommand<A::Event, T>) {
-        let _ = self.monitor_sender.try_send(command);
-    }
-
-    #[inline]
     fn notify_event_delivered(&self, event: &Arc<Envelope<A::Event>>) {
-        self.send_notification(MonitorCommand::EventDelivered(
-            event.clone(),
-            self.ctx.actor_id.clone(),
-        ));
+        if self.monitor.is_active() {
+            self.monitor.send(MonitoringEvent::EventDelivered(
+                event.clone(),
+                self.ctx.actor_id.clone(),
+            ));
+        }
     }
 
     #[inline]
     fn notify_event_handled(&self, event: &Arc<Envelope<A::Event>>) {
-        self.send_notification(MonitorCommand::EventHandled(
-            event.clone(),
-            self.ctx.actor_id.clone(),
-        ));
+        if self.monitor.is_active() {
+            self.monitor.send(MonitoringEvent::EventHandled(
+                event.clone(),
+                self.ctx.actor_id.clone(),
+            ));
+        }
     }
 
     #[inline]
     fn notify_error(&self, error: &crate::Error) {
-        self.send_notification(MonitorCommand::Error(
-            error.clone(),
-            self.ctx.actor_id.clone(),
-        ));
+        if self.monitor.is_active() {
+            self.monitor.send(MonitoringEvent::Error(
+                error.clone(),
+                self.ctx.actor_id.clone(),
+            ));
+        }
     }
 
     #[inline]
     fn notify_exit(&self) {
-        self.send_notification(MonitorCommand::ActorStopped(self.ctx.actor_id.clone()));
+        if self.monitor.is_active() {
+            self.monitor
+                .send(MonitoringEvent::ActorStopped(self.ctx.actor_id.clone()));
+        }
     }
 }
