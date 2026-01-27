@@ -7,7 +7,10 @@ use std::{
     },
 };
 
-use tokio::{select, sync::mpsc::Receiver};
+use tokio::{
+    select,
+    sync::{mpsc::Receiver, oneshot},
+};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -36,6 +39,7 @@ pub(crate) struct MonitorDispatcher<E: Event, T: Topic<E>> {
     cancel_token: Arc<CancellationToken>,
     ids_to_remove: Vec<MonitorId>,
     is_active: Arc<AtomicBool>,
+    flush_response: Option<oneshot::Sender<()>>,
 }
 
 impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
@@ -51,6 +55,7 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             last_id: 0,
             ids_to_remove: Vec::with_capacity(8),
             is_active,
+            flush_response: None,
         }
     }
 
@@ -78,6 +83,17 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
         self.update_is_active();
     }
 
+    #[inline]
+    fn handle_flush(&mut self) {
+        if self.flush_response.is_some() && self.receiver.is_empty() {
+            let _ = self
+                .flush_response
+                .take()
+                .expect("flush_response must exist at this point")
+                .send(());
+        }
+    }
+
     pub async fn run(&mut self) {
         loop {
             select! {
@@ -85,7 +101,8 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
                     break;
                 }
                 Some(cmd) = self.receiver.recv() => {
-                    self.handle_command(cmd)
+                    self.handle_command(cmd);
+                    self.handle_flush();
                 }
             }
         }
@@ -118,6 +135,10 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             }
             DispatchEvent(event) if self.is_active.load(Ordering::Relaxed) => {
                 self.handle_event(event);
+            }
+            Flush(resp) => {
+                self.flush_response = Some(resp);
+                self.handle_flush();
             }
             _ => {}
         }

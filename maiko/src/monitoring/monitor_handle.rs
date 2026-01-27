@@ -1,4 +1,4 @@
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
     Event, Topic,
@@ -32,5 +32,11 @@ impl<E: Event, T: Topic<E>> MonitorHandle<E, T> {
 
     pub async fn resume(&self) {
         let _ = self.sender.send(MonitorCommand::ResumeOne(self.id)).await;
+    }
+
+    pub async fn flush(&self) {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.sender.send(MonitorCommand::Flush(tx)).await;
+        let _ = rx.await;
     }
 }

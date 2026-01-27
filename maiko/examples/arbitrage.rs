@@ -15,7 +15,7 @@
 //! - Query events by sender, receiver, topic, or custom predicates
 //! - Track parent-child event relationships via correlation IDs
 
-use maiko::{Actor, Context, Topic};
+use maiko::{Actor, Context, Topic, testing::Harness};
 
 // ============================================================================
 // Domain Types
@@ -242,7 +242,7 @@ async fn main() -> maiko::Result {
     )?;
 
     // Initialize test harness
-    let mut test = sup.init_test_harness().await;
+    let mut test = Harness::new(&mut sup).await;
     sup.start().await?;
 
     println!("=== Test Harness Demonstration ===\n");
@@ -376,7 +376,7 @@ async fn main() -> maiko::Result {
     // ========================================================================
     println!("\n--- Test 5: Full Arbitrage Scenario ---");
 
-    test.reset().await;
+    test.reset();
     test.start_recording().await;
 
     // Send ticks that will trigger arbitrage
@@ -432,7 +432,6 @@ async fn main() -> maiko::Result {
     println!("  Trader buy orders: {}", buy_orders);
 
     // Clean up
-    test.exit().await;
     sup.stop().await?;
 
     println!("\n=== All Tests Passed ===");

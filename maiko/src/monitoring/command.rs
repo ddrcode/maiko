@@ -13,4 +13,5 @@ pub(crate) enum MonitorCommand<E: Event, T: Topic<E>> {
     PauseOne(MonitorId),
     ResumeOne(MonitorId),
     DispatchEvent(MonitoringEvent<E, T>),
+    Flush(oneshot::Sender<()>),
 }

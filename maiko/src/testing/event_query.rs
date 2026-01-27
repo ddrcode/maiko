@@ -115,7 +115,7 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
 
     /// Filter to events with the specified topic.
     pub fn with_topic(mut self, topic: T) -> Self {
-        self.add_filter(move |e| e.topic == topic);
+        self.add_filter(move |e| *e.topic == topic);
         self
     }
 
@@ -419,7 +419,8 @@ mod tests {
         ));
         let child = EventEntry::new(child_envelope, DefaultTopic, actors.alice.clone());
 
-        let unrelated_envelope = Arc::new(Envelope::new(TestEvent::Data(1), actors.charlie.clone()));
+        let unrelated_envelope =
+            Arc::new(Envelope::new(TestEvent::Data(1), actors.charlie.clone()));
         let unrelated = EventEntry::new(unrelated_envelope, DefaultTopic, actors.alice.clone());
 
         let records = Arc::new(vec![parent, child, unrelated]);

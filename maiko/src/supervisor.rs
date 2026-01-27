@@ -52,15 +52,12 @@ use crate::monitoring::MonitorRegistry;
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     config: Arc<Config>,
     broker: Arc<Mutex<Broker<E, T>>>,
-    sender: Sender<Arc<Envelope<E>>>,
+    pub(crate) sender: Sender<Arc<Envelope<E>>>,
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
     start_notifier: Arc<Notify>,
     supervisor_id: ActorId,
-
-    #[cfg(feature = "test-harness")]
-    harness: Option<crate::testing::Harness<E, T>>,
 
     #[cfg(feature = "monitoring")]
     monitoring: MonitorRegistry<E, T>,
@@ -98,9 +95,6 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             broker_cancel_token,
             start_notifier: Arc::new(Notify::new()),
             supervisor_id: ActorId::new(Arc::from("supervisor")),
-
-            #[cfg(feature = "test-harness")]
-            harness: None,
 
             #[cfg(feature = "monitoring")]
             monitoring,
@@ -267,11 +261,6 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let timeout = Duration::from_millis(10);
         let max = self.sender.max_capacity();
 
-        #[cfg(feature = "test-harness")]
-        if let Some(harness) = self.harness.as_ref() {
-            harness.exit().await;
-        }
-
         #[cfg(feature = "monitoring")]
         self.monitoring.stop().await;
 
@@ -297,44 +286,6 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
     pub fn config(&self) -> &Config {
         self.config.as_ref()
-    }
-
-    /// Initialize the test harness for observing event flow.
-    ///
-    /// This should be called before [`start()`](Self::start). The harness enables
-    /// event recording, injection, and assertions for testing.
-    ///
-    /// If called multiple times, returns a clone of the existing harness.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let mut sup = Supervisor::<MyEvent>::default();
-    /// sup.add_actor("test", |ctx| MyActor::new(ctx), &[DefaultTopic])?;
-    ///
-    /// let mut test = sup.init_test_harness().await;
-    /// sup.start().await?;
-    ///
-    /// test.start_recording().await;
-    /// // ... run test ...
-    /// test.stop_recording().await;
-    /// ```
-    #[cfg(feature = "test-harness")]
-    pub async fn init_test_harness(&mut self) -> crate::testing::Harness<E, T> {
-        // Return existing harness if already initialized
-        if let Some(ref harness) = self.harness {
-            return harness.clone();
-        }
-
-        let (harness, mut collector, recording) =
-            crate::testing::init_harness::<E, T>(self.sender.clone());
-        self.tasks.spawn(async move { collector.run().await });
-        self.broker
-            .lock()
-            .await
-            .set_test_sender(harness.test_sender.clone(), recording);
-        self.harness = Some(harness.clone());
-        harness
     }
 
     #[cfg(feature = "monitoring")]

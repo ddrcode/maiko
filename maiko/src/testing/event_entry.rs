@@ -15,12 +15,12 @@ use crate::{ActorId, Envelope, Event, EventId, Meta, Topic};
 #[derive(Debug, Clone)]
 pub struct EventEntry<E: Event, T: Topic<E>> {
     pub(crate) event: Arc<Envelope<E>>,
-    pub(crate) topic: T,
+    pub(crate) topic: Arc<T>,
     pub(crate) actor_id: ActorId,
 }
 
 impl<E: Event, T: Topic<E>> EventEntry<E, T> {
-    pub(crate) fn new(event: Arc<Envelope<E>>, topic: T, actor_id: ActorId) -> Self {
+    pub(crate) fn new(event: Arc<Envelope<E>>, topic: Arc<T>, actor_id: ActorId) -> Self {
         Self {
             event,
             topic,
