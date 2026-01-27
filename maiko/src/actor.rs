@@ -11,14 +11,14 @@ use crate::{Envelope, Error, Event, Result, StepAction};
 ///
 /// # Core Methods
 ///
-/// - [`handle_event`](Self::handle_event) — Process incoming events (reactive)
-/// - [`step`](Self::step) — Perform periodic work or produce events (proactive)
+/// - [`handle_event`](Self::handle_event)  - Process incoming events (reactive)
+/// - [`step`](Self::step)  - Perform periodic work or produce events (proactive)
 ///
 /// # Lifecycle Hooks
 ///
-/// - [`on_start`](Self::on_start) — Called once before the event loop starts
-/// - [`on_shutdown`](Self::on_shutdown) — Called once after the event loop stops
-/// - [`on_error`](Self::on_error) — Handle errors (swallow or propagate)
+/// - [`on_start`](Self::on_start)  - Called once before the event loop starts
+/// - [`on_shutdown`](Self::on_shutdown)  - Called once after the event loop stops
+/// - [`on_error`](Self::on_error)  - Handle errors (swallow or propagate)
 ///
 /// # Context (Optional)
 ///

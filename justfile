@@ -1,30 +1,37 @@
+# Default task
 default: check
 
-# Run formatting, linting, tests (including doctests), and build examples
+# Quick check: format and lint
 check:
     cargo fmt --all -- --check
-    cargo clippy --workspace --all-targets
-    cargo clippy --workspace --all-targets --features test-harness
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-# Quickly format the workspace
+# Full CI: format, lint, test, spell, build examples
+ci: check test spell build
+
+# Format code
 fmt:
     cargo fmt --all
-
-# Build entire workspace including examples
-build:
-    cargo build --workspace --examples
 
 # Run all tests
 test:
     cargo test --workspace --all-features
 
-# Lint only
+# Lint with warnings as errors
 lint:
-    cargo clippy --workspace --all-targets --all-features -D warnings
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-# Build docs without dependencies
+# Build workspace including examples
+build:
+    cargo build --workspace --all-features --examples
+
+# Build docs (with all features to show everything)
 doc:
-    cargo doc --workspace --no-deps
+    cargo doc --workspace --all-features --no-deps
+
+# Open docs in browser
+doc-open:
+    cargo doc --workspace --all-features --no-deps --open
 
 # Run spell checker
 spell:
@@ -35,4 +42,13 @@ examples:
     cargo run --example hello-world
     cargo run --example pingpong
     cargo run --example guesser
+    cargo run --example monitoring --features monitoring
+    cargo run --example arbitrage --features test-harness
 
+# Clean build artifacts
+clean:
+    cargo clean
+
+# Watch and run tests on changes (requires bacon)
+watch:
+    bacon test

@@ -1,7 +1,4 @@
-use std::{
-    collections::HashSet,
-    sync::{Arc, atomic::AtomicBool},
-};
+use std::sync::{Arc, atomic::AtomicBool};
 
 use tokio::{
     sync::{
@@ -13,9 +10,9 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Actor, ActorBuilder, ActorId, Config, Context, DefaultTopic, Envelope, Error, Event, Result,
+    Actor, ActorId, Config, Context, DefaultTopic, Envelope, Error, Event, Result, Subscribe,
     Topic,
-    internal::{ActorController, Broker, Subscriber},
+    internal::{ActorController, Broker, Subscriber, Subscription},
 };
 
 #[cfg(feature = "monitoring")]
@@ -25,19 +22,15 @@ use crate::monitoring::MonitorRegistry;
 ///
 /// # Actor Registration
 ///
-/// Two ways to register actors:
-///
-/// **Simple API** (for common cases):
 /// ```ignore
-/// supervisor.add_actor("my-actor", |ctx| MyActor::new(ctx), &[MyTopic::Data])?;
-/// ```
+/// // Subscribe to specific topics
+/// supervisor.add_actor("processor", |ctx| Processor::new(ctx), &[MyTopic::Data])?;
 ///
-/// **Builder API** (for advanced configuration):
-/// ```ignore
-/// supervisor.build_actor::<MyActor>("my-actor")
-///     .actor(|ctx| MyActor::new(ctx))
-///     .topics(&[MyTopic::Data])
-///     .build()?;
+/// // Subscribe to all topics (e.g., monitoring)
+/// supervisor.add_actor("monitor", |ctx| Monitor::new(ctx), Subscribe::all())?;
+///
+/// // Subscribe to no topics (pure event producer)
+/// supervisor.add_actor("producer", |ctx| Producer::new(ctx), Subscribe::none())?;
 /// ```
 ///
 /// # Runtime Control
@@ -121,39 +114,21 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     ///     &[MyTopic::Data, MyTopic::Control]
     /// )?;
     /// ```
-    pub fn add_actor<A, F>(&mut self, name: &str, factory: F, topics: &[T]) -> Result<ActorId>
+    pub fn add_actor<A, F, S>(&mut self, name: &str, factory: F, topics: S) -> Result<ActorId>
     where
         A: Actor<Event = E>,
         F: FnOnce(Context<E>) -> A,
-    {
-        self.build_actor(name).actor(factory).topics(topics).build()
-    }
-
-    /// Begin building an actor registration with fine-grained control.
-    ///
-    /// Returns an [`ActorBuilder`] that allows setting topics and (future)
-    /// configuration separately. For simple cases, prefer [`add_actor()`](Self::add_actor).
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// supervisor.build_actor::<MyActor>("processor")
-    ///     .actor(|ctx| MyActor::new(ctx))
-    ///     .topics(&[MyTopic::Data])
-    ///     .build()?;
-    /// ```
-    pub fn build_actor<A>(&mut self, name: &str) -> ActorBuilder<'_, E, T, A>
-    where
-        A: Actor<Event = E>,
+        S: Into<Subscribe<E, T>>,
     {
         let ctx = self.create_context(name);
-        ActorBuilder::new(self, ctx)
+        let actor = factory(ctx.clone());
+        let topics = topics.into().0;
+        self.register_actor(ctx, actor, topics)
     }
 
     /// Internal method to register an actor with the supervisor.
     ///
-    /// This is called by both `add_actor()` and `ActorBuilder.build()` to perform
-    /// the actual registration. It:
+    /// Called by `add_actor()` to perform the actual registration. It:
     /// 1. Creates a Subscriber and registers it with the broker
     /// 2. Creates an ActorHandler wrapping the actor
     /// 3. Spawns the actor task (which waits for start notification)
@@ -161,7 +136,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         &mut self,
         ctx: Context<E>,
         actor: A,
-        topics: HashSet<T>,
+        topics: Subscription<T>,
     ) -> Result<ActorId>
     where
         A: Actor<Event = E>,
@@ -202,7 +177,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
     /// Create a new Context for an actor.
     ///
-    /// Internal helper used by `add_actor` and `ActorBuilder` to create actor contexts.
+    /// Internal helper used by `add_actor` to create actor contexts.
     pub(crate) fn create_context(&self, name: &str) -> Context<E> {
         Context::<E> {
             actor_id: ActorId::new(Arc::<str>::from(name)),

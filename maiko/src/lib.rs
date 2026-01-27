@@ -2,7 +2,7 @@
 //!
 //! A lightweight actor runtime for Tokio with topic-based pub/sub routing.
 //!
-//! Maiko provides independent actors that communicate through asynchronous events—no shared
+//! Maiko provides independent actors that communicate through asynchronous events -no shared
 //! memory, no locks, no channel wiring. Each actor processes messages sequentially from its
 //! own mailbox, making concurrent systems easier to reason about.
 //!
@@ -75,19 +75,18 @@
 //!
 //! ## Features
 //!
-//! - **`macros`** (default) — Enables `#[derive(Event)]` macro
-//! - **`test-harness`** — Enables test utilities for asserting on event flow
+//! - **`macros`** (default)  - Enables `#[derive(Event)]` macro
+//! - **`test-harness`**  - Enables test utilities for asserting on event flow
 //!
 //! ## Examples
 //!
 //! See the [`examples/`](https://github.com/ddrcode/maiko/tree/main/maiko/examples) directory:
 //!
-//! - `pingpong.rs` — Simple event exchange between actors
-//! - `guesser.rs` — Multi-actor game with topics and timing
-//! - `arbitrage.rs` — Test harness demonstration
+//! - `pingpong.rs`  - Simple event exchange between actors
+//! - `guesser.rs`  - Multi-actor game with topics and timing
+//! - `arbitrage.rs`  - Test harness demonstration
 
 mod actor;
-mod actor_builder;
 mod actor_id;
 mod config;
 mod context;
@@ -96,6 +95,7 @@ mod error;
 mod event;
 mod meta;
 mod step_action;
+mod subscribe;
 mod supervisor;
 mod topic;
 
@@ -108,7 +108,6 @@ pub mod testing;
 pub mod monitoring;
 
 pub use actor::Actor;
-pub use actor_builder::ActorBuilder;
 pub use actor_id::ActorId;
 pub use config::Config;
 pub use context::Context;
@@ -117,6 +116,7 @@ pub use error::Error;
 pub use event::Event;
 pub use meta::Meta;
 pub use step_action::StepAction;
+pub use subscribe::Subscribe;
 pub use supervisor::Supervisor;
 pub use topic::{DefaultTopic, Topic};
 

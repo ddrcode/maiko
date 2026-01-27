@@ -27,9 +27,9 @@ use crate::{ActorId, DefaultTopic, Envelope, Error, Event, StepAction, Topic};
 /// # Event Lifecycle
 ///
 /// Events flow through these stages:
-/// 1. **Dispatched** — Broker routes event to a subscriber
-/// 2. **Delivered** — Actor receives event from its mailbox
-/// 3. **Handled** — Actor's `handle_event()` completes
+/// 1. **Dispatched**  - Broker routes event to a subscriber
+/// 2. **Delivered**  - Actor receives event from its mailbox
+/// 3. **Handled**  - Actor's `handle_event()` completes
 ///
 /// For a single event delivered to N actors, each callback fires N times.
 pub trait Monitor<E: Event, T: Topic<E> = DefaultTopic>: Send {

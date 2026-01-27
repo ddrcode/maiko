@@ -230,16 +230,17 @@ impl Actor for Printer {
 async fn main() -> Result<()> {
     let mut supervisor = Supervisor::<GuesserEvent, GuesserTopic>::default();
 
-    // Add Player actors with empty subscriptions - they only produce events
+    // Add Player actors with no subscriptions - they only produce events
     supervisor.add_actor(
         "Player1",
         |ctx| Guesser::new(ctx, PlayerId::Player1, 500),
-        &[], // No subscriptions - pure producer
+        Subscribe::none(),
     )?;
-    supervisor
-        .build_actor("Player2")
-        .actor(|ctx| Guesser::new(ctx, PlayerId::Player2, 350))
-        .build()?;
+    supervisor.add_actor(
+        "Player2",
+        |ctx| Guesser::new(ctx, PlayerId::Player2, 350),
+        Subscribe::none(),
+    )?;
 
     // Game coordinator subscribes to Game topic (receives guesses)
     supervisor.add_actor("Game", Game::new, &[GuesserTopic::Game])?;
