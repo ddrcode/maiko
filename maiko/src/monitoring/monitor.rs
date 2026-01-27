@@ -7,14 +7,16 @@ pub trait Monitor<E: Event, T: Topic<E> = DefaultTopic>: Send {
         let _r = receiver;
     }
 
-    fn on_event_delivered(&self, envelope: &Envelope<E>, receiver: &ActorId) {
+    fn on_event_delivered(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId) {
         let _e = envelope;
+        let _t = topic;
         let _r = receiver;
     }
 
-    fn on_event_handled(&self, envelope: &Envelope<E>, actor_id: &ActorId) {
+    fn on_event_handled(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId) {
         let _e = envelope;
-        let _a = actor_id;
+        let _t = topic;
+        let _r = receiver;
     }
 
     fn on_error(&self, err: &Error, actor_id: &ActorId) {

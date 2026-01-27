@@ -34,7 +34,6 @@ mod event_entry;
 mod event_query;
 mod event_spy;
 mod harness;
-mod test_event;
 mod topic_spy;
 
 pub use actor_spy::ActorSpy;

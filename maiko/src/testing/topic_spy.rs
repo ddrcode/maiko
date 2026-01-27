@@ -109,9 +109,9 @@ mod tests {
 
     fn sample_records_with_actors(actors: &TestActors) -> EventRecords<TestEvent, TestTopic> {
         Arc::new(vec![
-            make_entry(TestEvent(1), &actors.alice, &actors.bob),     // Data
+            make_entry(TestEvent(1), &actors.alice, &actors.bob), // Data
             make_entry(TestEvent(2), &actors.alice, &actors.charlie), // Data
-            make_entry(TestEvent(100), &actors.bob, &actors.alice),   // Control
+            make_entry(TestEvent(100), &actors.bob, &actors.alice), // Control
             make_entry(TestEvent(101), &actors.bob, &actors.charlie), // Control
         ])
     }

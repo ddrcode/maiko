@@ -87,7 +87,7 @@ impl<E: Event> Context<E> {
     /// The actor's name as registered with the supervisor.
     #[inline]
     pub fn actor_name(&self) -> &str {
-        &self.actor_id.name()
+        self.actor_id.name()
     }
 
     /// Whether the actor is considered alive by the runtime.

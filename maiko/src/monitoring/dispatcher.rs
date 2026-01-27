@@ -144,7 +144,10 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             DispatchEvent(event) if self.is_active.load(Ordering::Relaxed) => {
                 self.handle_event(event);
             }
-            Flush { response, settle_window } => {
+            Flush {
+                response,
+                settle_window,
+            } => {
                 self.flush_pending = Some((response, settle_window));
                 self.try_complete_flush();
             }
@@ -158,11 +161,11 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             EventDispatched(envelope, topic, actor_id) => {
                 self.notify(|m| m.on_event_dispatched(&envelope, &topic, &actor_id));
             }
-            EventDelivered(envelope, actor_id) => {
-                self.notify(|m| m.on_event_delivered(&envelope, &actor_id));
+            EventDelivered(envelope, topic, actor_id) => {
+                self.notify(|m| m.on_event_delivered(&envelope, &topic, &actor_id));
             }
-            EventHandled(envelope, actor_id) => {
-                self.notify(|m| m.on_event_handled(&envelope, &actor_id));
+            EventHandled(envelope, topic, actor_id) => {
+                self.notify(|m| m.on_event_handled(&envelope, &topic, &actor_id));
             }
             Error(error, actor_id) => {
                 self.notify(|m| m.on_error(&error, &actor_id));

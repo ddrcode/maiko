@@ -39,16 +39,25 @@ impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
                 },
 
                 Some(event) = self.receiver.recv() => {
-                    #[cfg(feature = "monitoring")] self.notify_event_delivered(&event);
+                    #[cfg(feature = "monitoring")]
+                    let topic = {
+                        let topic = Arc::new(T::from_event(event.event()));
+                        self.notify_event_delivered(&event, &topic);
+                        topic
+                    };
+
                     let res = self.actor.handle_event(&event).await;
-                    #[cfg(feature = "monitoring")] self.notify_event_handled(&event);
+
+                    #[cfg(feature = "monitoring")]
+                    self.notify_event_handled(&event, &topic);
+
                     self.handle_error(res)?;
 
                     let mut cnt = 1;
                     while let Ok(event) = self.receiver.try_recv() {
-                        #[cfg(feature = "monitoring")] self.notify_event_delivered(&event);
+                        #[cfg(feature = "monitoring")] self.notify_event_delivered(&event, &topic);
                         let res = self.actor.handle_event(&event).await;
-                        #[cfg(feature = "monitoring")] self.notify_event_handled(&event);
+                        #[cfg(feature = "monitoring")] self.notify_event_handled(&event, &topic);
                         self.handle_error(res)?;
                         cnt += 1;
                         if cnt == self.max_events_per_tick {
@@ -133,20 +142,22 @@ async fn handle_step_action(step_action: StepAction, step_handler: &mut StepHand
 #[cfg(feature = "monitoring")]
 impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
     #[inline]
-    fn notify_event_delivered(&self, event: &Arc<Envelope<A::Event>>) {
+    fn notify_event_delivered(&self, event: &Arc<Envelope<A::Event>>, topic: &Arc<T>) {
         if self.monitoring.is_active() {
             self.monitoring.send(MonitoringEvent::EventDelivered(
                 event.clone(),
+                topic.clone(),
                 self.ctx.actor_id.clone(),
             ));
         }
     }
 
     #[inline]
-    fn notify_event_handled(&self, event: &Arc<Envelope<A::Event>>) {
+    fn notify_event_handled(&self, event: &Arc<Envelope<A::Event>>, topic: &Arc<T>) {
         if self.monitoring.is_active() {
             self.monitoring.send(MonitoringEvent::EventHandled(
                 event.clone(),
+                topic.clone(),
                 self.ctx.actor_id.clone(),
             ));
         }

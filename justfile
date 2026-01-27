@@ -4,6 +4,7 @@ default: check
 check:
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets
+    cargo clippy --workspace --all-targets --features test-harness
 
 # Quickly format the workspace
 fmt:

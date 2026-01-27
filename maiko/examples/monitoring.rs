@@ -22,12 +22,19 @@ impl Actor for Greeter {
 struct Printer;
 
 impl Monitor<MyEvent> for Printer {
-    fn on_event_handled(&self, envelope: &Envelope<MyEvent>, actor_id: &ActorId) {
+    fn on_event_handled(
+        &self,
+        envelope: &Envelope<MyEvent>,
+        _topic: &DefaultTopic,
+        actor_id: &ActorId,
+    ) {
         println!("Event {:?} handled by actor {}", envelope.event(), actor_id);
     }
+
     fn on_error(&self, err: &Error, actor_id: &ActorId) {
         eprintln!("Error in actor {}: {}", actor_id, err);
     }
+
     fn on_actor_stop(&self, actor_id: &ActorId) {
         println!("Actor {} has stopped", actor_id);
     }
