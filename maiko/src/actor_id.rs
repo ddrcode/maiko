@@ -2,8 +2,7 @@ use std::{hash::Hash, ops::Deref, sync::Arc};
 
 /// Unique identifier for a registered actor.
 ///
-/// Returned by [`Supervisor::add_actor`](crate::Supervisor::add_actor) and
-/// [`ActorBuilder::build`](crate::ActorBuilder::build). Use `ActorId` to:
+/// Returned by [`Supervisor::add_actor`](crate::Supervisor::add_actor). Use `ActorId` to:
 ///
 /// - Identify actors in event metadata (sender information)
 /// - Reference actors in test harness assertions

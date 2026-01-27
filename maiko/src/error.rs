@@ -24,9 +24,6 @@ pub enum Error {
     #[error("Subscriber with name '{0}' already exists.")]
     SubscriberAlreadyExists(ActorId),
 
-    #[error("Adding new actor failed. {0}")]
-    ActorBuilderError(Arc<str>),
-
     #[error("Error external to Maiko occured: {0}")]
     External(Arc<str>),
 }

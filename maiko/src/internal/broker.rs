@@ -134,7 +134,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Event, Topic, internal::broker::Broker};
+    use crate::{Event, Topic, internal::Subscription, internal::broker::Broker};
     use std::{collections::HashSet, sync::Arc};
     use tokio::sync::mpsc;
     use tokio_util::sync::CancellationToken;
@@ -182,11 +182,17 @@ mod tests {
             monitoring,
         );
         let actor_id = ActorId::new(Arc::from("subscriber1"));
-        let subscriber =
-            super::Subscriber::new(actor_id.clone(), HashSet::from([TestTopic::A]), tx.clone());
+        let subscriber = super::Subscriber::new(
+            actor_id.clone(),
+            Subscription::Topics(HashSet::from([TestTopic::A])),
+            tx.clone(),
+        );
         assert!(broker.add_subscriber(subscriber).is_ok());
-        let duplicate_subscriber =
-            super::Subscriber::new(actor_id, HashSet::from([TestTopic::B]), tx.clone());
+        let duplicate_subscriber = super::Subscriber::new(
+            actor_id,
+            Subscription::Topics(HashSet::from([TestTopic::B])),
+            tx.clone(),
+        );
         assert!(broker.add_subscriber(duplicate_subscriber).is_err());
     }
 }

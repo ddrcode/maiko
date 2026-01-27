@@ -15,7 +15,13 @@ impl Actor for Greeter {
     type Event = MyEvent;
 
     async fn handle_event(&mut self, _envelope: &Envelope<Self::Event>) -> Result<()> {
-        Err(maiko::Error::External(Arc::from("This is error")))
+        // Intentionally return an error to demonstrate on_error monitoring
+        Err(maiko::Error::External(Arc::from("Simulated error")))
+    }
+
+    fn on_error(&self, _error: Error) -> Result<()> {
+        // Swallow the error so the actor continues running
+        Ok(())
     }
 }
 

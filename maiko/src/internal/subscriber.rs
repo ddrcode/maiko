@@ -1,20 +1,20 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{ActorId, Envelope, Event, Topic};
+use crate::{ActorId, Envelope, Event, Topic, internal::Subscription};
 
 #[derive(Debug)]
 pub(crate) struct Subscriber<E: Event, T: Topic<E>> {
     pub actor_id: ActorId,
-    pub topics: HashSet<T>,
+    pub topics: Subscription<T>,
     pub sender: Sender<Arc<Envelope<E>>>,
 }
 
 impl<E: Event, T: Topic<E>> Subscriber<E, T> {
     pub fn new(
         actor_id: ActorId,
-        topics: HashSet<T>,
+        topics: Subscription<T>,
         sender: Sender<Arc<Envelope<E>>>,
     ) -> Subscriber<E, T> {
         Subscriber {
