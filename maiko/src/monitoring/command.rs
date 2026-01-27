@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use tokio::sync::oneshot;
 
 use crate::{
@@ -13,5 +15,10 @@ pub(crate) enum MonitorCommand<E: Event, T: Topic<E>> {
     PauseOne(MonitorId),
     ResumeOne(MonitorId),
     DispatchEvent(MonitoringEvent<E, T>),
-    Flush(oneshot::Sender<()>),
+    /// Flush waits for the command queue to be empty and stay empty for the
+    /// specified settle window before responding.
+    Flush {
+        response: oneshot::Sender<()>,
+        settle_window: Duration,
+    },
 }

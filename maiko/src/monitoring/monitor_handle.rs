@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
@@ -34,9 +36,19 @@ impl<E: Event, T: Topic<E>> MonitorHandle<E, T> {
         let _ = self.sender.send(MonitorCommand::ResumeOne(self.id)).await;
     }
 
-    pub async fn flush(&self) {
+    /// Flush waits for the monitoring dispatcher queue to be empty and stay
+    /// empty for the specified settle window before returning.
+    ///
+    /// This ensures all events queued before the flush call have been processed.
+    pub async fn flush(&self, settle_window: Duration) {
         let (tx, rx) = oneshot::channel();
-        let _ = self.sender.send(MonitorCommand::Flush(tx)).await;
+        let _ = self
+            .sender
+            .send(MonitorCommand::Flush {
+                response: tx,
+                settle_window,
+            })
+            .await;
         let _ = rx.await;
     }
 }

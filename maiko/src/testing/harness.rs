@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use tokio::sync::mpsc::{Sender, UnboundedReceiver, unbounded_channel};
 
@@ -70,25 +73,49 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         while let Ok(_entry) = self.receiver.try_recv() {}
     }
 
+    /// Default settle window: wait 1ms for quiet before considering settled.
+    pub const DEFAULT_SETTLE_WINDOW: Duration = Duration::from_millis(1);
+
+    /// Default max settle time: give up waiting after 10ms.
+    pub const DEFAULT_MAX_SETTLE: Duration = Duration::from_millis(10);
+
     /// Wait for events to propagate through the system.
     ///
-    /// This sends a flush command through the collector's queue and waits for
-    /// acknowledgment, ensuring all prior events have been processed by the
-    /// collector. A small delay is added to allow actors to process events
-    /// and emit responses, which then need to flow through the broker and
-    /// collector.
+    /// Collects events until no new events arrive for 1ms (settle window),
+    /// or until 10ms total have elapsed (max settle time).
     ///
-    /// For chatty actors that continuously produce events, use
-    /// [`settle_with_timeout`](Self::settle_with_timeout) instead.
+    /// For chatty actors that continuously produce events, the max settle
+    /// time prevents infinite waiting. Use [`settle_with_timeout`](Self::settle_with_timeout)
+    /// for custom timing.
     pub async fn settle(&mut self) {
-        tokio::task::yield_now().await;
-        for _ in 0..3 {
-            // tokio::time::sleep(Duration::from_millis(1)).await;
-            tokio::task::yield_now().await;
-        }
-        self.monitor_handle.flush().await;
-        while let Ok(entry) = self.receiver.try_recv() {
-            self.snapshot.push(entry);
+        self.settle_with_timeout(Self::DEFAULT_SETTLE_WINDOW, Self::DEFAULT_MAX_SETTLE)
+            .await;
+    }
+
+    /// Wait for events with custom timing parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `settle_window` - Return early if no events arrive for this duration
+    /// * `max_settle` - Maximum total time to wait, regardless of activity
+    ///
+    /// Useful for chatty actors where you want a shorter max settle time,
+    /// or for slow systems where you need a longer settle window.
+    pub async fn settle_with_timeout(&mut self, settle_window: Duration, max_settle: Duration) {
+        let deadline = Instant::now() + max_settle;
+
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            let timeout = settle_window.min(remaining);
+            match tokio::time::timeout(timeout, self.receiver.recv()).await {
+                Ok(Some(entry)) => self.snapshot.push(entry),
+                Ok(None) => break, // Channel closed
+                Err(_) => break,   // Quiet for settle_window - system settled
+            }
         }
     }
 

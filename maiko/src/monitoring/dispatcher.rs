@@ -5,11 +5,13 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use tokio::{
     select,
     sync::{mpsc::Receiver, oneshot},
+    time::Instant,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -39,7 +41,8 @@ pub(crate) struct MonitorDispatcher<E: Event, T: Topic<E>> {
     cancel_token: Arc<CancellationToken>,
     ids_to_remove: Vec<MonitorId>,
     is_active: Arc<AtomicBool>,
-    flush_response: Option<oneshot::Sender<()>>,
+    flush_pending: Option<(oneshot::Sender<()>, Duration)>,
+    last_activity: Instant,
 }
 
 impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
@@ -55,7 +58,8 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             last_id: 0,
             ids_to_remove: Vec::with_capacity(8),
             is_active,
-            flush_response: None,
+            flush_pending: None,
+            last_activity: Instant::now(),
         }
     }
 
@@ -83,26 +87,30 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
         self.update_is_active();
     }
 
-    #[inline]
-    fn handle_flush(&mut self) {
-        if self.flush_response.is_some() && self.receiver.is_empty() {
-            let _ = self
-                .flush_response
-                .take()
-                .expect("flush_response must exist at this point")
-                .send(());
+    fn try_complete_flush(&mut self) {
+        if let Some((_, settle_window)) = &self.flush_pending {
+            if self.receiver.is_empty() && self.last_activity.elapsed() >= *settle_window {
+                if let Some((response, _)) = self.flush_pending.take() {
+                    let _ = response.send(());
+                }
+            }
         }
     }
 
     pub async fn run(&mut self) {
+        const FLUSH_CHECK_INTERVAL: Duration = Duration::from_micros(100);
+
         loop {
             select! {
                 _ = self.cancel_token.cancelled() => {
                     break;
                 }
                 Some(cmd) = self.receiver.recv() => {
+                    self.last_activity = Instant::now();
                     self.handle_command(cmd);
-                    self.handle_flush();
+                }
+                _ = tokio::time::sleep(FLUSH_CHECK_INTERVAL), if self.flush_pending.is_some() => {
+                    self.try_complete_flush();
                 }
             }
         }
@@ -136,9 +144,9 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             DispatchEvent(event) if self.is_active.load(Ordering::Relaxed) => {
                 self.handle_event(event);
             }
-            Flush(resp) => {
-                self.flush_response = Some(resp);
-                self.handle_flush();
+            Flush { response, settle_window } => {
+                self.flush_pending = Some((response, settle_window));
+                self.try_complete_flush();
             }
             _ => {}
         }
