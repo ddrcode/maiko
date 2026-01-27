@@ -4,19 +4,27 @@ use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Actor, Context, Envelope, Result, StepAction,
+    Actor, Context, Envelope, Result, StepAction, Topic,
     internal::{StepHandler, StepPause},
 };
 
-pub(crate) struct ActorController<A: Actor> {
+#[cfg(feature = "monitoring")]
+use crate::monitoring::{MonitoringEvent, MonitoringSink};
+
+pub(crate) struct ActorController<A: Actor, T: Topic<A::Event>> {
     pub(crate) actor: A,
     pub(crate) receiver: Receiver<Arc<Envelope<A::Event>>>,
     pub(crate) ctx: Context<A::Event>,
     pub(crate) max_events_per_tick: usize,
     pub(crate) cancel_token: Arc<CancellationToken>,
+
+    #[cfg(feature = "monitoring")]
+    pub(crate) monitoring: MonitoringSink<A::Event, T>,
+
+    pub(crate) _topic: std::marker::PhantomData<fn() -> T>,
 }
 
-impl<A: Actor> ActorController<A> {
+impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
     pub async fn run(&mut self) -> Result<()> {
         self.actor.on_start().await?;
         let token = self.cancel_token.clone();
@@ -31,12 +39,25 @@ impl<A: Actor> ActorController<A> {
                 },
 
                 Some(event) = self.receiver.recv() => {
+                    #[cfg(feature = "monitoring")]
+                    let topic = {
+                        let topic = Arc::new(T::from_event(event.event()));
+                        self.notify_event_delivered(&event, &topic);
+                        topic
+                    };
+
                     let res = self.actor.handle_event(&event).await;
+
+                    #[cfg(feature = "monitoring")]
+                    self.notify_event_handled(&event, &topic);
+
                     self.handle_error(res)?;
 
                     let mut cnt = 1;
                     while let Ok(event) = self.receiver.try_recv() {
+                        #[cfg(feature = "monitoring")] self.notify_event_delivered(&event, &topic);
                         let res = self.actor.handle_event(&event).await;
+                        #[cfg(feature = "monitoring")] self.notify_event_handled(&event, &topic);
                         self.handle_error(res)?;
                         cnt += 1;
                         if cnt == self.max_events_per_tick {
@@ -57,6 +78,9 @@ impl<A: Actor> ActorController<A> {
                     match self.actor.step().await {
                         Ok(action) => handle_step_action(action, &mut step_handler).await,
                         Err(e) => {
+                            #[cfg(feature = "monitoring")]
+                            self.notify_error(&e);
+
                             self.actor.on_error(e)?;
                             step_handler.reset();
                         }
@@ -67,6 +91,9 @@ impl<A: Actor> ActorController<A> {
                      match res {
                         Ok(action) => handle_step_action(action, &mut step_handler).await,
                         Err(e) => {
+                            #[cfg(feature = "monitoring")]
+                            self.notify_error(&e);
+
                             self.actor.on_error(e)?;
                             step_handler.reset();
                         }
@@ -75,12 +102,18 @@ impl<A: Actor> ActorController<A> {
             }
         }
 
+        #[cfg(feature = "monitoring")]
+        self.notify_exit();
+
         self.actor.on_shutdown().await
     }
 
     #[inline]
-    fn handle_error<T>(&self, result: Result<T>) -> Result<()> {
+    fn handle_error<R>(&self, result: Result<R>) -> Result<()> {
         if let Err(e) = result {
+            #[cfg(feature = "monitoring")]
+            self.notify_error(&e);
+
             self.actor.on_error(e)?;
         }
         Ok(())
@@ -104,4 +137,47 @@ async fn handle_step_action(step_action: StepAction, step_handler: &mut StepHand
         crate::StepAction::Never => StepPause::Suppressed,
     };
     step_handler.pause = pause;
+}
+
+#[cfg(feature = "monitoring")]
+impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
+    #[inline]
+    fn notify_event_delivered(&self, event: &Arc<Envelope<A::Event>>, topic: &Arc<T>) {
+        if self.monitoring.is_active() {
+            self.monitoring.send(MonitoringEvent::EventDelivered(
+                event.clone(),
+                topic.clone(),
+                self.ctx.actor_id.clone(),
+            ));
+        }
+    }
+
+    #[inline]
+    fn notify_event_handled(&self, event: &Arc<Envelope<A::Event>>, topic: &Arc<T>) {
+        if self.monitoring.is_active() {
+            self.monitoring.send(MonitoringEvent::EventHandled(
+                event.clone(),
+                topic.clone(),
+                self.ctx.actor_id.clone(),
+            ));
+        }
+    }
+
+    #[inline]
+    fn notify_error(&self, error: &crate::Error) {
+        if self.monitoring.is_active() {
+            self.monitoring.send(MonitoringEvent::Error(
+                error.clone(),
+                self.ctx.actor_id.clone(),
+            ));
+        }
+    }
+
+    #[inline]
+    fn notify_exit(&self) {
+        if self.monitoring.is_active() {
+            self.monitoring
+                .send(MonitoringEvent::ActorStopped(self.ctx.actor_id.clone()));
+        }
+    }
 }

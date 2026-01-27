@@ -18,6 +18,9 @@ use crate::{
     internal::{ActorController, Broker, Subscriber},
 };
 
+#[cfg(feature = "monitoring")]
+use crate::monitoring::MonitorRegistry;
+
 /// Coordinates actors and the broker, and owns the top-level runtime.
 ///
 /// # Actor Registration
@@ -49,15 +52,15 @@ use crate::{
 pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     config: Arc<Config>,
     broker: Arc<Mutex<Broker<E, T>>>,
-    sender: Sender<Arc<Envelope<E>>>,
+    pub(crate) sender: Sender<Arc<Envelope<E>>>,
     tasks: JoinSet<Result<()>>,
     cancel_token: Arc<CancellationToken>,
     broker_cancel_token: Arc<CancellationToken>,
     start_notifier: Arc<Notify>,
     supervisor_id: ActorId,
 
-    #[cfg(feature = "test-harness")]
-    harness: Option<crate::testing::Harness<E, T>>,
+    #[cfg(feature = "monitoring")]
+    monitoring: MonitorRegistry<E, T>,
 }
 
 impl<E: Event, T: Topic<E>> Supervisor<E, T> {
@@ -66,8 +69,22 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let config = Arc::new(config);
         let (tx, rx) = channel::<Arc<Envelope<E>>>(config.channel_size);
         let cancel_token = Arc::new(CancellationToken::new());
+
+        #[cfg(feature = "monitoring")]
+        let monitoring = {
+            let mut monitoring = MonitorRegistry::new(&config);
+            monitoring.start();
+            monitoring
+        };
+
         let broker_cancel_token = Arc::new(CancellationToken::new());
-        let broker = Broker::new(rx, broker_cancel_token.clone(), config.clone());
+        let broker = Broker::new(
+            rx,
+            broker_cancel_token.clone(),
+            config.clone(),
+            #[cfg(feature = "monitoring")]
+            monitoring.sink(),
+        );
 
         Self {
             broker: Arc::new(Mutex::new(broker)),
@@ -79,8 +96,8 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             start_notifier: Arc::new(Notify::new()),
             supervisor_id: ActorId::new(Arc::from("supervisor")),
 
-            #[cfg(feature = "test-harness")]
-            harness: None,
+            #[cfg(feature = "monitoring")]
+            monitoring,
         }
     }
 
@@ -161,12 +178,17 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics, tx);
         broker.add_subscriber(subscriber)?;
 
-        let mut controller = ActorController {
+        let mut controller = ActorController::<A, T> {
             actor,
             receiver: rx,
             ctx,
             max_events_per_tick: self.config.max_events_per_tick,
             cancel_token: self.cancel_token.clone(),
+
+            #[cfg(feature = "monitoring")]
+            monitoring: self.monitoring.sink(),
+
+            _topic: std::marker::PhantomData,
         };
 
         let notified = self.start_notifier.clone().notified_owned();
@@ -239,10 +261,8 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let timeout = Duration::from_millis(10);
         let max = self.sender.max_capacity();
 
-        #[cfg(feature = "test-harness")]
-        if let Some(harness) = self.harness.as_ref() {
-            harness.exit().await;
-        }
+        #[cfg(feature = "monitoring")]
+        self.monitoring.stop().await;
 
         // 1. Wait for the main channle to drain
         while start.elapsed() < timeout {
@@ -268,47 +288,27 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         self.config.as_ref()
     }
 
-    /// Initialize the test harness for observing event flow.
-    ///
-    /// This should be called before [`start()`](Self::start). The harness enables
-    /// event recording, injection, and assertions for testing.
-    ///
-    /// If called multiple times, returns a clone of the existing harness.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let mut sup = Supervisor::<MyEvent>::default();
-    /// sup.add_actor("test", |ctx| MyActor::new(ctx), &[DefaultTopic])?;
-    ///
-    /// let mut test = sup.init_test_harness().await;
-    /// sup.start().await?;
-    ///
-    /// test.start_recording().await;
-    /// // ... run test ...
-    /// test.stop_recording().await;
-    /// ```
-    #[cfg(feature = "test-harness")]
-    pub async fn init_test_harness(&mut self) -> crate::testing::Harness<E, T> {
-        // Return existing harness if already initialized
-        if let Some(ref harness) = self.harness {
-            return harness.clone();
-        }
-
-        let (harness, mut collector, recording) =
-            crate::testing::init_harness::<E, T>(self.sender.clone());
-        self.tasks.spawn(async move { collector.run().await });
-        self.broker
-            .lock()
-            .await
-            .set_test_sender(harness.test_sender.clone(), recording);
-        self.harness = Some(harness.clone());
-        harness
+    #[cfg(feature = "monitoring")]
+    pub fn monitors(&mut self) -> &mut MonitorRegistry<E, T> {
+        &mut self.monitoring
     }
 }
 
 impl<E: Event, T: Topic<E>> Default for Supervisor<E, T> {
     fn default() -> Self {
         Self::new(Config::default())
+    }
+}
+
+impl<E: Event, T: Topic<E>> Drop for Supervisor<E, T> {
+    fn drop(&mut self) {
+        if !self.cancel_token.is_cancelled() {
+            self.cancel_token.cancel();
+        }
+        if !self.broker_cancel_token.is_cancelled() {
+            self.broker_cancel_token.cancel();
+        }
+        #[cfg(feature = "monitoring")]
+        self.monitoring.cancel();
     }
 }

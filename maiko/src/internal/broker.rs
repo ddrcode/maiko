@@ -6,11 +6,8 @@ use tokio_util::sync::CancellationToken;
 use super::Subscriber;
 use crate::{Config, Envelope, Error, Event, Result, Topic};
 
-#[cfg(feature = "test-harness")]
-use std::sync::atomic::Ordering;
-
-#[cfg(feature = "test-harness")]
-use crate::testing::{EventEntry, RecordingFlag, TestEvent};
+#[cfg(feature = "monitoring")]
+use crate::monitoring::{MonitoringEvent, MonitoringSink};
 
 pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Arc<Envelope<E>>>,
@@ -18,11 +15,8 @@ pub struct Broker<E: Event, T: Topic<E>> {
     cancel_token: Arc<CancellationToken>,
     config: Arc<Config>,
 
-    #[cfg(feature = "test-harness")]
-    test_sender: Option<tokio::sync::mpsc::Sender<TestEvent<E, T>>>,
-
-    #[cfg(feature = "test-harness")]
-    recording: Option<RecordingFlag>,
+    #[cfg(feature = "monitoring")]
+    monitoring: MonitoringSink<E, T>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
@@ -30,21 +24,20 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         receiver: Receiver<Arc<Envelope<E>>>,
         cancel_token: Arc<CancellationToken>,
         config: Arc<Config>,
+        #[cfg(feature = "monitoring")] monitoring: MonitoringSink<E, T>,
     ) -> Broker<E, T> {
         Broker {
             receiver,
             subscribers: Vec::new(),
             cancel_token,
             config,
-            #[cfg(feature = "test-harness")]
-            test_sender: None,
-            #[cfg(feature = "test-harness")]
-            recording: None,
+            #[cfg(feature = "monitoring")]
+            monitoring,
         }
     }
 
     pub(crate) fn add_subscriber(&mut self, subscriber: Subscriber<E, T>) -> Result<()> {
-        if self.subscribers.iter().any(|s| *s == subscriber) {
+        if self.subscribers.contains(&subscriber) {
             return Err(Error::SubscriberAlreadyExists(subscriber.actor_id.clone()));
         }
         self.subscribers.push(subscriber);
@@ -52,14 +45,18 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<()> {
-        let topic = Topic::from_event(e.event());
+        let topic = T::from_event(e.event());
 
-        #[cfg(feature = "test-harness")]
-        let is_recording = self
-            .recording
-            .as_ref()
-            .map(|r| r.load(Ordering::Acquire))
-            .unwrap_or(false);
+        #[cfg(feature = "monitoring")]
+        let (is_recording, topic_for_monitor) = {
+            let active = self.monitoring.is_active();
+            let t = if active {
+                Some(Arc::new(topic.clone()))
+            } else {
+                None
+            };
+            (active, t)
+        };
 
         self.subscribers
             .iter()
@@ -68,16 +65,18 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .filter(|s| s.actor_id != *e.meta().actor_id())
             .try_for_each(|subscriber| {
                 let res = subscriber.sender.try_send(e.clone());
-                #[cfg(feature = "test-harness")]
+
+                #[cfg(feature = "monitoring")]
                 if is_recording {
-                    if let Some(ref sender) = self.test_sender {
-                        let _ = sender.try_send(TestEvent::Event(EventEntry::new(
+                    if let Some(topic_for_monitor) = &topic_for_monitor {
+                        self.monitoring.send(MonitoringEvent::EventDispatched(
                             e.clone(),
-                            topic.clone(),
+                            topic_for_monitor.clone(),
                             subscriber.actor_id.clone(),
-                        )));
+                        ));
                     }
                 }
+
                 res
             })?;
         Ok(())
@@ -85,32 +84,14 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     pub async fn run(&mut self) -> Result<()> {
         let mut cleanup_interval = tokio::time::interval(self.config.maintenance_interval);
-        let mut idle_interval = if cfg!(feature = "test-harness") {
-            tokio::time::interval(tokio::time::Duration::from_millis(5))
-        } else {
-            tokio::time::interval(tokio::time::Duration::MAX)
-        };
-        #[cfg(feature = "test-harness")]
-        let mut idle = true;
         loop {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
-                    #[cfg(feature = "test-harness")]
-                    { idle = false; }
                     self.send_event(&e)?;
                 },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
-                }
-                _ = idle_interval.tick() => {
-                    #[cfg(feature = "test-harness")]
-                    if !idle && self.is_empty() {
-                        idle = true;
-                        if let Some(ref sender) = self.test_sender {
-                            let _ = sender.try_send(TestEvent::Idle);
-                        }
-                    }
                 }
             }
         }
@@ -124,11 +105,6 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
 
     async fn shutdown(&mut self) {
         use tokio::time::*;
-
-        #[cfg(feature = "test-harness")]
-        if let Some(ref sender) = self.test_sender {
-            let _ = sender.send(TestEvent::Exit).await;
-        }
 
         // Send messages that were in the queue at the time of shutdown
         for _ in 0..self.receiver.len() {
@@ -153,16 +129,6 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         self.subscribers
             .iter()
             .all(|s| s.sender.is_closed() || s.sender.capacity() == s.sender.max_capacity())
-    }
-
-    #[cfg(feature = "test-harness")]
-    pub(crate) fn set_test_sender(
-        &mut self,
-        sender: tokio::sync::mpsc::Sender<TestEvent<E, T>>,
-        recording: RecordingFlag,
-    ) {
-        self.test_sender = Some(sender);
-        self.recording = Some(recording);
     }
 }
 
@@ -201,19 +167,26 @@ mod tests {
         let (tx, rx) = mpsc::channel(10);
         let config = Arc::new(crate::Config::default());
         let cancel_token = Arc::new(CancellationToken::new());
-        let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config);
+
+        #[cfg(feature = "monitoring")]
+        let monitoring = {
+            let registry = crate::monitoring::MonitorRegistry::<TestEvent, TestTopic>::new(&config);
+            registry.sink()
+        };
+
+        let mut broker = Broker::<TestEvent, TestTopic>::new(
+            rx,
+            cancel_token,
+            config,
+            #[cfg(feature = "monitoring")]
+            monitoring,
+        );
         let actor_id = ActorId::new(Arc::from("subscriber1"));
-        let subscriber = super::Subscriber::new(
-            actor_id.clone(),
-            HashSet::from([TestTopic::A]),
-            tx.clone(),
-        );
+        let subscriber =
+            super::Subscriber::new(actor_id.clone(), HashSet::from([TestTopic::A]), tx.clone());
         assert!(broker.add_subscriber(subscriber).is_ok());
-        let duplicate_subscriber = super::Subscriber::new(
-            actor_id,
-            HashSet::from([TestTopic::B]),
-            tx.clone(),
-        );
+        let duplicate_subscriber =
+            super::Subscriber::new(actor_id, HashSet::from([TestTopic::B]), tx.clone());
         assert!(broker.add_subscriber(duplicate_subscriber).is_err());
     }
 }

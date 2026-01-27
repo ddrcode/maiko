@@ -1,19 +1,14 @@
 use std::{
-    sync::{Arc, atomic::Ordering},
-    time::Duration,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 
-use tokio::{
-    sync::{Mutex, mpsc::Sender, oneshot},
-    time::timeout,
-};
+use tokio::sync::mpsc::{Sender, UnboundedReceiver, unbounded_channel};
 
 use crate::{
-    ActorId, Envelope, Event, EventId, Topic,
-    testing::{
-        ActorSpy, EventEntry, EventQuery, EventRecords, EventSpy, RecordingFlag, TestEvent,
-        TopicSpy,
-    },
+    ActorId, Envelope, Event, EventId, Supervisor, Topic,
+    monitoring::MonitorHandle,
+    testing::{ActorSpy, EventCollector, EventEntry, EventQuery, EventRecords, EventSpy, TopicSpy},
 };
 
 /// Test harness for observing and asserting on event flow in a Maiko system.
@@ -26,7 +21,8 @@ use crate::{
 /// # Example
 ///
 /// ```ignore
-/// let mut test = supervisor.init_test_harness().await;
+/// // Create harness BEFORE starting supervisor
+/// let mut test = Harness::new(&mut supervisor).await;
 /// supervisor.start().await?;
 ///
 /// test.start_recording().await;
@@ -36,105 +32,98 @@ use crate::{
 /// assert!(test.event(id).was_delivered_to(&consumer));
 /// assert_eq!(1, test.actor(&consumer).inbound_count());
 /// ```
-#[derive(Clone)]
+///
+/// # Warning
+///
+/// **Do not use in production.** The test harness uses an unbounded channel
+/// for event collection, which can lead to memory exhaustion under high load.
+/// For production monitoring, use the [`monitoring`](crate::monitoring) API directly.
 pub struct Harness<E: Event, T: Topic<E>> {
-    pub(crate) test_sender: Sender<TestEvent<E, T>>,
-    actor_sender: Sender<Arc<Envelope<E>>>,
-    entries: Arc<Mutex<Vec<EventEntry<E, T>>>>,
     snapshot: EventRecords<E, T>,
-    recording: RecordingFlag,
+    monitor_handle: MonitorHandle<E, T>,
+    receiver: UnboundedReceiver<EventEntry<E, T>>,
+    actor_sender: Sender<Arc<Envelope<E>>>,
 }
 
 impl<E: Event, T: Topic<E>> Harness<E, T> {
-    pub fn new(
-        test_sender: Sender<TestEvent<E, T>>,
-        actor_sender: Sender<Arc<Envelope<E>>>,
-        entries: Arc<Mutex<Vec<EventEntry<E, T>>>>,
-        recording: RecordingFlag,
-    ) -> Self {
+    pub async fn new(supervior: &mut Supervisor<E, T>) -> Self {
+        let (tx, rx) = unbounded_channel();
+        let monitor = EventCollector::new(tx);
+        let monitor_handle = supervior.monitors().add(monitor).await;
+        // monitor_handle.pause().await;
         Self {
-            test_sender,
-            actor_sender,
-            entries,
-            snapshot: Arc::new(Vec::new()),
-            recording,
+            snapshot: Vec::new(),
+            monitor_handle,
+            receiver: rx,
+            actor_sender: supervior.sender.clone(),
         }
     }
 
     // ==================== Recording Control ====================
 
     /// Start recording events. Call before sending test events.
-    pub async fn start_recording(&mut self) {
-        self.recording.store(true, Ordering::Release);
-        let _ = self.test_sender.send(TestEvent::StartRecording).await;
+    pub async fn start_recording(&self) {
+        self.monitor_handle.resume().await;
     }
 
     /// Stop recording and capture a snapshot for querying.
     ///
     /// After calling this, spy methods will query the captured snapshot.
     pub async fn stop_recording(&mut self) {
-        // First settle to ensure all in-flight events are recorded
         self.settle().await;
-        // Then stop recording
-        self.recording.store(false, Ordering::Release);
-        self.snapshot = self.take_snapshot().await;
-        let _ = self.test_sender.send(TestEvent::StopRecording).await;
+        self.monitor_handle.pause().await;
     }
 
     /// Clear all recorded events and reset the snapshot.
-    pub async fn reset(&mut self) {
-        let _ = self.test_sender.send(TestEvent::Reset).await;
-        self.snapshot = Arc::new(Vec::new());
+    pub fn reset(&mut self) {
+        self.snapshot.clear();
+        while let Ok(_entry) = self.receiver.try_recv() {}
     }
 
-    /// Signal the test harness to exit.
-    pub async fn exit(&self) {
-        let _ = self.test_sender.send(TestEvent::Exit).await;
-    }
+    /// Default settle window: wait 1ms for quiet before considering settled.
+    pub const DEFAULT_SETTLE_WINDOW: Duration = Duration::from_millis(1);
+
+    /// Default max settle time: give up waiting after 10ms.
+    pub const DEFAULT_MAX_SETTLE: Duration = Duration::from_millis(10);
 
     /// Wait for events to propagate through the system.
     ///
-    /// This sends a flush command through the collector's queue and waits for
-    /// acknowledgment, ensuring all prior events have been processed by the
-    /// collector. A small delay is added to allow actors to process events
-    /// and emit responses, which then need to flow through the broker and
-    /// collector.
+    /// Collects events until no new events arrive for 1ms (settle window),
+    /// or until 10ms total have elapsed (max settle time).
     ///
-    /// For chatty actors that continuously produce events, use
-    /// [`settle_with_timeout`](Self::settle_with_timeout) instead.
-    pub async fn settle(&self) {
-        for _ in 0..3 {
-            let (tx, rx) = oneshot::channel();
-            let _ = self.test_sender.send(TestEvent::Flush(tx)).await;
-            let _ = rx.await;
-            // Small delay to allow actors to process and emit new events
-            tokio::time::sleep(Duration::from_millis(5)).await;
+    /// For chatty actors that continuously produce events, the max settle
+    /// time prevents infinite waiting. Use [`settle_with_timeout`](Self::settle_with_timeout)
+    /// for custom timing.
+    pub async fn settle(&mut self) {
+        self.settle_with_timeout(Self::DEFAULT_SETTLE_WINDOW, Self::DEFAULT_MAX_SETTLE)
+            .await;
+    }
+
+    /// Wait for events with custom timing parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `settle_window` - Return early if no events arrive for this duration
+    /// * `max_settle` - Maximum total time to wait, regardless of activity
+    ///
+    /// Useful for chatty actors where you want a shorter max settle time,
+    /// or for slow systems where you need a longer settle window.
+    pub async fn settle_with_timeout(&mut self, settle_window: Duration, max_settle: Duration) {
+        let deadline = Instant::now() + max_settle;
+
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            let timeout = settle_window.min(remaining);
+            match tokio::time::timeout(timeout, self.receiver.recv()).await {
+                Ok(Some(entry)) => self.snapshot.push(entry),
+                Ok(None) => break, // Channel closed
+                Err(_) => break,   // Quiet for settle_window - system settled
+            }
         }
-    }
-
-    /// Wait for events to propagate, with a timeout.
-    ///
-    /// Useful for testing actors that continuously produce events, where
-    /// the queue may never fully drain. Returns `true` if settled within
-    /// the timeout, `false` if the timeout elapsed.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// // Wait up to 100ms for events to settle
-    /// if !test.settle_with_timeout(Duration::from_millis(100)).await {
-    ///     // Handle timeout - queue may still have events
-    /// }
-    /// ```
-    pub async fn settle_with_timeout(&self, duration: Duration) -> bool {
-        let (tx, rx) = oneshot::channel();
-        let _ = self.test_sender.send(TestEvent::Flush(tx)).await;
-        timeout(duration, rx).await.is_ok()
-    }
-
-    async fn take_snapshot(&self) -> EventRecords<E, T> {
-        let entries = self.entries.lock().await;
-        Arc::new(entries.clone())
     }
 
     // ==================== Event Injection ====================

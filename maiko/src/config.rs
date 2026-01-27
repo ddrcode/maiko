@@ -25,6 +25,8 @@ pub struct Config {
     pub max_events_per_tick: usize,
 
     pub maintenance_interval: tokio::time::Duration,
+
+    pub monitoring_channel_size: usize,
 }
 
 impl Default for Config {
@@ -33,6 +35,7 @@ impl Default for Config {
             channel_size: 128,
             max_events_per_tick: 10,
             maintenance_interval: tokio::time::Duration::from_secs(10),
+            monitoring_channel_size: 1024,
         }
     }
 }
@@ -68,6 +71,11 @@ impl Config {
     /// This controls how often the broker cleans up expired subscribers.
     pub fn with_maintenance_interval(mut self, interval: tokio::time::Duration) -> Self {
         self.maintenance_interval = interval;
+        self
+    }
+
+    pub fn with_monitoring_channel_size(mut self, size: usize) -> Self {
+        self.monitoring_channel_size = size;
         self
     }
 }

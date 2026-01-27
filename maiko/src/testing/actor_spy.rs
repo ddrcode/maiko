@@ -140,17 +140,17 @@ mod tests {
         receiver: &ActorId,
     ) -> EventEntry<TestEvent, DefaultTopic> {
         let envelope = Arc::new(Envelope::new(event, sender.clone()));
-        EventEntry::new(envelope, DefaultTopic, receiver.clone())
+        EventEntry::new(envelope, Arc::new(DefaultTopic), receiver.clone())
     }
 
     fn sample_records_with_actors(actors: &TestActors) -> EventRecords<TestEvent, DefaultTopic> {
         // Scenario: alice sends to bob and charlie, bob sends to alice
-        Arc::new(vec![
+        vec![
             make_entry(TestEvent(1), &actors.alice, &actors.bob),
             make_entry(TestEvent(2), &actors.alice, &actors.charlie),
             make_entry(TestEvent(3), &actors.bob, &actors.alice),
             make_entry(TestEvent(4), &actors.charlie, &actors.alice),
-        ])
+        ]
     }
 
     // ==================== Inbound Tests ====================
@@ -226,10 +226,11 @@ mod tests {
         let charlie = ActorId::new(Arc::from("charlie"));
         // Same event delivered to multiple actors
         let envelope = Arc::new(Envelope::new(TestEvent(1), alice.clone()));
-        let records = Arc::new(vec![
-            EventEntry::new(envelope.clone(), DefaultTopic, bob),
-            EventEntry::new(envelope, DefaultTopic, charlie),
-        ]);
+        let topic = Arc::new(DefaultTopic);
+        let records = vec![
+            EventEntry::new(envelope.clone(), topic.clone(), bob),
+            EventEntry::new(envelope, topic, charlie),
+        ];
 
         let spy = ActorSpy::new(records, alice);
         // Only 1 unique event sent, even though delivered to 2 actors
