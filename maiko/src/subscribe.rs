@@ -8,7 +8,7 @@ use crate::{Event, Topic, internal::Subscription};
 ///
 /// - [`Subscribe::all()`]  - receive events on all topics (e.g., monitoring actors)
 /// - [`Subscribe::none()`]  - receive no events (e.g., pure event producers)
-/// - [`Subscribe::to(topics)`]  - receive events on specific topics
+/// - [`Subscribe::to`] - receive events on specific topics
 ///
 /// For convenience, `&[T]` converts to `Subscribe` automatically:
 ///

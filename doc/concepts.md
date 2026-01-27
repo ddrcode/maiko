@@ -172,17 +172,6 @@ sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
 sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[DefaultTopic])?;
 ```
 
-### Builder API
-
-For advanced configuration:
-
-```rust
-sup.build_actor::<IngressActor>("ingress")
-    .actor(|ctx| IngressActor::new(ctx))
-    .topics(&[NetworkTopic::Ingress])
-    .build()?;
-```
-
 ### Runtime Control
 
 ```rust

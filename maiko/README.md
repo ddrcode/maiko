@@ -14,39 +14,55 @@
 
 ## What is Maiko?
 
-**Maiko** is a lightweight actor runtime for Tokio applications. Actors are independent units that encapsulate state and communicate through asynchronous events—no shared memory, no locks, no channel wiring. Each actor processes messages sequentially from its own mailbox, making concurrent systems easier to reason about.
+**Maiko** is a lightweight [actor](https://en.wikipedia.org/wiki/Actor_model) runtime for Tokio.
 
-Maiko uses **topic-based routing**: actors subscribe to topics, and events are automatically delivered to all interested subscribers. This creates loose coupling—actors don't need to know about each other, only the events they care about.
+Think **Kafka+Microservices, but for Tokio tasks** instead of distributed systems. Actors subscribe to topics, publish events, and Maiko handles all the routing - no manual channel wiring needed.
 
-> **Different from Actix/Ractor.** Traditional actor frameworks use direct addressing (you send messages to a specific actor). Maiko uses pub/sub routing (you publish events to topics). There are no actor addresses, no supervision trees, and no request-response patterns. Think of it as an in-process event bus with actor semantics.
+
+### How it compares
+
+| | Maiko | Actix/Ractor | Kafka |
+|---|-------|--------------|-------|
+| Routing | Topic-based pub/sub | Direct addressing | Topic-based pub/sub |
+| Coupling | Loose (actors don't know each other) | Tight (need actor addresses) | Loose |
+| Communication | Events | Request-response | Events |
+| Scope | In-process | In-process | Distributed |
+
+
+### Where it fits 
+
+Event-centric systems:
+
+- processing stock ticks, 
+- device signals, 
+- game events, telemetry pipelines. 
+ 
+Not ideal for request-response APIs or RPC patterns.
 
 ### Why "Maiko"?
 
-**Maiko** (舞妓) are traditional Japanese performers known for their coordinated dances. Like maiko who respond to music and each other in harmony, Maiko actors coordinate through events in the Tokio runtime. And yes, "Maiko" sounds like "my ko" (コ) — a nod to Tokio.
+**Maiko** (舞妓) are traditional Japanese performers known for their coordinated dances. Like maiko who respond to music and each other in harmony, Maiko actors coordinate through events in the Tokio runtime. 
 
-### The Problem Maiko Solves
+---
 
-Building concurrent Tokio applications often leads to **channel spaghetti**—manually creating, cloning, and wiring channels between tasks. With Maiko, channels disappear from your code:
+## The Problem Maiko Solves
+
+Building concurrent Tokio applications often leads to **channel spaghetti** - manually creating, cloning, and wiring channels between tasks:
 
 ```rust
-// Actors just subscribe to topics - Maiko handles all routing
-sup.add_actor("task_a", |ctx| TaskA { ctx }, &[Topic::Input])?;
-sup.add_actor("task_b", |ctx| TaskB { ctx }, &[Topic::Processed])?;
-sup.add_actor("task_c", |ctx| TaskC { ctx }, &[Topic::Input, Topic::Processed])?;
-
-// No manual channel creation, cloning, or wiring needed!
+// Without Maiko: manual channel wiring
+let (tx1, rx1) = mpsc::channel(32);
+let (tx2, rx2) = mpsc::channel(32);
+let (tx3, rx3) = mpsc::channel(32);
+// Clone tx1 for task B, clone tx2 for task C, wire rx1 to...
 ```
 
-### When to Use Maiko
-
-Maiko excels at **unidirectional event pipelines** where components don't need to know about each other:
-
-- **System event processing** — device monitoring, signals, inotify
-- **Data pipelines** — sensor data, stock ticks, telemetry
-- **Game engines** — entity systems, input handling
-- **Reactive architectures** — event sourcing, CQRS
-
-**Not ideal for:** Request-response APIs, RPC-style communication, complex supervision hierarchies.
+```rust
+// With Maiko: declare subscriptions, routing happens automatically
+sup.add_actor("sensor",    |ctx| Sensor::new(ctx),    Subscribe::none())?;      // produces events
+sup.add_actor("processor", |ctx| Processor::new(ctx), &[Topic::SensorData])?;   // handles sensor data
+sup.add_actor("logger",    |ctx| Logger::new(ctx),    Subscribe::all())?;       // observes everything
+```
 
 ---
 
@@ -90,10 +106,11 @@ async fn main() -> Result<()> {
 
 ### Examples
 
-See the [`examples/`](maiko/examples/) directory for complete programs:
+See the [`examples/`](maiko/examples/) directory:
 
-- **[`pingpong.rs`](maiko/examples/pingpong.rs)** — Simple event exchange between actors
-- **[`guesser.rs`](maiko/examples/guesser.rs)** — Multi-actor game with topics and timing
+- **[`pingpong.rs`](maiko/examples/pingpong.rs)** - Event exchange between actors
+- **[`guesser.rs`](maiko/examples/guesser.rs)** - Multi-actor game with topics and timing
+- **[`monitoring.rs`](maiko/examples/monitoring.rs)** - Observing event flow
 
 ```bash
 cargo run --example pingpong
@@ -110,9 +127,8 @@ cargo run --example guesser
 | **Topic** | Routes events to interested actors |
 | **Actor** | Processes events via `handle_event()` and produces events via `step()` |
 | **Context** | Provides actors with `send()`, `stop()`, and metadata access |
-| **Supervisor** | Manages actor lifecycles and runtime |
+| **Supervisor** | Manages actor lifecycles and the runtime |
 | **Envelope** | Wraps events with metadata (sender, correlation ID) |
-| **ActorId** | Unique identifier for actors, serializable across IPC boundaries |
 
 For detailed documentation, see **[Core Concepts](doc/concepts.md)**.
 
@@ -120,7 +136,7 @@ For detailed documentation, see **[Core Concepts](doc/concepts.md)**.
 
 ## Test Harness
 
-Maiko includes a test harness for observing and asserting on event flow:
+Maiko includes a test harness (built on the monitoring API) for observing and asserting on event flow:
 
 ```rust
 #[tokio::test]
@@ -143,13 +159,13 @@ async fn test_event_delivery() -> Result<()> {
 }
 ```
 
-Enable with `features = ["test-harness"]`. See **[Test Harness Documentation](doc/testing.md)** for full details.
+Enable with `features = ["test-harness"]`. See **[Test Harness Documentation](doc/testing.md)** for details.
 
 ---
 
 ## Monitoring
 
-Maiko provides a monitoring API for observing event flow. Implement the `Monitor` trait to receive callbacks for event dispatch, delivery, handling, and errors:
+The monitoring API provides hooks into the event lifecycle - useful for debugging, metrics, and logging:
 
 ```rust
 use maiko::monitoring::Monitor;
@@ -162,21 +178,20 @@ impl<E: Event, T: Topic<E>> Monitor<E, T> for EventLogger {
     }
 }
 
-// Register with supervisor
 let handle = sup.monitors().add(EventLogger).await;
 ```
 
-Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](doc/monitoring.md)** for full details.
+Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](doc/monitoring.md)** for details.
 
 ---
 
 ## Documentation
 
-- **[Core Concepts](doc/concepts.md)** — Events, Topics, Actors, Context, Supervisor
-- **[Monitoring](doc/monitoring.md)** — Event lifecycle hooks, metrics collection
-- **[Test Harness](doc/testing.md)** — Recording, spies, queries, assertions
-- **[Advanced Topics](doc/advanced.md)** — Error handling, configuration, design philosophy
-- **[API Reference](https://docs.rs/maiko)** — Complete API documentation
+- **[Core Concepts](doc/concepts.md)** - Events, Topics, Actors, Context, Supervisor
+- **[Monitoring](doc/monitoring.md)** - Event lifecycle hooks, metrics collection
+- **[Test Harness](doc/testing.md)** - Recording, spies, queries, assertions
+- **[Advanced Topics](doc/advanced.md)** - Error handling, configuration, design philosophy
+- **[API Reference](https://docs.rs/maiko)** - Complete API documentation
 
 ---
 
@@ -184,27 +199,27 @@ Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](doc/mo
 
 **Near-term:**
 - Dynamic actor spawning/removal at runtime
-- Actor introspection and metrics
-- Enhanced error handling strategies
+- Improved supervision and error handling strategies
 
 **Future:**
 - `maiko-actors` crate with reusable actors (IPC bridges, WebSocket, OpenTelemetry)
 - Cross-process communication via bridge actors
-- Embassy port for embedded systems
+
+---
+
+## Used In
+
+Maiko powers the daemon in [**Charon**](https://github.com/ddrcode/charon) - a USB keyboard pass-through device built on Raspberry Pi. The daemon uses Maiko actors to read input from multiple keyboards, map and translate key events, output USB HID to the host, and coordinate telemetry, IPC, and power management.
 
 ---
 
 ## Contributing
 
-Contributions welcome! Please feel free to:
+Contributions welcome! Whether it's a bug report, feature idea, or pull request - all input is appreciated.
 
-- Report bugs via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
-- Submit pull requests
-- Suggest features and improvements
-
-### Code Philosophy
-
-Maiko is developed through **human-AI collaboration**. The architecture, API design, and key decisions are human-driven, while AI serves as a capable pair programming partner—reviewing code, suggesting improvements, and helping implement well-specified designs.
+- **Try it out** and let us know what you think
+- **Report issues** via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
+- **Looking to contribute code?** Check out [good first issues](https://github.com/ddrcode/maiko/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22)
 
 ---
 

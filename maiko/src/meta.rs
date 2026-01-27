@@ -21,7 +21,7 @@ use crate::{ActorId, EventId};
 pub struct Meta {
     id: EventId,
     timestamp: u64,
-    pub(crate) actor_id: ActorId, // FIXME used by broker
+    pub(crate) actor_id: ActorId,
     correlation_id: Option<EventId>,
 }
 

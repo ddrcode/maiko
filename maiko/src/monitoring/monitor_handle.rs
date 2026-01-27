@@ -9,7 +9,7 @@ use crate::{
 
 /// Handle for controlling a registered monitor.
 ///
-/// Returned by [`MonitorRegistry::add()`].
+/// Returned by [`MonitorRegistry::add`](crate::monitoring::MonitorRegistry::add).
 ///
 /// # Example
 ///
