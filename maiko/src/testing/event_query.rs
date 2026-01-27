@@ -214,17 +214,17 @@ mod tests {
         receiver: &ActorId,
     ) -> EventEntry<TestEvent, DefaultTopic> {
         let envelope = Arc::new(Envelope::new(event, sender.clone()));
-        EventEntry::new(envelope, DefaultTopic, receiver.clone())
+        EventEntry::new(envelope, Arc::new(DefaultTopic), receiver.clone())
     }
 
     fn sample_records_with_actors(actors: &TestActors) -> EventRecords<TestEvent, DefaultTopic> {
-        Arc::new(vec![
+        vec![
             make_entry(TestEvent::Ping, &actors.alice, &actors.bob),
             make_entry(TestEvent::Pong, &actors.bob, &actors.alice),
             make_entry(TestEvent::Data(42), &actors.alice, &actors.bob),
             make_entry(TestEvent::Data(42), &actors.alice, &actors.charlie),
             make_entry(TestEvent::Ping, &actors.charlie, &actors.alice),
-        ])
+        ]
     }
 
     #[test]
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn is_empty_returns_true_for_empty_records() {
-        let query: EventQuery<TestEvent, DefaultTopic> = EventQuery::new(Arc::new(vec![]));
+        let query: EventQuery<TestEvent, DefaultTopic> = EventQuery::new(vec![]);
         assert!(query.is_empty());
     }
 
@@ -320,11 +320,12 @@ mod tests {
         // Create same event delivered to multiple actors
         let envelope = Arc::new(Envelope::new(TestEvent::Data(42), actors.alice.clone()));
         let target_id = envelope.id();
-        let records = Arc::new(vec![
+        let topic = Arc::new(DefaultTopic);
+        let records = vec![
             make_entry(TestEvent::Ping, &actors.bob, &actors.charlie),
-            EventEntry::new(envelope.clone(), DefaultTopic, actors.bob.clone()),
-            EventEntry::new(envelope, DefaultTopic, actors.charlie.clone()),
-        ]);
+            EventEntry::new(envelope.clone(), topic.clone(), actors.bob.clone()),
+            EventEntry::new(envelope, topic, actors.charlie.clone()),
+        ];
         let query = EventQuery::new(records).with_id(target_id);
         // Same event delivered to bob and charlie
         assert_eq!(query.count(), 2);
@@ -406,24 +407,25 @@ mod tests {
     #[test]
     fn correlated_with_filters_children() {
         let actors = TestActors::new();
+        let topic = Arc::new(DefaultTopic);
 
         // Create a parent event and a child correlated to it
         let parent_envelope = Arc::new(Envelope::new(TestEvent::Ping, actors.alice.clone()));
         let parent_id = parent_envelope.id();
-        let parent = EventEntry::new(parent_envelope, DefaultTopic, actors.bob.clone());
+        let parent = EventEntry::new(parent_envelope, topic.clone(), actors.bob.clone());
 
         let child_envelope = Arc::new(Envelope::with_correlation(
             TestEvent::Pong,
             actors.bob.clone(),
             parent_id,
         ));
-        let child = EventEntry::new(child_envelope, DefaultTopic, actors.alice.clone());
+        let child = EventEntry::new(child_envelope, topic.clone(), actors.alice.clone());
 
         let unrelated_envelope =
             Arc::new(Envelope::new(TestEvent::Data(1), actors.charlie.clone()));
-        let unrelated = EventEntry::new(unrelated_envelope, DefaultTopic, actors.alice.clone());
+        let unrelated = EventEntry::new(unrelated_envelope, topic, actors.alice.clone());
 
-        let records = Arc::new(vec![parent, child, unrelated]);
+        let records = vec![parent, child, unrelated];
         let query = EventQuery::new(records).correlated_with(parent_id);
         assert_eq!(query.count(), 1);
         assert!(query.first().unwrap().sender() == "bob");

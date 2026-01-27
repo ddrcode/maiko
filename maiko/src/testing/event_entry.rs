@@ -90,7 +90,7 @@ mod tests {
         let sender_id = ActorId::new(Arc::from("sender-actor"));
         let receiver_id = ActorId::new(Arc::from("receiver-actor"));
         let envelope = Arc::new(Envelope::new(TestEvent(42), sender_id.clone()));
-        let entry = EventEntry::new(envelope, DefaultTopic, receiver_id.clone());
+        let entry = EventEntry::new(envelope, Arc::new(DefaultTopic), receiver_id.clone());
         (entry, sender_id, receiver_id)
     }
 

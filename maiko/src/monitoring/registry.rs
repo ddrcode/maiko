@@ -10,6 +10,24 @@ use crate::{
     },
 };
 
+/// Registry for managing monitors attached to a supervisor.
+///
+/// Access via [`Supervisor::monitors()`](crate::Supervisor::monitors).
+///
+/// # Example
+///
+/// ```ignore
+/// let registry = supervisor.monitors();
+///
+/// // Add a monitor
+/// let handle = registry.add(MyMonitor).await;
+///
+/// // Pause all monitors
+/// registry.pause().await;
+///
+/// // Resume all monitors
+/// registry.resume().await;
+/// ```
 pub struct MonitorRegistry<E: Event, T: Topic<E>> {
     cancel_token: Arc<CancellationToken>,
     dispatcher: Option<MonitorDispatcher<E, T>>,
@@ -59,6 +77,9 @@ impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
         MonitoringSink::new(self.sender.clone(), self.is_active.clone())
     }
 
+    /// Register a new monitor and return a handle for controlling it.
+    ///
+    /// The monitor starts in the active (non-paused) state.
     pub async fn add<M: Monitor<E, T> + 'static>(&self, monitor: M) -> MonitorHandle<E, T> {
         let (tx, rx) = oneshot::channel();
         let _ = self
@@ -71,14 +92,22 @@ impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
         MonitorHandle::new(id, self.sender.clone())
     }
 
+    /// Remove a monitor by its ID.
+    ///
+    /// Prefer using [`MonitorHandle::remove()`] instead.
     pub async fn remove(&self, id: MonitorId) {
         let _ = self.sender.send(MonitorCommand::RemoveMonitor(id)).await;
     }
 
+    /// Pause all registered monitors.
+    ///
+    /// Paused monitors do not receive callbacks. Events continue to flow
+    /// through the system normally.
     pub async fn pause(&self) {
         let _ = self.sender.send(MonitorCommand::PauseAll).await;
     }
 
+    /// Resume all registered monitors.
     pub async fn resume(&self) {
         let _ = self.sender.send(MonitorCommand::ResumeAll).await;
     }

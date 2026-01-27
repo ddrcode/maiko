@@ -21,7 +21,8 @@ use crate::{
 /// # Example
 ///
 /// ```ignore
-/// let mut test = supervisor.init_test_harness().await;
+/// // Create harness BEFORE starting supervisor
+/// let mut test = Harness::new(&mut supervisor).await;
 /// supervisor.start().await?;
 ///
 /// test.start_recording().await;
@@ -31,6 +32,12 @@ use crate::{
 /// assert!(test.event(id).was_delivered_to(&consumer));
 /// assert_eq!(1, test.actor(&consumer).inbound_count());
 /// ```
+///
+/// # Warning
+///
+/// **Do not use in production.** The test harness uses an unbounded channel
+/// for event collection, which can lead to memory exhaustion under high load.
+/// For production monitoring, use the [`monitoring`](crate::monitoring) API directly.
 pub struct Harness<E: Event, T: Topic<E>> {
     snapshot: EventRecords<E, T>,
     monitor_handle: MonitorHandle<E, T>,

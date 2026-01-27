@@ -10,7 +10,10 @@
 //! # Example
 //!
 //! ```ignore
-//! let mut test = supervisor.init_test_harness().await;
+//! use maiko::testing::Harness;
+//!
+//! // Create harness BEFORE starting supervisor
+//! let mut test = Harness::new(&mut supervisor).await;
 //! supervisor.start().await?;
 //!
 //! test.start_recording().await;
@@ -27,6 +30,10 @@
 //!     .matching_event(|e| matches!(e, MyEvent::Order(_)))
 //!     .count();
 //! ```
+//!
+//! # Warning
+//!
+//! **Do not use in production.** See [`Harness`] documentation for details.
 
 mod actor_spy;
 mod event_collector;

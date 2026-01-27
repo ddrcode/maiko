@@ -7,6 +7,24 @@ use crate::{
     monitoring::{MonitorCommand, MonitorId},
 };
 
+/// Handle for controlling a registered monitor.
+///
+/// Returned by [`MonitorRegistry::add()`].
+///
+/// # Example
+///
+/// ```ignore
+/// let handle = supervisor.monitors().add(MyMonitor).await;
+///
+/// // Pause this specific monitor
+/// handle.pause().await;
+///
+/// // Resume it
+/// handle.resume().await;
+///
+/// // Remove it entirely
+/// handle.remove().await;
+/// ```
 pub struct MonitorHandle<E: Event, T: Topic<E>> {
     id: MonitorId,
     sender: Sender<MonitorCommand<E, T>>,
@@ -17,10 +35,14 @@ impl<E: Event, T: Topic<E>> MonitorHandle<E, T> {
         Self { id, sender }
     }
 
+    /// Returns this monitor's unique identifier.
     pub fn id(&self) -> MonitorId {
         self.id
     }
 
+    /// Remove this monitor from the registry.
+    ///
+    /// Consumes the handle since the monitor can no longer be controlled.
     pub async fn remove(self) {
         let _ = self
             .sender
@@ -28,10 +50,15 @@ impl<E: Event, T: Topic<E>> MonitorHandle<E, T> {
             .await;
     }
 
+    /// Pause this monitor.
+    ///
+    /// Paused monitors do not receive callbacks. Events continue to flow
+    /// through the system normally.
     pub async fn pause(&self) {
         let _ = self.sender.send(MonitorCommand::PauseOne(self.id)).await;
     }
 
+    /// Resume this monitor.
     pub async fn resume(&self) {
         let _ = self.sender.send(MonitorCommand::ResumeOne(self.id)).await;
     }

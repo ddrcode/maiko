@@ -20,7 +20,7 @@ use std::{hash::Hash, ops::Deref, sync::Arc};
 /// let consumer = sup.add_actor("consumer", |ctx| Consumer::new(ctx), &[DefaultTopic])?;
 ///
 /// // Use in test harness
-/// let mut test = sup.init_test_harness().await;
+/// let mut test = Harness::new(&mut sup).await;
 /// test.send_as(&producer, MyEvent::Data(42)).await?;
 /// assert!(test.actor(&consumer).inbound_count() > 0);
 ///

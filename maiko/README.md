@@ -112,6 +112,7 @@ cargo run --example guesser
 | **Context** | Provides actors with `send()`, `stop()`, and metadata access |
 | **Supervisor** | Manages actor lifecycles and runtime |
 | **Envelope** | Wraps events with metadata (sender, correlation ID) |
+| **ActorId** | Unique identifier for actors, serializable across IPC boundaries |
 
 For detailed documentation, see **[Core Concepts](doc/concepts.md)**.
 
@@ -128,7 +129,7 @@ async fn test_event_delivery() -> Result<()> {
     let producer = sup.add_actor("producer", |ctx| Producer::new(ctx), &[DefaultTopic])?;
     let consumer = sup.add_actor("consumer", |ctx| Consumer::new(ctx), &[DefaultTopic])?;
 
-    let mut test = sup.init_test_harness().await;
+    let mut test = Harness::new(&mut sup).await;
     sup.start().await?;
 
     test.start_recording().await;
@@ -146,9 +147,33 @@ Enable with `features = ["test-harness"]`. See **[Test Harness Documentation](do
 
 ---
 
+## Monitoring
+
+Maiko provides a monitoring API for observing event flow. Implement the `Monitor` trait to receive callbacks for event dispatch, delivery, handling, and errors:
+
+```rust
+use maiko::monitoring::Monitor;
+
+struct EventLogger;
+
+impl<E: Event, T: Topic<E>> Monitor<E, T> for EventLogger {
+    fn on_event_handled(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId) {
+        println!("[handled] {} by {}", envelope.id(), receiver.name());
+    }
+}
+
+// Register with supervisor
+let handle = sup.monitors().add(EventLogger).await;
+```
+
+Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](doc/monitoring.md)** for full details.
+
+---
+
 ## Documentation
 
 - **[Core Concepts](doc/concepts.md)** — Events, Topics, Actors, Context, Supervisor
+- **[Monitoring](doc/monitoring.md)** — Event lifecycle hooks, metrics collection
 - **[Test Harness](doc/testing.md)** — Recording, spies, queries, assertions
 - **[Advanced Topics](doc/advanced.md)** — Error handling, configuration, design philosophy
 - **[API Reference](https://docs.rs/maiko)** — Complete API documentation

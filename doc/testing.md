@@ -25,7 +25,7 @@ async fn test_event_flow() -> Result<()> {
     let consumer = sup.add_actor("consumer", |ctx| Consumer::new(ctx), &[DefaultTopic])?;
 
     // Initialize harness BEFORE starting
-    let mut test = sup.init_test_harness().await;
+    let mut test = Harness::new(&mut sup).await;
     sup.start().await?;
 
     // Record events
@@ -68,16 +68,15 @@ The returned `event_id` can be used to inspect the event's delivery.
 
 ## Settling
 
-After sending events, use `settle()` to wait for the system to process them:
+`stop_recording()` automatically calls `settle()` internally, so for most tests you don't need to call it explicitly:
 
 ```rust
 test.start_recording().await;
 test.send_as(&producer, MyEvent::Trigger).await?;
-test.settle().await;  // Wait for events to propagate
-test.stop_recording().await;
+test.stop_recording().await;  // Settles and captures snapshot
 ```
 
-For cascading events (actor A triggers actor B triggers actor C), call `settle()` multiple times:
+For cascading events (actor A triggers actor B triggers actor C), call `settle()` between sends to let each level propagate:
 
 ```rust
 test.settle().await;  // First cascade level
@@ -220,7 +219,7 @@ async fn test_order_processing_pipeline() -> Result<()> {
     let processor = sup.add_actor("processor", |ctx| Processor::new(ctx), &[OrderTopic::Validated])?;
     let notifier = sup.add_actor("notifier", |ctx| Notifier::new(ctx), &[OrderTopic::Processed])?;
 
-    let mut test = sup.init_test_harness().await;
+    let mut test = Harness::new(&mut sup).await;
     sup.start().await?;
 
     test.start_recording().await;
@@ -258,3 +257,52 @@ See [`examples/arbitrage.rs`](../maiko/examples/arbitrage.rs) for a comprehensiv
 - **Async timing**: `settle()` waits for actors to receive events, but not necessarily for them to finish processing. For long-running handlers, you may need additional synchronization.
 - **Recording overhead**: When the test harness is enabled, there's minimal overhead even when not actively recording.
 - **Single supervisor**: The harness is tied to a single supervisor instance.
+
+## Performance Considerations
+
+> **The test harness is designed for testing only. Do not use it in production.**
+
+### Why Not Production?
+
+The test harness uses an **unbounded channel** to collect events. This design choice prioritizes correctness and simplicity for testing:
+
+- Events are never dropped, ensuring test assertions are reliable
+- No backpressure that could affect actor timing during tests
+- Simple implementation without complex flow control
+
+However, in production this means:
+
+- **Unbounded memory growth** — A fast producer with a slow consumer will accumulate events indefinitely
+- **No backpressure** — The system won't slow down when overwhelmed
+- **Memory exhaustion risk** — Long-running systems can run out of memory
+
+### For Production Monitoring
+
+If you need production observability, use the [monitoring API](monitoring.md) directly with a custom `Monitor` implementation that:
+
+- Uses bounded channels or ring buffers
+- Samples events under high load
+- Batches writes to external systems
+- Handles backpressure appropriately
+
+### Settle Timing
+
+The `settle()` method uses a timeout-based approach:
+
+```rust
+pub const DEFAULT_SETTLE_WINDOW: Duration = Duration::from_millis(1);
+pub const DEFAULT_MAX_SETTLE: Duration = Duration::from_millis(10);
+```
+
+- **Settle window** (1ms): Returns when no events arrive for this duration
+- **Max settle** (10ms): Maximum time to wait, even if events keep arriving
+
+For chatty actors that continuously produce events, the max settle prevents infinite waiting. Adjust with `settle_with_timeout()`:
+
+```rust
+// Longer settle for slow systems
+test.settle_with_timeout(Duration::from_millis(5), Duration::from_millis(50)).await;
+
+// Shorter settle for chatty actors
+test.settle_with_timeout(Duration::from_millis(1), Duration::from_millis(5)).await;
+```
