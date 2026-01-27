@@ -4,7 +4,7 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Event, Topic,
+    Config, Event, Topic,
     monitoring::{
         Monitor, MonitorCommand, MonitorDispatcher, MonitorHandle, MonitorId, MonitoringSink,
     },
@@ -19,9 +19,9 @@ pub struct MonitorRegistry<E: Event, T: Topic<E>> {
 }
 
 impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(config: &Config) -> Self {
         let cancel_token = Arc::new(CancellationToken::new());
-        let (tx, rx) = tokio::sync::mpsc::channel(1024);
+        let (tx, rx) = tokio::sync::mpsc::channel(config.monitoring_channel_size);
         let is_active = Arc::new(AtomicBool::new(false));
         let dispatcher = MonitorDispatcher::new(rx, cancel_token.clone(), is_active.clone());
         Self {
@@ -76,10 +76,10 @@ impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
     }
 
     pub async fn pause(&self) {
-        let _ = self.sender.send(MonitorCommand::Pause).await;
+        let _ = self.sender.send(MonitorCommand::PauseAll).await;
     }
 
     pub async fn resume(&self) {
-        let _ = self.sender.send(MonitorCommand::Resume).await;
+        let _ = self.sender.send(MonitorCommand::ResumeAll).await;
     }
 }

@@ -17,7 +17,7 @@ use crate::event::Event;
 ///
 /// Trait bounds: refer to the event trait as [`crate::Event`] in generic
 /// signatures to avoid confusion with the `Event` derive macro.
-pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone + Send + 'static {
+pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone + Send + Sync + 'static {
     fn from_event(event: &E) -> Self
     where
         Self: Sized;

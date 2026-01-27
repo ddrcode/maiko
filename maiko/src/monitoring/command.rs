@@ -8,8 +8,8 @@ use crate::{
 pub(crate) enum MonitorCommand<E: Event, T: Topic<E>> {
     AddMonitor(Box<dyn Monitor<E, T>>, oneshot::Sender<MonitorId>),
     RemoveMonitor(MonitorId),
-    Pause,
-    Resume,
+    PauseAll,
+    ResumeAll,
     PauseOne(MonitorId),
     ResumeOne(MonitorId),
     DispatchEvent(MonitoringEvent<E, T>),

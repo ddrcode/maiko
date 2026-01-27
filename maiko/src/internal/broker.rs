@@ -45,10 +45,18 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<()> {
-        let topic = Topic::from_event(e.event());
+        let topic = T::from_event(e.event());
 
         #[cfg(feature = "monitoring")]
-        let is_recording = self.monitoring.is_active();
+        let (is_recording, topic_for_monitor) = {
+            let active = self.monitoring.is_active();
+            let t = if active {
+                Some(Arc::new(topic.clone()))
+            } else {
+                None
+            };
+            (active, t)
+        };
 
         self.subscribers
             .iter()
@@ -57,14 +65,18 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .filter(|s| s.actor_id != *e.meta().actor_id())
             .try_for_each(|subscriber| {
                 let res = subscriber.sender.try_send(e.clone());
+
                 #[cfg(feature = "monitoring")]
                 if is_recording {
-                    self.monitoring.send(MonitoringEvent::EventDispatched(
-                        e.clone(),
-                        topic.clone(),
-                        subscriber.actor_id.clone(),
-                    ));
+                    if let Some(topic_for_monitor) = &topic_for_monitor {
+                        self.monitoring.send(MonitoringEvent::EventDispatched(
+                            e.clone(),
+                            topic_for_monitor.clone(),
+                            subscriber.actor_id.clone(),
+                        ));
+                    }
                 }
+
                 res
             })?;
         Ok(())
@@ -158,7 +170,7 @@ mod tests {
 
         #[cfg(feature = "monitoring")]
         let monitoring = {
-            let registry = crate::monitoring::MonitorRegistry::<TestEvent, TestTopic>::new();
+            let registry = crate::monitoring::MonitorRegistry::<TestEvent, TestTopic>::new(&config);
             registry.sink()
         };
 

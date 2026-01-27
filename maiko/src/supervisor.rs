@@ -75,7 +75,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         #[cfg(feature = "monitoring")]
         let monitoring = {
-            let mut monitoring = MonitorRegistry::new();
+            let mut monitoring = MonitorRegistry::new(&config);
             monitoring.start();
             monitoring
         };

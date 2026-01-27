@@ -12,16 +12,29 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     Event, Topic,
-    monitoring::{Monitor, MonitorCommand, MonitoringEvent},
+    monitoring::{Monitor, MonitorCommand, MonitorId, MonitoringEvent},
 };
+
+struct MonitorEntry<E: Event, T: Topic<E>> {
+    monitor: Box<dyn Monitor<E, T>>,
+    paused: bool,
+}
+
+impl<E: Event, T: Topic<E>> MonitorEntry<E, T> {
+    fn new(monitor: Box<dyn Monitor<E, T>>) -> Self {
+        Self {
+            monitor,
+            paused: false,
+        }
+    }
+}
 
 pub(crate) struct MonitorDispatcher<E: Event, T: Topic<E>> {
     receiver: Receiver<MonitorCommand<E, T>>,
-    monitors: HashMap<u8, Box<dyn Monitor<E, T>>>,
-    last_id: u8,
-    paused: bool,
+    monitors: HashMap<MonitorId, MonitorEntry<E, T>>,
+    last_id: MonitorId,
     cancel_token: Arc<CancellationToken>,
-    ids_to_remove: Vec<u8>,
+    ids_to_remove: Vec<MonitorId>,
     is_active: Arc<AtomicBool>,
 }
 
@@ -36,15 +49,33 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             cancel_token,
             monitors: HashMap::new(),
             last_id: 0,
-            paused: false,
             ids_to_remove: Vec::with_capacity(8),
             is_active,
         }
     }
 
     fn update_is_active(&mut self) {
-        let active = !self.monitors.is_empty() && !self.paused;
+        let active = self.monitors.values().any(|m| !m.paused);
         self.is_active.store(active, Ordering::Relaxed);
+    }
+
+    fn remove_monitor(&mut self, id: MonitorId) {
+        self.monitors.remove(&id);
+        self.update_is_active();
+    }
+
+    fn set_monitor_paused(&mut self, id: MonitorId, paused: bool) {
+        if let Some(entry) = self.monitors.get_mut(&id) {
+            entry.paused = paused;
+            self.update_is_active();
+        }
+    }
+
+    fn set_monitors_paused_to_all(&mut self, paused: bool) {
+        for entry in self.monitors.values_mut() {
+            entry.paused = paused;
+        }
+        self.update_is_active();
     }
 
     pub async fn run(&mut self) {
@@ -65,28 +96,25 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
         match cmd {
             AddMonitor(monitor, resp) => {
                 let id = self.last_id;
-                self.monitors.insert(id, monitor);
+                self.monitors.insert(id, MonitorEntry::new(monitor));
                 self.last_id += 1;
                 self.update_is_active();
                 let _ = resp.send(id);
             }
             RemoveMonitor(id) => {
-                self.monitors.remove(&id);
-                self.update_is_active();
+                self.remove_monitor(id);
             }
-            Pause => {
-                self.paused = true;
-                self.update_is_active();
+            PauseAll => {
+                self.set_monitors_paused_to_all(true);
             }
-            Resume => {
-                self.paused = false;
-                self.update_is_active();
+            ResumeAll => {
+                self.set_monitors_paused_to_all(false);
             }
-            PauseOne(_id) => {
-                todo!("PauseOne handle not implemented");
+            PauseOne(id) => {
+                self.set_monitor_paused(id, true);
             }
-            ResumeOne(_id) => {
-                todo!("ResumeOne handle not implemented");
+            ResumeOne(id) => {
+                self.set_monitor_paused(id, false);
             }
             DispatchEvent(event) if self.is_active.load(Ordering::Relaxed) => {
                 self.handle_event(event);
@@ -119,16 +147,20 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
 
 impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
     fn notify(&mut self, f: impl Fn(&dyn Monitor<E, T>)) {
-        for (id, monitor) in &self.monitors {
-            let result = catch_unwind(AssertUnwindSafe(|| f(monitor.as_ref())));
+        for (id, entry) in &self.monitors {
+            if entry.paused {
+                continue;
+            }
+
+            let result = catch_unwind(AssertUnwindSafe(|| f(entry.monitor.as_ref())));
             if result.is_err() {
                 tracing::error!(monitor_id = %id, "Monitor panicked, removing");
                 self.ids_to_remove.push(*id);
             }
         }
 
-        self.ids_to_remove.drain(..).for_each(|id| {
-            self.monitors.remove(&id);
-        });
+        while let Some(id) = self.ids_to_remove.pop() {
+            self.remove_monitor(id);
+        }
     }
 }
