@@ -1,6 +1,6 @@
-use crate::{ActorId, Envelope, Error, Event, StepAction, Topic};
+use crate::{ActorId, DefaultTopic, Envelope, Error, Event, StepAction, Topic};
 
-pub trait Monitor<E: Event, T: Topic<E>>: Send {
+pub trait Monitor<E: Event, T: Topic<E> = DefaultTopic>: Send {
     fn on_event_dispatched(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId) {
         let _e = envelope;
         let _t = topic;
@@ -17,7 +17,7 @@ pub trait Monitor<E: Event, T: Topic<E>>: Send {
         let _a = actor_id;
     }
 
-    fn on_error(&self, err: Error, actor_id: &ActorId) {
+    fn on_error(&self, err: &Error, actor_id: &ActorId) {
         let _a = actor_id;
         let _e = err;
     }

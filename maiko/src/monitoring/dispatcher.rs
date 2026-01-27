@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    panic::{AssertUnwindSafe, catch_unwind},
+    sync::Arc,
+};
 
 use tokio::{select, sync::mpsc::Receiver};
 use tokio_util::sync::CancellationToken;
@@ -14,6 +18,7 @@ pub(crate) struct MonitorDispatcher<E: Event, T: Topic<E>> {
     last_id: u8,
     paused: bool,
     cancel_token: Arc<CancellationToken>,
+    ids_to_remove: Vec<u8>,
 }
 
 impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
@@ -27,6 +32,7 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             monitors: HashMap::new(),
             last_id: 0,
             paused: false,
+            ids_to_remove: Vec::with_capacity(8),
         }
     }
 
@@ -61,19 +67,45 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             Resume => {
                 self.paused = false;
             }
-            PauseOne(_) => {
+            PauseOne(_id) => {
                 todo!("PauseOne handle not implemented");
             }
-            ResumeOne(_) => {
+            ResumeOne(_id) => {
                 todo!("ResumeOne handle not implemented");
             }
             EventDispatched(envelope, topic, actor_id) if !self.paused => {
-                self.monitors
-                    .values()
-                    .for_each(|m| m.on_event_dispatched(&envelope, &topic, &actor_id));
+                self.notify(|m| m.on_event_dispatched(&envelope, &topic, &actor_id));
+            }
+            EventDelivered(envelope, actor_id) if !self.paused => {
+                self.notify(|m| m.on_event_delivered(&envelope, &actor_id));
+            }
+            EventHandled(envelope, actor_id) if !self.paused => {
+                self.notify(|m| m.on_event_handled(&envelope, &actor_id));
+            }
+            Error(error, actor_id) if !self.paused => {
+                self.notify(|m| m.on_error(&error, &actor_id));
+            }
+            ActorStopped(actor_id) if !self.paused => {
+                self.notify(|m| m.on_actor_stop(&actor_id));
             }
 
             _ => {}
         }
+    }
+}
+
+impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
+    fn notify(&mut self, f: impl Fn(&dyn Monitor<E, T>)) {
+        for (id, monitor) in &self.monitors {
+            let result = catch_unwind(AssertUnwindSafe(|| f(monitor.as_ref())));
+            if result.is_err() {
+                tracing::error!(monitor_id = %id, "Monitor panicked, removing");
+                self.ids_to_remove.push(*id);
+            }
+        }
+
+        self.ids_to_remove.drain(..).for_each(|id| {
+            self.monitors.remove(&id);
+        });
     }
 }

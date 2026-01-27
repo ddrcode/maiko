@@ -4,7 +4,7 @@ use tokio::sync::mpsc::error::{SendError, TrySendError};
 
 use crate::{ActorId, Envelope, Event};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {
     #[error("Actor's context must be set by this point")]
     ContextNotSet,
@@ -13,7 +13,7 @@ pub enum Error {
     SendError(String),
 
     #[error("Actor task join error: {0}")]
-    ActorJoinError(#[from] tokio::task::JoinError),
+    ActorJoinError(String),
 
     #[error("Broker has already started.")]
     BrokerAlreadyStarted,
@@ -43,5 +43,11 @@ impl<E: Event> From<TrySendError<Arc<Envelope<E>>>> for Error {
             TrySendError::Full(_) => Error::ChannelIsFull,
             TrySendError::Closed(_) => Error::SendError(e.to_string()),
         }
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(e: tokio::task::JoinError) -> Self {
+        Error::ActorJoinError(e.to_string())
     }
 }

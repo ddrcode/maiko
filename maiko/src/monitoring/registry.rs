@@ -12,7 +12,7 @@ pub struct MonitorRegistry<E: Event, T: Topic<E>> {
     cancel_token: Arc<CancellationToken>,
     dispatcher: Option<MonitorDispatcher<E, T>>,
     dispatcher_handle: Option<tokio::task::JoinHandle<()>>,
-    sender: tokio::sync::mpsc::Sender<MonitorCommand<E, T>>,
+    pub(crate) sender: tokio::sync::mpsc::Sender<MonitorCommand<E, T>>,
 }
 
 impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
@@ -28,8 +28,11 @@ impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
         }
     }
 
-    pub(crate) async fn start(&mut self) {
-        let mut dispatcher = self.dispatcher.take().expect("Dispatcher must exist on start");
+    pub(crate) fn start(&mut self) {
+        let mut dispatcher = self
+            .dispatcher
+            .take()
+            .expect("Dispatcher must exist on start");
         let handle = tokio::spawn(async move {
             dispatcher.run().await;
         });
@@ -43,14 +46,11 @@ impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
         }
     }
 
-    pub async fn add_monitor(
-        &self,
-        monitor: Box<dyn Monitor<E, T>>,
-    ) -> MonitorHandle<E, T> {
+    pub async fn add<M: Monitor<E, T> + 'static>(&self, monitor: M) -> MonitorHandle<E, T> {
         let (tx, rx) = oneshot::channel();
         let _ = self
             .sender
-            .send(MonitorCommand::AddMonitor(monitor, tx))
+            .send(MonitorCommand::AddMonitor(Box::new(monitor), tx))
             .await;
         let id = rx
             .await
@@ -58,7 +58,7 @@ impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
         MonitorHandle::new(id, self.sender.clone())
     }
 
-    pub async fn remove_monitor(&self, id: MonitorId) {
+    pub async fn remove(&self, id: MonitorId) {
         let _ = self.sender.send(MonitorCommand::RemoveMonitor(id)).await;
     }
 

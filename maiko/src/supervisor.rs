@@ -18,6 +18,9 @@ use crate::{
     internal::{ActorController, Broker, Subscriber},
 };
 
+#[cfg(feature = "monitoring")]
+use crate::monitoring::MonitorRegistry;
+
 /// Coordinates actors and the broker, and owns the top-level runtime.
 ///
 /// # Actor Registration
@@ -58,6 +61,9 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
 
     #[cfg(feature = "test-harness")]
     harness: Option<crate::testing::Harness<E, T>>,
+
+    #[cfg(feature = "monitoring")]
+    monitoring: MonitorRegistry<E, T>,
 }
 
 impl<E: Event, T: Topic<E>> Supervisor<E, T> {
@@ -69,7 +75,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let broker_cancel_token = Arc::new(CancellationToken::new());
         let broker = Broker::new(rx, broker_cancel_token.clone(), config.clone());
 
-        Self {
+        let mut supervisor = Self {
             broker: Arc::new(Mutex::new(broker)),
             config,
             sender: tx,
@@ -81,7 +87,15 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
             #[cfg(feature = "test-harness")]
             harness: None,
-        }
+
+            #[cfg(feature = "monitoring")]
+            monitoring: MonitorRegistry::new(),
+        };
+
+        #[cfg(feature = "monitoring")]
+        supervisor.monitoring.start();
+
+        supervisor
     }
 
     /// Register a new actor with a factory that receives a [`Context<E>`].
@@ -161,12 +175,17 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics, tx);
         broker.add_subscriber(subscriber)?;
 
-        let mut controller = ActorController {
+        let mut controller = ActorController::<A, T> {
             actor,
             receiver: rx,
             ctx,
             max_events_per_tick: self.config.max_events_per_tick,
             cancel_token: self.cancel_token.clone(),
+
+            #[cfg(feature = "monitoring")]
+            monitor_sender: self.monitoring.sender.clone(),
+
+            _topic: std::marker::PhantomData,
         };
 
         let notified = self.start_notifier.clone().notified_owned();
@@ -244,6 +263,9 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             harness.exit().await;
         }
 
+        #[cfg(feature = "monitoring")]
+        self.monitoring.stop().await;
+
         // 1. Wait for the main channle to drain
         while start.elapsed() < timeout {
             if self.sender.capacity() == max {
@@ -304,6 +326,11 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             .set_test_sender(harness.test_sender.clone(), recording);
         self.harness = Some(harness.clone());
         harness
+    }
+
+    #[cfg(feature = "monitoring")]
+    pub fn monitors(&mut self) -> &mut MonitorRegistry<E, T> {
+        &mut self.monitoring
     }
 }
 

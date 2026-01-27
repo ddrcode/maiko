@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::oneshot;
 
 use crate::{
-    ActorId, Envelope, Event, Topic,
+    ActorId, Envelope, Error, Event, Topic,
     monitoring::{Monitor, MonitorId},
 };
 
@@ -13,6 +13,8 @@ pub(crate) enum MonitorCommand<E: Event, T: Topic<E>> {
     EventDispatched(Arc<Envelope<E>>, T, ActorId),
     EventDelivered(Arc<Envelope<E>>, ActorId),
     EventHandled(Arc<Envelope<E>>, ActorId),
+    ActorStopped(ActorId),
+    Error(Error, ActorId),
     Pause,
     Resume,
     PauseOne(MonitorId),
