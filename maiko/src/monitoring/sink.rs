@@ -10,12 +10,12 @@ use crate::{
     monitoring::{MonitorCommand, MonitoringEvent},
 };
 
-pub(crate) struct MonitoringProvider<E: Event, T: Topic<E>> {
+pub(crate) struct MonitoringSink<E: Event, T: Topic<E>> {
     is_active: Arc<AtomicBool>,
     sender: Sender<MonitorCommand<E, T>>,
 }
 
-impl<E: Event, T: Topic<E>> MonitoringProvider<E, T> {
+impl<E: Event, T: Topic<E>> MonitoringSink<E, T> {
     pub fn new(sender: Sender<MonitorCommand<E, T>>, is_active: Arc<AtomicBool>) -> Self {
         Self { sender, is_active }
     }

@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     Event, Topic,
     monitoring::{
-        Monitor, MonitorCommand, MonitorDispatcher, MonitorHandle, MonitorId, MonitoringProvider,
+        Monitor, MonitorCommand, MonitorDispatcher, MonitorHandle, MonitorId, MonitoringSink,
     },
 };
 
@@ -55,8 +55,8 @@ impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
         self.cancel_token.cancel();
     }
 
-    pub(crate) fn provider(&self) -> MonitoringProvider<E, T> {
-        MonitoringProvider::new(self.sender.clone(), self.is_active.clone())
+    pub(crate) fn sink(&self) -> MonitoringSink<E, T> {
+        MonitoringSink::new(self.sender.clone(), self.is_active.clone())
     }
 
     pub async fn add<M: Monitor<E, T> + 'static>(&self, monitor: M) -> MonitorHandle<E, T> {

@@ -7,7 +7,7 @@ use super::Subscriber;
 use crate::{Config, Envelope, Error, Event, Result, Topic};
 
 #[cfg(feature = "monitoring")]
-use crate::monitoring::{MonitoringEvent, MonitoringProvider};
+use crate::monitoring::{MonitoringEvent, MonitoringSink};
 
 pub struct Broker<E: Event, T: Topic<E>> {
     receiver: Receiver<Arc<Envelope<E>>>,
@@ -16,7 +16,7 @@ pub struct Broker<E: Event, T: Topic<E>> {
     config: Arc<Config>,
 
     #[cfg(feature = "monitoring")]
-    monitor: MonitoringProvider<E, T>,
+    monitoring: MonitoringSink<E, T>,
 }
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
@@ -24,7 +24,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         receiver: Receiver<Arc<Envelope<E>>>,
         cancel_token: Arc<CancellationToken>,
         config: Arc<Config>,
-        #[cfg(feature = "monitoring")] monitor: MonitoringProvider<E, T>,
+        #[cfg(feature = "monitoring")] monitoring: MonitoringSink<E, T>,
     ) -> Broker<E, T> {
         Broker {
             receiver,
@@ -32,7 +32,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             cancel_token,
             config,
             #[cfg(feature = "monitoring")]
-            monitor,
+            monitoring,
         }
     }
 
@@ -48,7 +48,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         let topic = Topic::from_event(e.event());
 
         #[cfg(feature = "monitoring")]
-        let is_recording = self.monitor.is_active();
+        let is_recording = self.monitoring.is_active();
 
         self.subscribers
             .iter()
@@ -59,7 +59,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 let res = subscriber.sender.try_send(e.clone());
                 #[cfg(feature = "monitoring")]
                 if is_recording {
-                    self.monitor.send(MonitoringEvent::EventDispatched(
+                    self.monitoring.send(MonitoringEvent::EventDispatched(
                         e.clone(),
                         topic.clone(),
                         subscriber.actor_id.clone(),
@@ -155,7 +155,20 @@ mod tests {
         let (tx, rx) = mpsc::channel(10);
         let config = Arc::new(crate::Config::default());
         let cancel_token = Arc::new(CancellationToken::new());
-        let mut broker = Broker::<TestEvent, TestTopic>::new(rx, cancel_token, config);
+
+        #[cfg(feature = "monitoring")]
+        let monitoring = {
+            let registry = crate::monitoring::MonitorRegistry::<TestEvent, TestTopic>::new();
+            registry.sink()
+        };
+
+        let mut broker = Broker::<TestEvent, TestTopic>::new(
+            rx,
+            cancel_token,
+            config,
+            #[cfg(feature = "monitoring")]
+            monitoring,
+        );
         let actor_id = ActorId::new(Arc::from("subscriber1"));
         let subscriber =
             super::Subscriber::new(actor_id.clone(), HashSet::from([TestTopic::A]), tx.clone());

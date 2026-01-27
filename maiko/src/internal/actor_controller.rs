@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[cfg(feature = "monitoring")]
-use crate::monitoring::{MonitoringEvent, MonitoringProvider};
+use crate::monitoring::{MonitoringEvent, MonitoringSink};
 
 pub(crate) struct ActorController<A: Actor, T: Topic<A::Event>> {
     pub(crate) actor: A,
@@ -19,7 +19,7 @@ pub(crate) struct ActorController<A: Actor, T: Topic<A::Event>> {
     pub(crate) cancel_token: Arc<CancellationToken>,
 
     #[cfg(feature = "monitoring")]
-    pub(crate) monitor: MonitoringProvider<A::Event, T>,
+    pub(crate) monitoring: MonitoringSink<A::Event, T>,
 
     pub(crate) _topic: std::marker::PhantomData<fn() -> T>,
 }
@@ -134,8 +134,8 @@ async fn handle_step_action(step_action: StepAction, step_handler: &mut StepHand
 impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
     #[inline]
     fn notify_event_delivered(&self, event: &Arc<Envelope<A::Event>>) {
-        if self.monitor.is_active() {
-            self.monitor.send(MonitoringEvent::EventDelivered(
+        if self.monitoring.is_active() {
+            self.monitoring.send(MonitoringEvent::EventDelivered(
                 event.clone(),
                 self.ctx.actor_id.clone(),
             ));
@@ -144,8 +144,8 @@ impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
 
     #[inline]
     fn notify_event_handled(&self, event: &Arc<Envelope<A::Event>>) {
-        if self.monitor.is_active() {
-            self.monitor.send(MonitoringEvent::EventHandled(
+        if self.monitoring.is_active() {
+            self.monitoring.send(MonitoringEvent::EventHandled(
                 event.clone(),
                 self.ctx.actor_id.clone(),
             ));
@@ -154,8 +154,8 @@ impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
 
     #[inline]
     fn notify_error(&self, error: &crate::Error) {
-        if self.monitor.is_active() {
-            self.monitor.send(MonitoringEvent::Error(
+        if self.monitoring.is_active() {
+            self.monitoring.send(MonitoringEvent::Error(
                 error.clone(),
                 self.ctx.actor_id.clone(),
             ));
@@ -164,8 +164,8 @@ impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
 
     #[inline]
     fn notify_exit(&self) {
-        if self.monitor.is_active() {
-            self.monitor
+        if self.monitoring.is_active() {
+            self.monitoring
                 .send(MonitoringEvent::ActorStopped(self.ctx.actor_id.clone()));
         }
     }

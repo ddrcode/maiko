@@ -86,7 +86,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             broker_cancel_token.clone(),
             config.clone(),
             #[cfg(feature = "monitoring")]
-            monitoring.provider(),
+            monitoring.sink(),
         );
 
         Self {
@@ -192,7 +192,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             cancel_token: self.cancel_token.clone(),
 
             #[cfg(feature = "monitoring")]
-            monitor: self.monitoring.provider(),
+            monitoring: self.monitoring.sink(),
 
             _topic: std::marker::PhantomData,
         };
