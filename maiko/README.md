@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Topic-based pub/sub for Tokio**
+**Lightweight actor framework for Tokio**
 
 [![Crates.io](https://img.shields.io/crates/v/maiko.svg)](https://crates.io/crates/maiko)
 [![Documentation](https://docs.rs/maiko/badge.svg)](https://docs.rs/maiko)
@@ -14,40 +14,19 @@
 
 ## What is Maiko?
 
-**Maiko** is a lightweight [actor](https://en.wikipedia.org/wiki/Actor_model) runtime for Tokio.
+**Maiko** is an [actor framework](https://en.wikipedia.org/wiki/Actor_model) for Tokio. Structure your application as independent components - each with its own state, logic, and lifecycle - communicating purely through events.
 
-Think **Kafka+Microservices, but for Tokio tasks** instead of distributed systems. Actors subscribe to topics, publish events, and Maiko handles all the routing - no manual channel wiring needed.
+Each actor:
+- Runs in its own async task
+- Maintains private state (no shared memory, no locks)
+- Receives events through a dedicated mailbox
+- Publishes events without knowing who receives them
 
+Actors subscribe to topics, publish events, and Maiko routes automatically. Publishers don't need to know who's listening - think Kafka-style pub/sub, but for Tokio tasks instead of distributed systems.
 
-### How it compares
+### No more channel spaghetti
 
-| | Maiko | Actix/Ractor | Kafka |
-|---|-------|--------------|-------|
-| Routing | Topic-based pub/sub | Direct addressing | Topic-based pub/sub |
-| Coupling | Loose (actors don't know each other) | Tight (need actor addresses) | Loose |
-| Communication | Events | Request-response | Events |
-| Scope | In-process | In-process | Distributed |
-
-
-### Where it fits 
-
-Event-centric systems:
-
-- processing stock ticks, 
-- device signals, 
-- game events, telemetry pipelines. 
- 
-Not ideal for request-response APIs or RPC patterns.
-
-### Why "Maiko"?
-
-**Maiko** (舞妓) are traditional Japanese performers known for their coordinated dances. Like maiko who respond to music and each other in harmony, Maiko actors coordinate through events in the Tokio runtime. 
-
----
-
-## The Problem Maiko Solves
-
-Building concurrent Tokio applications often leads to **channel spaghetti** - manually creating, cloning, and wiring channels between tasks:
+Building concurrent Tokio applications often means manually creating, cloning, and wiring channels between tasks:
 
 ```rust
 // Without Maiko: manual channel wiring
@@ -63,6 +42,22 @@ sup.add_actor("sensor",    |ctx| Sensor::new(ctx),    Subscribe::none())?;      
 sup.add_actor("processor", |ctx| Processor::new(ctx), &[Topic::SensorData])?;   // handles sensor data
 sup.add_actor("logger",    |ctx| Logger::new(ctx),    Subscribe::all())?;       // observes everything
 ```
+
+### How it compares
+
+| | Maiko | Actix/Ractor | Kafka |
+|---|-------|--------------|-------|
+| Routing | Topic-based pub/sub | Direct addressing | Topic-based pub/sub |
+| Coupling | Loose (actors don't know each other) | Tight (need actor addresses) | Loose |
+| Communication | Events | Request-response | Events |
+| Scope | In-process | In-process | Distributed |
+
+
+### Where it fits
+
+Event-centric systems: processing stock ticks, device signals, game events, telemetry pipelines.
+
+Not ideal for request-response APIs or RPC patterns.
 
 ---
 
@@ -191,6 +186,7 @@ Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](doc/mo
 - **[Monitoring](doc/monitoring.md)** - Event lifecycle hooks, metrics collection
 - **[Test Harness](doc/testing.md)** - Recording, spies, queries, assertions
 - **[Advanced Topics](doc/advanced.md)** - Error handling, configuration, design philosophy
+- **[FAQ](doc/faq.md)** - Common questions answered
 - **[API Reference](https://docs.rs/maiko)** - Complete API documentation
 
 ---

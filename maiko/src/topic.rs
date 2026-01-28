@@ -51,6 +51,7 @@ impl std::fmt::Display for DefaultTopic {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;

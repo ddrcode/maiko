@@ -243,10 +243,10 @@ async fn main() -> Result<()> {
     )?;
 
     // Game coordinator subscribes to Game topic (receives guesses)
-    supervisor.add_actor("Game", Game::new, &[GuesserTopic::Game])?;
+    supervisor.add_actor("Game", Game::new, [GuesserTopic::Game])?;
 
     // Printer subscribes to Output topic (receives results and messages)
-    supervisor.add_actor("Printer", |_| Printer, &[GuesserTopic::Output])?;
+    supervisor.add_actor("Printer", |_| Printer, [GuesserTopic::Output])?;
 
     // Run until Game actor calls ctx.stop()
     supervisor.run().await?;

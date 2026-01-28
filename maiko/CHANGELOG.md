@@ -1,8 +1,15 @@
-# Unreleased
+# 0.2.1 (Unreleased)
+
+### Added
+
+- FAQ
 
 ### Changed
 
 - `ActorId` has a public constructor now
+- Improved documentation and README
+
+---
 
 # [0.2.0](https://github.com/ddrcode/maiko/compare/v0.1.1...v0.2.0) (January 27th, 2026)
 

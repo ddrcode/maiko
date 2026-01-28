@@ -1,3 +1,11 @@
+# 0.2.1 (Unreleased)
+
+### Added
+
+- `SelfRouting` macro for making events to act as topics
+
+---
+
 # [0.2.0](https://github.com/ddrcode/maiko/compare/v0.1.1...v0.2.0) (January 13th, 2026)
 
 No changes. Version bumped to be aligned with the main library.

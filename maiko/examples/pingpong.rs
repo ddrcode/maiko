@@ -1,7 +1,7 @@
 //! Ping-Pong Example
 //!
 //! This example demonstrates event-driven communication between two actors using
-//! **event-as-topic** routing.
+//! **event-as-topic** routing via the `SelfRouting` derive.
 //!
 //! # Key Concepts Demonstrated
 //!
@@ -11,9 +11,9 @@
 //! - "Ping" actor subscribes to `Pong` events only
 //! - "Pong" actor subscribes to `Ping` events only
 //!
-//! ## 2. Event-as-Topic Pattern
+//! ## 2. Event-as-Topic Pattern with `SelfRouting`
 //!
-//! The same type (`PingPongEvent`) serves as both:
+//! The `#[derive(SelfRouting)]` macro makes the event type serve as both:
 //! - The **event payload** (what gets sent)
 //! - The **routing topic** (how it gets filtered)
 //!
@@ -27,24 +27,14 @@
 use maiko::*;
 
 /// Event types for the ping-pong system.
-#[derive(Event, Clone, Debug, Hash, PartialEq, Eq)]
+///
+/// The `SelfRouting` derive implements `Topic<PingPongEvent> for PingPongEvent`,
+/// enabling event-as-topic routing where each event variant becomes its own topic.
+/// A `Ping` event routes to actors subscribed to the `Ping` topic, and `Pong` to `Pong`.
+#[derive(Event, SelfRouting, Clone, Debug, Hash, PartialEq, Eq)]
 enum PingPongEvent {
     Ping,
     Pong,
-}
-
-/// Implement Topic for PingPongEvent to enable event-as-topic routing.
-///
-/// The `from_event` method maps each event to its corresponding topic.
-/// In this case, we return the event itself - a `Ping` event maps to the
-/// Ping topic, and a `Pong` event maps to the Pong topic.
-///
-/// This pattern allows fine-grained routing: actors can subscribe to specific
-/// event variants rather than receiving all events of the same base type.
-impl Topic<PingPongEvent> for PingPongEvent {
-    fn from_event(event: &Self) -> Self {
-        event.clone()
-    }
 }
 
 /// A simple actor that responds to ping-pong events.
@@ -101,8 +91,8 @@ pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent, PingPongEvent>::default();
 
     // Adds actors that subscribes ONLY to one type of event
-    sup.add_actor("Ping", |ctx| PingPong { ctx }, &[PingPongEvent::Pong])?;
-    sup.add_actor("Pong", |ctx| PingPong { ctx }, &[PingPongEvent::Ping])?;
+    sup.add_actor("Ping", |ctx| PingPong { ctx }, [PingPongEvent::Pong])?;
+    sup.add_actor("Pong", |ctx| PingPong { ctx }, [PingPongEvent::Ping])?;
 
     // Add "Counter" actor that subscribes to both events.
     sup.add_actor(
