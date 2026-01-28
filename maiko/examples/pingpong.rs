@@ -41,6 +41,9 @@ enum PingPongEvent {
 ///
 /// This pattern allows fine-grained routing: actors can subscribe to specific
 /// event variants rather than receiving all events of the same base type.
+///
+/// Pro tip: you could mark `PingPongEvent` with an `IdentityTopic` trait and get
+/// this implementation for free.
 impl Topic<PingPongEvent> for PingPongEvent {
     fn from_event(event: &Self) -> Self {
         event.clone()
@@ -101,8 +104,8 @@ pub async fn main() -> Result<()> {
     let mut sup = Supervisor::<PingPongEvent, PingPongEvent>::default();
 
     // Adds actors that subscribes ONLY to one type of event
-    sup.add_actor("Ping", |ctx| PingPong { ctx }, &[PingPongEvent::Pong])?;
-    sup.add_actor("Pong", |ctx| PingPong { ctx }, &[PingPongEvent::Ping])?;
+    sup.add_actor("Ping", |ctx| PingPong { ctx }, [PingPongEvent::Pong])?;
+    sup.add_actor("Pong", |ctx| PingPong { ctx }, [PingPongEvent::Ping])?;
 
     // Add "Counter" actor that subscribes to both events.
     sup.add_actor(

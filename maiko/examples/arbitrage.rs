@@ -15,7 +15,7 @@
 //! - Query events by sender, receiver, topic, or custom predicates
 //! - Track parent-child event relationships via correlation IDs
 
-use maiko::{Actor, Context, Topic, testing::Harness};
+use maiko::{Actor, Context, Subscribe, Topic, testing::Harness};
 
 // ============================================================================
 // Domain Types
@@ -230,16 +230,12 @@ async fn main() -> maiko::Result {
     // Set up the actor system
     let mut sup = maiko::Supervisor::<MarketEvent, MarketTopic>::default();
 
-    let alpha_ticker = sup.add_actor("AlphaTicker", |_| Ticker, &[Order(Alpha)])?;
-    let beta_ticker = sup.add_actor("BetaTicker", |_| Ticker, &[Order(Beta)])?;
-    let normalizer = sup.add_actor("Normalizer", |ctx| Normalizer { ctx }, &[RawData])?;
-    let trader = sup.add_actor("Trader", Trader::new, &[NormalizedData])?;
-    let _database = sup.add_actor("Database", |_| Database, &[NormalizedData])?;
-    let telemetry = sup.add_actor(
-        "Telemetry",
-        |_| Telemetry,
-        &[RawData, NormalizedData, Order(Alpha), Order(Beta)],
-    )?;
+    let alpha_ticker = sup.add_actor("AlphaTicker", |_| Ticker, [Order(Alpha)])?;
+    let beta_ticker = sup.add_actor("BetaTicker", |_| Ticker, [Order(Beta)])?;
+    let normalizer = sup.add_actor("Normalizer", |ctx| Normalizer { ctx }, [RawData])?;
+    let trader = sup.add_actor("Trader", Trader::new, [NormalizedData])?;
+    let _database = sup.add_actor("Database", |_| Database, [NormalizedData])?;
+    let telemetry = sup.add_actor("Telemetry", |_| Telemetry, Subscribe::all())?;
 
     // Initialize test harness
     let mut test = Harness::new(&mut sup).await;
