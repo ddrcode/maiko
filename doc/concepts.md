@@ -3,7 +3,7 @@
 Maiko is built around a small set of core abstractions that work together:
 
 - **Events** are messages that flow through the system
-- **Topics** determine which actors receive which events
+- **Topics** determine which actors receive which events (actors subscribe to topics)
 - **Actors** are independent units that process events and maintain state
 - **Context** allows actors to send events and interact with the runtime
 - **Supervisor** manages actor lifecycles and coordinates the system
@@ -16,7 +16,7 @@ This document covers each abstraction in detail.
 Events are messages that flow through the system. They must implement the `Event` trait (via derive macro):
 
 ```rust
-#[derive(Event, Clone, Debug)]
+#[derive(Event, Debug)]
 enum NetworkEvent {
     PacketReceived(Vec<u8>),
     ConnectionClosed(u32),
@@ -24,10 +24,12 @@ enum NetworkEvent {
 }
 ```
 
-Events should be:
+Events are:
 - **Cloneable** — events may be delivered to multiple actors
+- **Send + Sync** - as they travel between tasks and threads.
+
+Events should be:
 - **Debuggable** — for logging and diagnostics
-- **Lightweight** — prefer `Arc<T>` for large payloads
 
 ## Topics
 
@@ -169,7 +171,7 @@ let mut sup = Supervisor::<NetworkEvent>::new();
 
 sup.add_actor("ingress", |ctx| IngressActor::new(ctx), &[NetworkTopic::Ingress])?;
 sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
-sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), &[DefaultTopic])?;
+sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), Subscribe::All())?;
 ```
 
 ### Runtime Control
@@ -187,7 +189,7 @@ sup.run().await?;
 // Graceful shutdown
 sup.stop().await?;
 
-// Send events from outside
+// Send events from outside (Supervisor as actor)
 sup.send(MyEvent::Data(42)).await?;
 ```
 

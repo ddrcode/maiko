@@ -31,7 +31,7 @@ use std::{hash::Hash, ops::Deref, sync::Arc};
 pub struct ActorId(Arc<str>);
 
 impl ActorId {
-    pub(crate) fn new(id: Arc<str>) -> Self {
+    pub fn new(id: Arc<str>) -> Self {
         Self(id)
     }
 

@@ -29,19 +29,20 @@ Think **Kafka+Microservices, but for Tokio tasks** instead of distributed system
 | Scope | In-process | In-process | Distributed |
 
 
-### Where it fits 
+### Where it fits
 
 Event-centric systems:
 
-- processing stock ticks, 
-- device signals, 
-- game events, telemetry pipelines. 
- 
+- System event processing (device monitoring, signals, inotify)
+- Data pipelines (sensor data, stock ticks, telemetry)
+- Game engines (entity systems, input handling)
+- Reactive architectures (event sourcing, CQRS)
+
 Not ideal for request-response APIs or RPC patterns.
 
 ### Why "Maiko"?
 
-**Maiko** (舞妓) are traditional Japanese performers known for their coordinated dances. Like maiko who respond to music and each other in harmony, Maiko actors coordinate through events in the Tokio runtime. 
+**Maiko** (舞妓) are traditional Japanese performers known for their coordinated dances. Like maiko who respond to music and each other in harmony, Maiko actors coordinate through events in the Tokio runtime.
 
 ---
 
@@ -136,7 +137,7 @@ For detailed documentation, see **[Core Concepts](doc/concepts.md)**.
 
 ## Test Harness
 
-Maiko includes a test harness (built on the monitoring API) for observing and asserting on event flow:
+Maiko includes a test harness for observing and asserting on event flow:
 
 ```rust
 #[tokio::test]

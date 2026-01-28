@@ -52,6 +52,7 @@ let mut sup = Supervisor::new(config);
 | `channel_size` | 32 | Buffer size for actor event queues |
 | `max_events_per_tick` | 10 | Max events an actor processes before yielding |
 | `maintenance_interval` | 1s | How often broker cleans up closed channels |
+| `monitoring_channel_size` | 1024 | Buffer size used by "monitoring" feature |
 
 ## Design Philosophy
 
@@ -134,12 +135,5 @@ Start with defaults and tune based on profiling.
 
 ### Payload Size
 
-For large payloads, wrap in `Arc`:
-
-```rust
-#[derive(Event, Clone, Debug)]
-enum DataEvent {
-    LargePayload(Arc<Vec<u8>>),  // Cloning is cheap
-    SmallPayload(u32),           // Direct is fine
-}
-```
+Maiko can handle larger events efficently as each `Envelope` is wrapped in `Arc` before sending.
+It means there is no memory overhead while sending the same event to multiple actors.
