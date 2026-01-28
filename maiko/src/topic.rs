@@ -51,13 +51,6 @@ impl std::fmt::Display for DefaultTopic {
     }
 }
 
-pub trait IdentityTopic {}
-
-impl<E: Event + IdentityTopic + Eq + Hash> Topic<E> for E {
-    fn from_event(event: &E) -> Self {
-        event.clone()
-    }
-}
 
 #[cfg(test)]
 mod tests {
