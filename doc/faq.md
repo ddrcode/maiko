@@ -55,7 +55,39 @@ This makes Maiko actors more decoupled - a publisher doesn't need to know who's 
 
 ## What's the ideal application for Maiko?
 
-Maiko excels at **event-centric systems** where data flows through a pipeline of processors:
+Maiko excels at **event-centric systems** where data flows through independent processors.
+
+**Example: Weather Station**
+
+Imagine a weather monitoring system with multiple sensors. Here's how it maps to Maiko actors:
+
+```
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│ Temperature │  │  Humidity   │  │   Wind      │
+│   Sensor    │  │   Sensor    │  │   Sensor    │
+└──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+       │                │                │
+       └────────────────┼────────────────┘
+                        │
+                        ▼ Topic: SensorReading
+       ┌────────────────┼────────────────┐
+       │                │                │
+       ▼                ▼                ▼
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│ Normalizer  │  │  Database   │  │   Alert     │
+│  (C° → F°)  │  │   Writer    │  │  Monitor    │
+└──────┬──────┘  └─────────────┘  └──────┬──────┘
+       │                                 │
+       ▼ Topic: NormalizedReading        ▼ Topic: Alert
+┌─────────────┐                   ┌─────────────┐
+│  Hourly     │                   │   Email     │
+│  Reporter   │                   │   Sender    │
+└─────────────┘                   └─────────────┘
+```
+
+Each box is an actor. They don't know about each other - they just publish events and subscribe to topics. Adding a new sensor? Just register another actor. Want SMS alerts? Add an actor subscribed to `Alert`. The existing code doesn't change.
+
+**Domains where this pattern fits:**
 
 - **IoT / Embedded**: Device signals, sensor readings, hardware events
 - **Financial**: Market data feeds, trading signals, price ticks
@@ -63,9 +95,7 @@ Maiko excels at **event-centric systems** where data flows through a pipeline of
 - **Telemetry**: Log processing, metrics aggregation, monitoring
 - **Media**: Audio/video frame processing, effects pipelines
 
-**Common pattern**: Multiple producers emit events, multiple consumers react, some actors do both. Events flow through the system without tight coupling.
-
-**Real-world example**: [Charon](https://github.com/ddrcode/charon) - a USB keyboard passthrough device. Its daemon uses Maiko to coordinate keyboard input reading, key mapping, USB HID output, telemetry, IPC, and power management.
+**Real-world example**: [Charon](https://github.com/ddrcode/charon) - a USB keyboard passthrough device. Its daemon uses Maiko actors for keyboard input, key mapping, USB HID output, telemetry, IPC, and power management.
 
 **Not ideal for**:
 - Request-response APIs (REST, gRPC)
@@ -93,6 +123,50 @@ Maiko excels at **event-centric systems** where data flows through a pipeline of
 - No dynamic actor registration after startup (planned)
 - Limited error recovery (actors crash on unhandled errors)
 - No backpressure strategy (slow consumers can affect the system)
+
+## How do I test a Maiko application?
+
+Maiko includes a **test harness** (built on the monitoring API) designed for testing actor systems. Enable it with `features = ["test-harness"]`.
+
+The harness lets you:
+- **Record events** during a test window
+- **Inject events** as if sent by specific actors
+- **Query event flow** - who sent what to whom
+- **Assert on delivery** - verify events reached the right actors
+
+```rust
+#[tokio::test]
+async fn test_temperature_alert() -> Result<()> {
+    let mut sup = Supervisor::<WeatherEvent, WeatherTopic>::default();
+
+    let sensor = sup.add_actor("sensor", |ctx| TempSensor::new(ctx), Subscribe::none())?;
+    let alert = sup.add_actor("alert", |ctx| AlertMonitor::new(ctx), &[WeatherTopic::Reading])?;
+
+    let mut harness = Harness::new(&mut sup).await;
+    sup.start().await?;
+
+    // Record what happens when we inject a high temperature reading
+    harness.start_recording().await;
+    let event_id = harness.send_as(&sensor, WeatherEvent::Temperature(45.0)).await?;
+    harness.stop_recording().await;
+
+    // Verify the alert actor received the reading
+    assert!(harness.event(event_id).was_delivered_to(&alert));
+
+    // Verify an alert was generated
+    let alerts = harness.events().with_topic(&WeatherTopic::Alert);
+    assert_eq!(alerts.count(), 1);
+
+    sup.stop().await
+}
+```
+
+The harness provides spies for inspecting actors, events, and topics:
+- `harness.actor(&id)` - what did this actor send/receive?
+- `harness.event(id)` - where did this event go?
+- `harness.events()` - query all recorded events with filters
+
+See the **[Test Harness Documentation](testing.md)** for the full API.
 
 ## Can I add or remove actors at runtime?
 

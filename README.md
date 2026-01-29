@@ -209,6 +209,14 @@ Maiko powers the daemon in [**Charon**](https://github.com/ddrcode/charon) - a U
 
 ---
 
+## Current State
+
+Maiko is battle-tested in the [Charon](https://github.com/ddrcode/charon) project, where it runs continuously, but it's not yet production-grade. I'd describe it as solid for happy-path scenarios and insufficient for rainy days. Supervision is minimal, backpressure isn't handled, and improved error handling and recovery strategies are planned for 0.3.0.
+
+For now, Maiko demonstrates what it wants to be. That's the state I wanted to reach before sharing it with a wider audience. Want to help shape what comes next? See below.
+
+---
+
 ## Contributing
 
 Contributions welcome! Whether it's a bug report, feature idea, or pull request - all input is appreciated.
