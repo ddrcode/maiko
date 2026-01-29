@@ -1,4 +1,4 @@
-37
+39
 1ms
 10ms
 Actix
@@ -14,6 +14,7 @@ enum
 Erlang
 EventEntry
 implementors
+IPC
 lifecycle
 Maiko
 metadata
@@ -34,4 +35,5 @@ u128
 UIs
 Unix
 Vec
+WebSocket
 WebSockets
