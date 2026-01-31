@@ -14,12 +14,12 @@
 
 ## What is Maiko?
 
-**Maiko** is an [actor framework](https://en.wikipedia.org/wiki/Actor_model) for Tokio. Structure your application as independent components - each with its own state, logic, and lifecycle - communicating purely through events.
+**Maiko** is an [actor framework](https://en.wikipedia.org/wiki/Actor_model) for Tokio. Structure your application as independent components (actors) - each with its own state, logic, and lifecycle - communicating purely through events.
 
 Each actor:
 - Runs in its own async task
 - Maintains private state (no shared memory, no locks)
-- Receives events through a dedicated mailbox
+- Receives events through a dedicated channel
 - Publishes events without knowing who receives them
 
 Actors subscribe to topics, publish events, and Maiko routes automatically. Publishers don't need to know who's listening - think Kafka-style pub/sub, but for Tokio tasks instead of distributed systems.
@@ -55,7 +55,8 @@ sup.add_actor("logger",    |ctx| Logger::new(ctx),    Subscribe::all())?;       
 
 ### Where it fits
 
-Event-centric systems: processing stock ticks, device signals, game events, telemetry pipelines.
+Event-centric systems: processing stock ticks, device signals, telemetry pipelines, handling system
+events, data transformation.
 
 Not ideal for request-response APIs or RPC patterns.
 
