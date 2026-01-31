@@ -1,3 +1,9 @@
+# [0.2.2] Unreleased
+
+- Docs and readme improvement
+
+---
+
 # [0.2.1](https://github.com/ddrcode/maiko/compare/v0.2.0...v0.2.1) (January 29th, 2026)
 
 ### Added

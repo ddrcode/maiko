@@ -12,25 +12,16 @@ Each actor:
 
 Maiko handles all the routing. Actors subscribe to topics, and when an event is published, it's automatically delivered to interested subscribers. No manual channel wiring needed.
 
-## How does Maiko relate to Erlang/OTP and Akka?
+## How does Maiko relate to other actor frameworks?
 
-Maiko shares the same foundational ideas:
+Maiko borrows the core idea from the actor model: isolated units with private state, communicating through messages.
 
-| Concept | Erlang/OTP | Akka | Maiko |
-|---------|------------|------|-------|
-| Isolated units | Processes | Actors | Actors |
-| Communication | Message passing | Message passing | Event pub/sub |
-| Addressing | PIDs / registered names | ActorRef | Topics |
-| Supervision | Supervision trees | Supervision strategies | Single supervisor |
+**Key difference from most actor frameworks**: Maiko uses topic-based routing instead of direct addressing. You publish an event *about* something; you don't send a message *to* a specific actor. Publishers don't need to know who's listening.
 
-**Key difference**: Erlang and Akka use direct addressing (you send a message *to* a specific actor). Maiko uses topic-based routing (you publish an event *about* something, and interested actors receive it).
-
-This makes Maiko actors more decoupled - a publisher doesn't need to know who's listening. It's closer to Kafka's model, but for in-process communication.
-
-**What Maiko doesn't have (yet)**:
-- Supervision trees and restart strategies (planned)
-- Location transparency / distributed actors
-- Hot code reloading
+**What Maiko is not**:
+- Not distributed (single process, single Tokio runtime)
+- Not a supervision tree (single flat supervisor, restart strategies planned)
+- Not request-response (fire-and-forget events only)
 
 ## How does Maiko differ from other Rust actor frameworks?
 
@@ -40,7 +31,7 @@ This makes Maiko actors more decoupled - a publisher doesn't need to know who's 
 | **Coupling** | Loose (actors don't know each other) | Tight (need actor addresses) | Tight (need actor addresses) | Tight |
 | **Communication** | Events | Request-response | Request-response | Messages |
 | **Discovery** | Subscribe to topics | Pass addresses manually | Registry lookup | Pass references |
-| **Best for** | Event-driven flows | Web services, RPC | Distributed systems | Real-time, games |
+| **Best for** | Event-driven pipelines | Web services, RPC | Distributed systems | Low-latency loops |
 
 **When to choose Maiko over alternatives**:
 - Your system is naturally event-driven (sensors, ticks, signals)
@@ -90,10 +81,9 @@ Each box is an actor. They don't know about each other - they just publish event
 **Domains where this pattern fits:**
 
 - **IoT / Embedded**: Device signals, sensor readings, hardware events
-- **Financial**: Market data feeds, trading signals, price ticks
-- **Gaming**: Game events, entity updates, input handling
 - **Telemetry**: Log processing, metrics aggregation, monitoring
-- **Media**: Audio/video frame processing, effects pipelines
+- **Pipelines**: Data transformation, enrichment, routing
+- **Background jobs**: Task coordination, workflow orchestration
 
 **Real-world example**: [Charon](https://github.com/ddrcode/charon) - a USB keyboard passthrough device. Its daemon uses Maiko actors for keyboard input, key mapping, USB HID output, telemetry, IPC, and power management.
 
