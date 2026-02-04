@@ -1,6 +1,6 @@
 [package]
 name = "maiko"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.85"
 description = "Lightweight event-driven actor runtime with topic-based pub/sub for Tokio"
@@ -54,3 +54,7 @@ required-features = ["monitoring"]
 [[example]]
 name = "arbitrage"
 required-features = ["default", "test-harness"]
+
+[[example]]
+name = "recorder"
+required-features = ["recorder"]

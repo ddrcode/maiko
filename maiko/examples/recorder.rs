@@ -1,4 +1,4 @@
-use maiko::{monitoring::recorder::Recorder, *};
+use maiko::{monitors::Recorder, *};
 use serde::{Deserialize, Serialize};
 
 #[allow(unused)]

@@ -1,0 +1,69 @@
+use crate::{ActorId, Envelope, Event, Topic, monitoring::Monitor};
+
+/// A monitor that logs event lifecycle to the `tracing` crate.
+///
+/// Provides visibility into event flow without custom code. Log levels:
+/// - `trace` - event dispatched/delivered (high volume)
+/// - `debug` - event handled
+/// - `warn` - errors
+/// - `info` - actor stopped
+///
+/// # Example
+///
+/// ```ignore
+/// use maiko::monitors::Tracer;
+///
+/// sup.monitors().add(Tracer).await;
+/// ```
+pub struct Tracer;
+
+impl<E, T> Monitor<E, T> for Tracer
+where
+    E: Event + std::fmt::Debug,
+    T: Topic<E> + std::fmt::Debug,
+{
+    fn on_event_dispatched(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId) {
+        tracing::trace!(
+            event_id = %envelope.id(),
+            sender = %envelope.meta().actor_name(),
+            receiver = %receiver.name(),
+            topic = ?topic,
+            "event dispatched"
+        );
+    }
+
+    fn on_event_delivered(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId) {
+        tracing::trace!(
+            event_id = %envelope.id(),
+            receiver = %receiver.name(),
+            topic = ?topic,
+            "event delivered"
+        );
+    }
+
+    fn on_event_handled(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId) {
+        tracing::debug!(
+            event_id = %envelope.id(),
+            sender = %envelope.meta().actor_name(),
+            receiver = %receiver.name(),
+            topic = ?topic,
+            event = ?envelope.event(),
+            "event handled"
+        );
+    }
+
+    fn on_error(&self, err: &str, actor_id: &ActorId) {
+        tracing::warn!(
+            actor = %actor_id.name(),
+            error = %err,
+            "actor error"
+        );
+    }
+
+    fn on_actor_stop(&self, actor_id: &ActorId) {
+        tracing::info!(
+            actor = %actor_id.name(),
+            "actor stopped"
+        );
+    }
+}

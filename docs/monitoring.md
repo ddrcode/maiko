@@ -60,6 +60,45 @@ async fn main() -> maiko::Result<()> {
 }
 ```
 
+## Built-in Monitors
+
+Maiko provides ready-to-use monitors in the `maiko::monitors` module:
+
+### Tracer
+
+Logs event lifecycle to the `tracing` crate. Zero configuration needed:
+
+```rust
+use maiko::monitors::Tracer;
+
+sup.monitors().add(Tracer).await;
+```
+
+Output at different log levels:
+- `trace` - event dispatched/delivered (high volume)
+- `debug` - event handled
+- `warn` - errors
+- `info` - actor stopped
+
+### Recorder
+
+Records events to a JSON Lines file for replay or debugging. Requires `recorder` feature:
+
+```toml
+maiko = { version = "0.2", features = ["recorder"] }
+```
+
+```rust
+use maiko::monitors::Recorder;
+
+let recorder = Recorder::new("events.jsonl")?;
+sup.monitors().add(recorder).await;
+```
+
+### Test Harness
+
+The [test harness](testing.md) is a specialized monitor for testing. It captures events for inspection and assertion. Requires `test-harness` feature.
+
 ## Monitor Trait
 
 The `Monitor` trait provides callbacks for different lifecycle events. All methods have default no-op implementations, so you only need to implement the ones you care about:
@@ -76,7 +115,7 @@ pub trait Monitor<E: Event, T: Topic<E>>: Send {
     fn on_event_handled(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId) {}
 
     /// Called when an actor's handler returns an error.
-    fn on_error(&self, err: &Error, actor_id: &ActorId) {}
+    fn on_error(&self, err: &str, actor_id: &ActorId) {}
 
     /// Called when an actor stops.
     fn on_actor_stop(&self, actor_id: &ActorId) {}
@@ -165,7 +204,7 @@ impl<E: Event, T: Topic<E>> Monitor<E, T> for MetricsMonitor {
         self.handled.fetch_add(1, Ordering::Relaxed);
     }
 
-    fn on_error(&self, _: &maiko::Error, _: &ActorId) {
+    fn on_error(&self, _: &str, _: &ActorId) {
         self.errors.fetch_add(1, Ordering::Relaxed);
     }
 }

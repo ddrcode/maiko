@@ -126,7 +126,7 @@ cargo run --example guesser
 | **Supervisor** | Manages actor lifecycles and the runtime |
 | **Envelope** | Wraps events with metadata (sender, correlation ID) |
 
-For detailed documentation, see **[Core Concepts](doc/concepts.md)**.
+For detailed documentation, see **[Core Concepts](docs/concepts.md)**.
 
 ---
 
@@ -155,7 +155,7 @@ async fn test_event_delivery() -> Result<()> {
 }
 ```
 
-Enable with `features = ["test-harness"]`. See **[Test Harness Documentation](doc/testing.md)** for details.
+Enable with `features = ["test-harness"]`. See **[Test Harness Documentation](docs/testing.md)** for details.
 
 ---
 
@@ -177,17 +177,17 @@ impl<E: Event, T: Topic<E>> Monitor<E, T> for EventLogger {
 let handle = sup.monitors().add(EventLogger).await;
 ```
 
-Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](doc/monitoring.md)** for details.
+Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](docs/monitoring.md)** for details.
 
 ---
 
 ## Documentation
 
-- **[Core Concepts](doc/concepts.md)** - Events, Topics, Actors, Context, Supervisor
-- **[Monitoring](doc/monitoring.md)** - Event lifecycle hooks, metrics collection
-- **[Test Harness](doc/testing.md)** - Recording, spies, queries, assertions
-- **[Advanced Topics](doc/advanced.md)** - Error handling, configuration, design philosophy
-- **[FAQ](doc/faq.md)** - Common questions answered
+- **[Core Concepts](docs/concepts.md)** - Events, Topics, Actors, Context, Supervisor
+- **[Monitoring](docs/monitoring.md)** - Event lifecycle hooks, metrics collection
+- **[Test Harness](docs/testing.md)** - Recording, spies, queries, assertions
+- **[Advanced Topics](docs/advanced.md)** - Error handling, configuration, design philosophy
+- **[FAQ](docs/faq.md)** - Common questions answered
 - **[API Reference](https://docs.rs/maiko)** - Complete API documentation
 
 ---

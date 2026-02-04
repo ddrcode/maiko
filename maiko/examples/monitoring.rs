@@ -25,6 +25,8 @@ impl Actor for Greeter {
     }
 }
 
+// Custom monitor demonstrating the Monitor trait.
+// For simple tracing, consider using `maiko::monitors::Tracer` instead.
 struct Printer;
 
 impl Monitor<MyEvent> for Printer {
@@ -37,7 +39,7 @@ impl Monitor<MyEvent> for Printer {
         println!("Event {:?} handled by actor {}", envelope.event(), actor_id);
     }
 
-    fn on_error(&self, err: &Error, actor_id: &ActorId) {
+    fn on_error(&self, err: &str, actor_id: &ActorId) {
         eprintln!("Error in actor {}: {}", actor_id, err);
     }
 

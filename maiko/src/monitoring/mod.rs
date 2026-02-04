@@ -48,6 +48,4 @@ pub use monitor_handle::MonitorHandle;
 pub(crate) use monitoring_event::MonitoringEvent;
 pub use registry::MonitorRegistry;
 
-#[cfg(feature = "recorder")]
-pub mod recorder;
 pub(crate) use sink::MonitoringSink;

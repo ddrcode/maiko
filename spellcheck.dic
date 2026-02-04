@@ -1,4 +1,4 @@
-39
+40
 1ms
 10ms
 Actix
@@ -15,6 +15,7 @@ Erlang
 EventEntry
 implementors
 IPC
+JSON
 lifecycle
 Maiko
 metadata
