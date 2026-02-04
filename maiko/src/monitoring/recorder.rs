@@ -1,9 +1,9 @@
+use crate::{ActorId, Envelope, Event, Topic, monitoring::Monitor};
+use serde::Serialize;
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
-use serde::Serialize;
-use crate::{ActorId, Envelope, Event, Topic, monitoring::Monitor};
 
 /// A monitor that records events to a file in JSON format.
 ///
@@ -41,14 +41,14 @@ where
     fn on_event_dispatched(&self, envelope: &Envelope<E>, _topic: &T, _receiver: &ActorId) {
         // Just serialize the envelope directly as requested.
         if let Ok(mut writer) = self.writer.try_borrow_mut() {
-             if let Err(e) = serde_json::to_writer(&mut *writer, envelope) {
+            if let Err(e) = serde_json::to_writer(&mut *writer, envelope) {
                 eprintln!("Recorder failed to serialize event: {}", e);
             }
             // Add newline for easy reading/parsing (JSON Lines)
             let _ = std::io::Write::write_all(&mut *writer, b"\n");
             let _ = std::io::Write::flush(&mut *writer);
         } else {
-             eprintln!("Recorder failed to borrow writer");
+            eprintln!("Recorder failed to borrow writer");
         }
     }
 }
@@ -56,10 +56,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DefaultTopic;
+    use serde::Serialize;
     use std::io::Read;
     use std::sync::Arc;
-    use serde::Serialize;
-    use crate::DefaultTopic;
 
     #[derive(Clone, Debug, Serialize)]
     struct TestEvent(String);
@@ -69,7 +69,7 @@ mod tests {
     fn test_recorder_writes_json() {
         let path = "test_log_refcell.jsonl";
         let recorder = Recorder::new(path).expect("Failed to create recorder");
-        
+
         let event = TestEvent("hello".to_string());
         let sender_id = ActorId::new(Arc::from("sender"));
         let envelope = Envelope::new(event.clone(), sender_id);
@@ -80,13 +80,14 @@ mod tests {
         // Verify content
         let mut file = File::open(path).expect("Failed to open log file");
         let mut content = String::new();
-        file.read_to_string(&mut content).expect("Failed to read log file");
+        file.read_to_string(&mut content)
+            .expect("Failed to read log file");
 
         // Simple string checks
         assert!(content.contains("hello"));
         assert!(content.contains("sender"));
         // Receiver is NOT recorded anymore per requirements
-        
+
         // Cleanup
         let _ = std::fs::remove_file(path);
     }

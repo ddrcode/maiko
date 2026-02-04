@@ -26,6 +26,9 @@ pub enum Error {
 
     #[error("Error external to Maiko occured: {0}")]
     External(Arc<str>),
+
+    #[error("IO Error: {0}")]
+    IOError(String),
 }
 
 impl<E: Event> From<SendError<Arc<Envelope<E>>>> for Error {
@@ -46,5 +49,11 @@ impl<E: Event> From<TrySendError<Arc<Envelope<E>>>> for Error {
 impl From<tokio::task::JoinError> for Error {
     fn from(e: tokio::task::JoinError) -> Self {
         Error::ActorJoinError(e.to_string())
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::IOError(e.to_string())
     }
 }
