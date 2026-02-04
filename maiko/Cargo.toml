@@ -54,3 +54,7 @@ required-features = ["monitoring"]
 [[example]]
 name = "arbitrage"
 required-features = ["default", "test-harness"]
+
+[[example]]
+name = "recorder"
+required-features = ["recorder"]

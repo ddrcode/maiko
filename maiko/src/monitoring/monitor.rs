@@ -1,4 +1,4 @@
-use crate::{ActorId, DefaultTopic, Envelope, Error, Event, StepAction, Topic};
+use crate::{ActorId, DefaultTopic, Envelope, Event, StepAction, Topic};
 
 /// Trait for observing event flow through the system.
 ///
@@ -61,7 +61,7 @@ pub trait Monitor<E: Event, T: Topic<E> = DefaultTopic>: Send {
     }
 
     /// Called when an actor's handler returns an error.
-    fn on_error(&self, err: &Error, actor_id: &ActorId) {
+    fn on_error(&self, err: &str, actor_id: &ActorId) {
         let _a = actor_id;
         let _e = err;
     }

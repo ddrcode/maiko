@@ -167,7 +167,7 @@ impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
     fn notify_error(&self, error: &crate::Error) {
         if self.monitoring.is_active() {
             self.monitoring.send(MonitoringEvent::Error(
-                error.clone(),
+                error.to_string().into(),
                 self.ctx.actor_id.clone(),
             ));
         }

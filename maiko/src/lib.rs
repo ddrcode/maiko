@@ -107,6 +107,9 @@ pub mod testing;
 #[cfg(feature = "monitoring")]
 pub mod monitoring;
 
+#[cfg(feature = "recorder")]
+pub mod monitors;
+
 pub use actor::Actor;
 pub use actor_id::ActorId;
 pub use config::Config;
