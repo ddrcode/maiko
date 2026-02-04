@@ -25,6 +25,8 @@ impl Actor for Greeter {
     }
 }
 
+// Custom monitor demonstrating the Monitor trait.
+// For simple tracing, consider using `maiko::monitors::Tracer` instead.
 struct Printer;
 
 impl Monitor<MyEvent> for Printer {

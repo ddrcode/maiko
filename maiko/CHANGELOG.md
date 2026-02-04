@@ -1,6 +1,19 @@
-# [0.2.2] Unreleased
+# [0.2.2](https://github.com/ddrcode/maiko/compare/v0.2.1...v0.2.2) (February 4th, 2026)
 
-- Docs and readme improvement
+### Added
+
+- `Recorder` monitor for recording events to JSON Lines files ([#49])
+- `Tracer` monitor for logging event lifecycle via `tracing` crate ([#52])
+- `monitors` module for built-in monitor implementations ([#52])
+
+### Changed
+
+- `Error` enum no longer implements `Clone` (allows deriving from non-Clone errors) ([#49])
+- Reorganized monitoring: `monitoring` module for engine, `monitors` for implementations ([#52])
+- Improved documentation
+
+[#49]: https://github.com/ddrcode/maiko/pull/49
+[#52]: https://github.com/ddrcode/maiko/pull/52
 
 ---
 
@@ -8,7 +21,7 @@
 
 ### Added
 
-- [Frequently Asked Questions](https://github.com/ddrcode/maiko/blob/main/doc/faq.md)
+- [Frequently Asked Questions](https://github.com/ddrcode/maiko/blob/main/docs/faq.md)
 
 ### Changed
 

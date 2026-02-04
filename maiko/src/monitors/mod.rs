@@ -5,16 +5,19 @@
 //!
 //! # Available Monitors
 //!
+//! - [`Tracer`] - Logs event lifecycle via `tracing` crate
 //! - [`Recorder`] - Records events to a JSON Lines file (requires `recorder` feature)
 //!
 //! # Example
 //!
 //! ```ignore
-//! use maiko::monitors::Recorder;
+//! use maiko::monitors::Tracer;
 //!
-//! let recorder = Recorder::new("events.jsonl")?;
-//! sup.monitors().add(recorder).await;
+//! sup.monitors().add(Tracer).await;
 //! ```
+
+mod tracer;
+pub use tracer::Tracer;
 
 #[cfg(feature = "recorder")]
 mod recorder;
