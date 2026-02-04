@@ -22,10 +22,10 @@ impl Actor for Greeter {
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
-    
+
     // Create a recorder that logs to "event_log.jsonl"
     let recorder = Recorder::new("event_log.jsonl")?;
-    
+
     // Register the recorder monitor and get the handle
     let _recorder_handle = sup.monitors().add(recorder).await;
 
@@ -41,11 +41,11 @@ async fn main() -> Result<()> {
 
     // Wait a bit for processing
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    
+
     // sup.stop() gracefully shuts down and waits for queue to drain.
     // It is sufficient for flushing in this simple case as consumers finish processing.
     sup.stop().await?;
-    
+
     println!("Events recorded to event_log.jsonl");
     Ok(())
 }
