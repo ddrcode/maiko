@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::hash::Hash;
 
 use crate::event::Event;
@@ -17,10 +18,24 @@ use crate::event::Event;
 ///
 /// Trait bounds: refer to the event trait as [`crate::Event`] in generic
 /// signatures to avoid confusion with the `Event` derive macro.
+///
+/// # Topic Names
+///
+/// The `name()` method returns a human-readable name for the topic,
+/// used for logging, monitoring, and diagram generation.
+/// The default implementation returns "unnamed".
 pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone + Send + Sync + 'static {
     fn from_event(event: &E) -> Self
     where
         Self: Sized;
+
+    /// Returns a human-readable name for this topic.
+    ///
+    /// For enum topics, this is typically the variant name (e.g., "SensorData").
+    /// The default implementation returns the type name via `std::any::type_name`.
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed(std::any::type_name::<Self>())
+    }
 }
 
 /// Default topic for simple systems that don't need topic-based routing.
@@ -42,6 +57,10 @@ pub struct DefaultTopic;
 impl<E: Event> Topic<E> for DefaultTopic {
     fn from_event(_event: &E) -> DefaultTopic {
         DefaultTopic
+    }
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("default")
     }
 }
 

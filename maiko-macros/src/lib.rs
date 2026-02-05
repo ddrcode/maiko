@@ -1,6 +1,7 @@
 //! Procedural macros for the Maiko actor runtime.
 //!
 //! - `#[derive(Event)]`: Implements `maiko::Event` for your type, preserving generics and bounds.
+//!   For enums, also generates `name()` returning the variant name.
 //! - `#[derive(SelfRouting)]`: Implements `maiko::Topic<T> for T` for event-as-topic routing.
 //!
 //! Usage:
@@ -17,18 +18,51 @@
 //! ```
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, parse_macro_input};
+use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
 #[proc_macro_derive(Event)]
 pub fn derive_event(input: TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let ident = input.ident;
-    let generics = input.generics;
+    let ident = input.ident.clone();
+    let generics = input.generics.clone();
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
+    // For enums, generate name() that returns variant names
+    let name_impl = match &input.data {
+        Data::Enum(data_enum) => {
+            let match_arms = data_enum.variants.iter().map(|variant| {
+                let variant_ident = &variant.ident;
+                let variant_name = variant_ident.to_string();
+
+                // Handle different field types (unit, tuple, struct)
+                let pattern = match &variant.fields {
+                    Fields::Unit => quote! { Self::#variant_ident },
+                    Fields::Unnamed(_) => quote! { Self::#variant_ident(..) },
+                    Fields::Named(_) => quote! { Self::#variant_ident { .. } },
+                };
+
+                quote! {
+                    #pattern => ::std::borrow::Cow::Borrowed(#variant_name)
+                }
+            });
+
+            quote! {
+                fn name(&self) -> ::std::borrow::Cow<'static, str> {
+                    match self {
+                        #(#match_arms),*
+                    }
+                }
+            }
+        }
+        // For structs, use the default implementation (returns "unnamed")
+        _ => quote! {},
+    };
+
     let expanded = quote! {
-        impl #impl_generics maiko::Event for #ident #ty_generics #where_clause {}
+        impl #impl_generics maiko::Event for #ident #ty_generics #where_clause {
+            #name_impl
+        }
     };
     TokenStream::from(expanded)
 }

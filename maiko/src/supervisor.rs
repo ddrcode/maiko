@@ -51,6 +51,7 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
     broker_cancel_token: Arc<CancellationToken>,
     start_notifier: Arc<Notify>,
     supervisor_id: ActorId,
+    registrations: Vec<(ActorId, Subscription<T>)>,
 
     #[cfg(feature = "monitoring")]
     monitoring: MonitorRegistry<E, T>,
@@ -88,6 +89,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             broker_cancel_token,
             start_notifier: Arc::new(Notify::new()),
             supervisor_id: ActorId::new(Arc::from("supervisor")),
+            registrations: Vec::new(),
 
             #[cfg(feature = "monitoring")]
             monitoring,
@@ -149,8 +151,9 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
 
-        let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics, tx);
+        let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics.clone(), tx);
         broker.add_subscriber(subscriber)?;
+        self.registrations.push((actor_id.clone(), topics));
 
         let mut controller = ActorController::<A, T> {
             actor,
@@ -262,6 +265,64 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         self.config.as_ref()
     }
 
+    /// Generate a Mermaid flowchart showing actor subscriptions.
+    ///
+    /// Topics are shown as circles, actors as boxes. Arrows indicate
+    /// that an actor subscribes to (receives events from) a topic.
+    ///
+    /// Actors with `Subscribe::all()` are connected to all known topics.
+    /// Actors with `Subscribe::none()` appear isolated (no incoming arrows).
+    ///
+    /// # Example output
+    ///
+    /// ```text
+    /// flowchart LR
+    ///     SensorData((SensorData)) --> processor
+    ///     SensorData --> logger
+    ///     Alert((Alert)) --> logger
+    /// ```
+    ///
+    /// Topic names are obtained via `Topic::name()`.
+    pub fn to_mermaid(&self) -> String {
+        use std::collections::HashSet;
+
+        // Collect all known topics from specific subscriptions
+        let mut all_topics: HashSet<T> = HashSet::new();
+        for (_, subscription) in &self.registrations {
+            if let Subscription::Topics(topics) = subscription {
+                all_topics.extend(topics.iter().cloned());
+            }
+        }
+
+        let mut lines = vec!["flowchart LR".to_string()];
+
+        // For each registration, add edges from topics to actors
+        for (actor_id, subscription) in &self.registrations {
+            let actor_name = actor_id.name();
+            match subscription {
+                Subscription::All => {
+                    // Connect to all known topics
+                    for topic in &all_topics {
+                        let topic_name = topic.name();
+                        lines.push(format!("    {}(({0})) --> {}", topic_name, actor_name));
+                    }
+                }
+                Subscription::Topics(topics) => {
+                    for topic in topics {
+                        let topic_name = topic.name();
+                        lines.push(format!("    {}(({0})) --> {}", topic_name, actor_name));
+                    }
+                }
+                Subscription::None => {
+                    // Pure producer - no incoming edges, but show the node
+                    lines.push(format!("    {}[{}]", actor_name, actor_name));
+                }
+            }
+        }
+
+        lines.join("\n")
+    }
+
     #[cfg(feature = "monitoring")]
     pub fn monitors(&mut self) -> &mut MonitorRegistry<E, T> {
         &mut self.monitoring
@@ -284,5 +345,85 @@ impl<E: Event, T: Topic<E>> Drop for Supervisor<E, T> {
         }
         #[cfg(feature = "monitoring")]
         self.monitoring.cancel();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    #[allow(dead_code)]
+    enum TestEvent {
+        Sensor(f64),
+        Alert(String),
+    }
+
+    impl Event for TestEvent {}
+
+    #[derive(Debug, Hash, Eq, PartialEq, Clone)]
+    enum TestTopic {
+        SensorData,
+        Alerts,
+    }
+
+    impl Topic<TestEvent> for TestTopic {
+        fn from_event(event: &TestEvent) -> Self {
+            match event {
+                TestEvent::Sensor(_) => TestTopic::SensorData,
+                TestEvent::Alert(_) => TestTopic::Alerts,
+            }
+        }
+
+        fn name(&self) -> std::borrow::Cow<'static, str> {
+            std::borrow::Cow::Borrowed(match self {
+                TestTopic::SensorData => "SensorData",
+                TestTopic::Alerts => "Alerts",
+            })
+        }
+    }
+
+    struct DummyActor;
+
+    impl Actor for DummyActor {
+        type Event = TestEvent;
+        async fn handle_event(&mut self, _: &Envelope<Self::Event>) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_to_mermaid_basic() {
+        let mut sup = Supervisor::<TestEvent, TestTopic>::default();
+        sup.add_actor("sensor", |_| DummyActor, Subscribe::none())
+            .unwrap();
+        sup.add_actor("processor", |_| DummyActor, &[TestTopic::SensorData])
+            .unwrap();
+        sup.add_actor("alerter", |_| DummyActor, &[TestTopic::Alerts])
+            .unwrap();
+
+        let mermaid = sup.to_mermaid();
+        assert!(mermaid.starts_with("flowchart LR"));
+        assert!(mermaid.contains("sensor[sensor]")); // producer node
+        assert!(mermaid.contains("SensorData((SensorData)) --> processor"));
+        assert!(mermaid.contains("Alerts((Alerts)) --> alerter"));
+    }
+
+    #[tokio::test]
+    async fn test_to_mermaid_subscribe_all() {
+        let mut sup = Supervisor::<TestEvent, TestTopic>::default();
+        sup.add_actor("processor", |_| DummyActor, &[TestTopic::SensorData])
+            .unwrap();
+        sup.add_actor("alerter", |_| DummyActor, &[TestTopic::Alerts])
+            .unwrap();
+        sup.add_actor("monitor", |_| DummyActor, Subscribe::all())
+            .unwrap();
+
+        let mermaid = sup.to_mermaid();
+        // Monitor should be connected to both topics
+        assert!(mermaid.contains("--> monitor"));
+        // Should have both SensorData and Alerts pointing to monitor
+        let monitor_lines: Vec<_> = mermaid.lines().filter(|l| l.contains("monitor")).collect();
+        assert_eq!(monitor_lines.len(), 2);
     }
 }
