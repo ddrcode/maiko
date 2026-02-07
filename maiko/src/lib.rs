@@ -93,6 +93,7 @@ mod context;
 mod envelope;
 mod error;
 mod event;
+mod label;
 mod meta;
 mod step_action;
 mod subscribe;
@@ -117,6 +118,7 @@ pub use context::Context;
 pub use envelope::Envelope;
 pub use error::Error;
 pub use event::Event;
+pub use label::Label;
 pub use meta::Meta;
 pub use step_action::StepAction;
 pub use subscribe::Subscribe;
@@ -124,7 +126,7 @@ pub use supervisor::Supervisor;
 pub use topic::{DefaultTopic, Topic};
 
 #[cfg(feature = "macros")]
-pub use maiko_macros::{Event, SelfRouting};
+pub use maiko_macros::{Event, Label, SelfRouting};
 
 pub type Result<T = ()> = std::result::Result<T, Error>;
 pub type EventId = u128;

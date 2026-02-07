@@ -172,6 +172,52 @@ Currently minimal. If an actor's `handle_event` returns an error:
 
 Proper supervision (restart strategies, escalation policies) is planned for 0.3.0.
 
+## Why is there no `try_send` in Context?
+
+By design. `ctx.send().await` is the only way to send events, and it waits for the broker to have capacity.
+
+**The tradeoff:**
+
+Pure actor independence says: fire and forget, don't care what happens downstream.
+
+`ctx.send().await` says: wait if the broker's channel is full.
+
+These conflict. Maiko chooses bounded channels with backpressure. When the broker can't accept more events, producers wait. This couples senders to system capacity - not to specific receivers, but to the broker's ability to accept.
+
+**Why this choice?**
+
+Pure fire-and-forget needs somewhere for events to go:
+- Unbounded queues → memory exhaustion under load
+- Bounded queues + silent drop → data loss, hard to debug
+- Bounded queues + wait → stable system, explicit behavior
+
+The "independence" in actor model means: no shared memory, no knowledge of specific recipients, asynchronous communication. It doesn't mean "producers never wait."
+
+**Why not offer both?**
+
+A `try_send` would let producers bypass backpressure:
+```rust
+// Hypothetical - doesn't exist
+ctx.try_send(event)?;  // Returns immediately, drops if broker busy
+```
+
+Problems:
+- **Incoherent model**: Receiver configured to block, but producer doesn't wait. Mixed signals.
+- **Hidden data loss**: Events silently dropped, hard to debug
+- **Two ways to send**: Users must understand when to use which
+
+**If you truly need fire-and-forget:**
+```rust
+let ctx = ctx.clone();
+tokio::spawn(async move {
+    let _ = ctx.send(event).await;
+});
+```
+
+Explicit. Visible. Your choice. Not a blessed API that muddles the model.
+
+**Philosophy**: One way to send. Backpressure by default. Honest about the tradeoff.
+
 ## What about performance?
 
 Maiko is designed for correctness and simplicity first. That said:
