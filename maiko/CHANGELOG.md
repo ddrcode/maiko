@@ -1,3 +1,12 @@
+# 0.2.3 Unreleased
+
+### Added
+
+- `Label` trait and derive macro
+- `to_mermaid` method in `Supervisor`
+
+---
+
 # [0.2.2](https://github.com/ddrcode/maiko/compare/v0.2.1...v0.2.2) (February 4th, 2026)
 
 ### Added

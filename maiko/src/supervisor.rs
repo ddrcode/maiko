@@ -10,8 +10,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Actor, ActorId, Config, Context, DefaultTopic, Envelope, Error, Event, Result, Subscribe,
-    Topic,
+    Actor, ActorId, Config, Context, DefaultTopic, Envelope, Error, Event, Label, Result,
+    Subscribe, Topic,
     internal::{ActorController, Broker, Subscriber, Subscription},
 };
 
@@ -265,6 +265,19 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         self.config.as_ref()
     }
 
+    #[cfg(feature = "monitoring")]
+    pub fn monitors(&mut self) -> &mut MonitorRegistry<E, T> {
+        &mut self.monitoring
+    }
+}
+
+impl<E: Event, T: Topic<E>> Default for Supervisor<E, T> {
+    fn default() -> Self {
+        Self::new(Config::default())
+    }
+}
+
+impl<E: Event, T: Topic<E> + Label> Supervisor<E, T> {
     /// Generate a Mermaid flowchart showing actor subscriptions.
     ///
     /// Topics are shown as circles, actors as boxes. Arrows indicate
@@ -303,13 +316,13 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
                 Subscription::All => {
                     // Connect to all known topics
                     for topic in &all_topics {
-                        let topic_name = topic.name();
+                        let topic_name = topic.label();
                         lines.push(format!("    {}(({0})) --> {}", topic_name, actor_name));
                     }
                 }
                 Subscription::Topics(topics) => {
                     for topic in topics {
-                        let topic_name = topic.name();
+                        let topic_name = topic.label();
                         lines.push(format!("    {}(({0})) --> {}", topic_name, actor_name));
                     }
                 }
@@ -321,17 +334,6 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         }
 
         lines.join("\n")
-    }
-
-    #[cfg(feature = "monitoring")]
-    pub fn monitors(&mut self) -> &mut MonitorRegistry<E, T> {
-        &mut self.monitoring
-    }
-}
-
-impl<E: Event, T: Topic<E>> Default for Supervisor<E, T> {
-    fn default() -> Self {
-        Self::new(Config::default())
     }
 }
 
@@ -374,8 +376,10 @@ mod tests {
                 TestEvent::Alert(_) => TestTopic::Alerts,
             }
         }
+    }
 
-        fn name(&self) -> std::borrow::Cow<'static, str> {
+    impl Label for TestTopic {
+        fn label(&self) -> std::borrow::Cow<'static, str> {
             std::borrow::Cow::Borrowed(match self {
                 TestTopic::SensorData => "SensorData",
                 TestTopic::Alerts => "Alerts",
