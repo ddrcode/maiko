@@ -4,6 +4,7 @@
 
 - `Label` trait and derive macro
 - `to_mermaid` method in `Supervisor`
+- `EventChain` in test harness for correlation tracking
 
 ---
 
