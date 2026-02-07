@@ -40,20 +40,24 @@
 //!
 //! **Do not use in production.** See [`Harness`] documentation for details.
 
+mod actor_flow;
 mod actor_spy;
 mod event_chain;
 mod event_collector;
 mod event_entry;
+mod event_flow;
 mod event_matcher;
 mod event_query;
 mod event_spy;
 mod harness;
 mod topic_spy;
 
+pub use actor_flow::ActorFlow;
 pub use actor_spy::ActorSpy;
-pub use event_chain::{ActorFlow, EventChain, EventFlow};
+pub use event_chain::EventChain;
 pub(crate) use event_collector::EventCollector;
 pub use event_entry::EventEntry;
+pub use event_flow::EventFlow;
 pub use event_matcher::EventMatcher;
 pub use event_query::EventQuery;
 pub use event_spy::EventSpy;

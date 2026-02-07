@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{ActorId, Event, EventId, Label, Topic};
 
-use super::{EventEntry, EventMatcher, EventRecords};
+use super::{ActorFlow, EventEntry, EventFlow, EventMatcher, EventRecords};
 
 /// A chain of events originating from a single root event.
 ///
@@ -194,14 +194,14 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
     }
 
     /// Returns an iterator over all entries in this chain.
-    fn chain_entries(&self) -> impl Iterator<Item = &EventEntry<E, T>> {
+    pub(super) fn chain_entries(&self) -> impl Iterator<Item = &EventEntry<E, T>> {
         self.records
             .iter()
             .filter(|e| self.chain_ids.contains(&e.id()))
     }
 
     /// Returns events in order (BFS from root).
-    fn ordered_entries(&self) -> Vec<&EventEntry<E, T>> {
+    pub(super) fn ordered_entries(&self) -> Vec<&EventEntry<E, T>> {
         let mut result = Vec::new();
         let mut queue = vec![self.root_id];
         let mut visited = HashSet::new();
@@ -228,158 +228,6 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
         }
 
         result
-    }
-}
-
-/// Actor flow view for querying which actors were visited by the chain.
-pub struct ActorFlow<'a, E: Event, T: Topic<E>> {
-    chain: &'a EventChain<E, T>,
-}
-
-impl<E: Event, T: Topic<E>> ActorFlow<'_, E, T> {
-    /// Returns the list of actors that received events in this chain.
-    fn receivers(&self) -> Vec<&ActorId> {
-        self.chain
-            .chain_entries()
-            .map(|e| e.receiver())
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect()
-    }
-
-    /// Returns the ordered list of actors that received events (in BFS order).
-    fn ordered_receivers(&self) -> Vec<&ActorId> {
-        let mut seen = HashSet::new();
-        self.chain
-            .ordered_entries()
-            .into_iter()
-            .filter_map(|e| {
-                let actor = e.receiver();
-                if seen.insert(actor) {
-                    Some(actor)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    /// Returns true if all specified actors received events from this chain (any order).
-    pub fn visited_all(&self, actors: &[&ActorId]) -> bool {
-        let receivers: HashSet<_> = self.receivers().into_iter().collect();
-        actors.iter().all(|a| receivers.contains(*a))
-    }
-
-    /// Returns true if events passed through the specified actors in order (gaps allowed).
-    pub fn through(&self, actors: &[&ActorId]) -> bool {
-        if actors.is_empty() {
-            return true;
-        }
-
-        let ordered = self.ordered_receivers();
-        let mut actor_iter = actors.iter();
-        let mut current = actor_iter.next();
-
-        for receiver in &ordered {
-            if let Some(expected) = current {
-                if **receiver == **expected {
-                    current = actor_iter.next();
-                }
-            }
-        }
-
-        current.is_none() // All actors were found in order
-    }
-
-    /// Returns true if the chain visited exactly these actors in this order.
-    pub fn exactly(&self, actors: &[&ActorId]) -> bool {
-        let ordered = self.ordered_receivers();
-        if ordered.len() != actors.len() {
-            return false;
-        }
-        ordered.iter().zip(actors.iter()).all(|(a, b)| **a == **b)
-    }
-}
-
-/// Event flow view for querying the sequence of events in the chain.
-pub struct EventFlow<'a, E: Event, T: Topic<E>> {
-    chain: &'a EventChain<E, T>,
-}
-
-impl<E: Event + Label, T: Topic<E>> EventFlow<'_, E, T> {
-    /// Returns true if the chain contains an event matching the given matcher.
-    pub fn contains(&self, matcher: impl Into<EventMatcher<E, T>>) -> bool {
-        let matcher = matcher.into();
-        self.chain.chain_entries().any(|e| matcher.matches(e))
-    }
-
-    /// Returns true if events matching the matchers appear consecutively in the chain.
-    pub fn sequence<M>(&self, matchers: &[M]) -> bool
-    where
-        M: Into<EventMatcher<E, T>> + Clone,
-    {
-        if matchers.is_empty() {
-            return true;
-        }
-
-        let ordered = self.ordered_events();
-        let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
-
-        // Look for consecutive matches
-        'outer: for start in 0..ordered.len() {
-            if matchers[0].matches(ordered[start]) {
-                let mut match_idx = 1;
-                for entry in ordered.iter().skip(start + 1) {
-                    if match_idx >= matchers.len() {
-                        return true;
-                    }
-                    if matchers[match_idx].matches(entry) {
-                        match_idx += 1;
-                    } else {
-                        continue 'outer;
-                    }
-                }
-                if match_idx == matchers.len() {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    /// Returns true if events matching the matchers appear in order (gaps allowed).
-    pub fn through<M>(&self, matchers: &[M]) -> bool
-    where
-        M: Into<EventMatcher<E, T>> + Clone,
-    {
-        if matchers.is_empty() {
-            return true;
-        }
-
-        let ordered = self.ordered_events();
-        let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
-        let mut matcher_idx = 0;
-
-        for entry in &ordered {
-            if matcher_idx >= matchers.len() {
-                break;
-            }
-            if matchers[matcher_idx].matches(entry) {
-                matcher_idx += 1;
-            }
-        }
-
-        matcher_idx == matchers.len()
-    }
-
-    /// Returns ordered unique events (by label, BFS order).
-    fn ordered_events(&self) -> Vec<&EventEntry<E, T>> {
-        let mut seen_ids = HashSet::new();
-        self.chain
-            .ordered_entries()
-            .into_iter()
-            .filter(|e| seen_ids.insert(e.id()))
-            .collect()
     }
 }
 
