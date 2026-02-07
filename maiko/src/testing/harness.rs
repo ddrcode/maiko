@@ -8,7 +8,10 @@ use tokio::sync::mpsc::{Sender, UnboundedReceiver, unbounded_channel};
 use crate::{
     ActorId, Envelope, Event, EventId, Supervisor, Topic,
     monitoring::MonitorHandle,
-    testing::{ActorSpy, EventCollector, EventEntry, EventQuery, EventRecords, EventSpy, TopicSpy},
+    testing::{
+        ActorSpy, EventChain, EventCollector, EventEntry, EventQuery, EventRecords, EventSpy,
+        TopicSpy,
+    },
 };
 
 /// Test harness for observing and asserting on event flow in a Maiko system.
@@ -177,6 +180,29 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     /// Use this to inspect event flow through a topic.
     pub fn topic(&self, topic: T) -> TopicSpy<E, T> {
         TopicSpy::new(self.snapshot.clone(), topic)
+    }
+
+    /// Returns an event chain for tracing event propagation from a root event.
+    ///
+    /// The chain captures all events correlated to the root (children, grandchildren, etc.)
+    /// and provides methods to verify actor flow and event sequences.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let chain = test.chain(root_event_id);
+    ///
+    /// // Verify actors were visited in order
+    /// assert!(chain.actors().through(&[&scanner, &pipeline, &writer]));
+    ///
+    /// // Verify event sequence
+    /// assert!(chain.events().sequence(&["KeyPress", "HidReport"]));
+    ///
+    /// // Check for branching
+    /// assert!(chain.diverges_after("KeyPress"));
+    /// ```
+    pub fn chain(&self, id: EventId) -> EventChain<E, T> {
+        EventChain::new(self.snapshot.clone(), id)
     }
 
     // ==================== Debugging ====================

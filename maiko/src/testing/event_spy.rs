@@ -1,6 +1,6 @@
 use crate::{
     ActorId, Event, EventId, Topic,
-    testing::{EventQuery, EventRecords},
+    testing::{EventChain, EventQuery, EventRecords},
 };
 
 /// A spy for observing the delivery and effects of a specific event.
@@ -60,6 +60,14 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     /// Child events are those whose `correlation_id` matches this event's `id`.
     pub fn children(&self) -> EventQuery<E, T> {
         EventQuery::new(self.records.clone()).correlated_with(self.id)
+    }
+
+    /// Returns an event chain for tracing this event's propagation.
+    ///
+    /// The chain captures all events correlated to this event (children, grandchildren, etc.)
+    /// and provides methods to verify actor flow and event sequences.
+    pub fn chain(&self) -> EventChain<E, T> {
+        EventChain::new(self.records.clone(), self.id)
     }
 }
 

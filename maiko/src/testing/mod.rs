@@ -29,6 +29,11 @@
 //!     .sent_by(&trader)
 //!     .matching_event(|e| matches!(e, MyEvent::Order(_)))
 //!     .count();
+//!
+//! // Or trace event propagation with EventChain
+//! let chain = test.chain(id);
+//! assert!(chain.actors().through(&[&producer, &processor, &writer]));
+//! assert!(chain.events().sequence(&["Input", "Processed", "Output"]));
 //! ```
 //!
 //! # Warning
@@ -36,16 +41,20 @@
 //! **Do not use in production.** See [`Harness`] documentation for details.
 
 mod actor_spy;
+mod event_chain;
 mod event_collector;
 mod event_entry;
+mod event_matcher;
 mod event_query;
 mod event_spy;
 mod harness;
 mod topic_spy;
 
 pub use actor_spy::ActorSpy;
+pub use event_chain::{ActorFlow, EventChain, EventFlow};
 pub(crate) use event_collector::EventCollector;
 pub use event_entry::EventEntry;
+pub use event_matcher::EventMatcher;
 pub use event_query::EventQuery;
 pub use event_spy::EventSpy;
 pub use harness::Harness;
