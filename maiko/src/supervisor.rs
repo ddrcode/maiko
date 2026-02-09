@@ -350,6 +350,86 @@ impl<E: Event, T: Topic<E>> Drop for Supervisor<E, T> {
     }
 }
 
+#[cfg(feature = "serde")]
+use serde::Serialize;
+
+#[cfg(feature = "serde")]
+#[derive(Serialize)]
+struct ActorSubscriptionExport {
+    actor_id: String,
+    subscriptions: Vec<String>,
+}
+
+#[cfg(feature = "serde")]
+impl<E, T> Supervisor<E, T>
+where
+    E: Event,
+    T: Topic<E> + Label + Clone + Eq + std::hash::Hash,
+{
+    /// Export actor subscription topology as JSON.
+    ///
+    /// This method provides a machine-readable representation of which actors
+    /// are subscribed to which topics. It mirrors the information shown by
+    /// [`to_mermaid`](Self::to_mermaid), but returns structured JSON suitable
+    /// for inspection, tooling, or testing.
+    ///
+    /// The output is a flat list where each entry contains:
+    ///
+    /// - `actor_id` — the actor name
+    /// - `subscriptions` — topic labels the actor receives events from
+    ///
+    /// # Semantics
+    ///
+    /// - Actors registered with [`Subscribe::all()`] are expanded to include
+    ///   all known topics discovered from explicit subscriptions.
+    /// - Actors registered with [`Subscribe::none()`] produce an empty list.
+    /// - Topic names are obtained via [`Label::label()`].
+    ///
+    /// This export reflects declared routing configuration only. It does not
+    /// represent runtime message flow, event producers, or supervision
+    /// hierarchy.
+    ///
+    /// # Errors
+    ///
+    /// Returns any serialization error produced by `serde_json`.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let json = supervisor.to_json()?;
+    /// println!("{json}");
+    /// ```
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        use std::collections::HashSet;
+
+        let mut all_topics: HashSet<T> = HashSet::new();
+        for (_, subscription) in &self.registrations {
+            if let Subscription::Topics(topics) = subscription {
+                all_topics.extend(topics.iter().cloned());
+            }
+        }
+
+        let mut exports = Vec::with_capacity(self.registrations.len());
+
+        for (actor_id, subscription) in &self.registrations {
+            let subs: Vec<String> = match subscription {
+                Subscription::All => all_topics.iter().map(|t| t.label()).collect(),
+
+                Subscription::Topics(topics) => topics.iter().map(|t| t.label()).collect(),
+
+                Subscription::None => Vec::new(),
+            };
+
+            exports.push(ActorSubscriptionExport {
+                actor_id: actor_id.name().to_string(),
+                subscriptions: subs,
+            });
+        }
+
+        serde_json::to_string_pretty(&exports)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,10 +504,81 @@ mod tests {
             .unwrap();
 
         let mermaid = sup.to_mermaid();
-        // Monitor should be connected to both topics
+
         assert!(mermaid.contains("--> monitor"));
-        // Should have both SensorData and Alerts pointing to monitor
+
         let monitor_lines: Vec<_> = mermaid.lines().filter(|l| l.contains("monitor")).collect();
         assert_eq!(monitor_lines.len(), 2);
+    }
+
+    #[cfg(feature = "serde")]
+    #[tokio::test]
+    async fn test_to_json_basic() {
+        use serde_json::Value;
+
+        let mut sup = Supervisor::<TestEvent, TestTopic>::default();
+
+        sup.add_actor("sensor", |_| DummyActor, Subscribe::none())
+            .unwrap();
+
+        sup.add_actor("processor", |_| DummyActor, &[TestTopic::SensorData])
+            .unwrap();
+
+        let json = sup.to_json().unwrap();
+        let parsed: Value = serde_json::from_str(&json).unwrap();
+
+        let arr = parsed.as_array().unwrap();
+
+        let sensor = arr.iter().find(|v| v["actor_id"] == "sensor").unwrap();
+
+        let processor = arr.iter().find(|v| v["actor_id"] == "processor").unwrap();
+
+        assert!(sensor["subscriptions"].as_array().unwrap().is_empty());
+
+        let subs = processor["subscriptions"].as_array().unwrap();
+
+        assert_eq!(subs.len(), 1);
+        assert_eq!(subs[0], "SensorData");
+    }
+
+    #[cfg(feature = "serde")]
+    #[tokio::test]
+    async fn test_to_json_subscribe_all() {
+        use serde_json::Value;
+
+        let mut sup = Supervisor::<TestEvent, TestTopic>::default();
+
+        sup.add_actor("processor", |_| DummyActor, &[TestTopic::SensorData])
+            .unwrap();
+
+        sup.add_actor("alerter", |_| DummyActor, &[TestTopic::Alerts])
+            .unwrap();
+
+        sup.add_actor("monitor", |_| DummyActor, Subscribe::all())
+            .unwrap();
+
+        let json = sup.to_json().unwrap();
+        let parsed: Value = serde_json::from_str(&json).unwrap();
+
+        let arr = parsed.as_array().unwrap();
+
+        let monitor = arr.iter().find(|v| v["actor_id"] == "monitor").unwrap();
+
+        let subs = monitor["subscriptions"].as_array().unwrap();
+
+        assert_eq!(subs.len(), 2);
+        assert!(subs.contains(&Value::String("SensorData".into())));
+        assert!(subs.contains(&Value::String("Alerts".into())));
+    }
+
+    #[cfg(feature = "serde")]
+    #[tokio::test]
+    async fn test_to_json_is_valid_json() {
+        let mut sup = Supervisor::<TestEvent, TestTopic>::default();
+        sup.add_actor("a", |_| DummyActor, Subscribe::none())
+            .unwrap();
+
+        let json = sup.to_json().unwrap();
+        assert!(serde_json::from_str::<serde_json::Value>(&json).is_ok());
     }
 }
