@@ -193,6 +193,14 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
         }
     }
 
+    /// Returns the sender of the root event (the actor who initiated the chain).
+    pub(super) fn root_sender(&self) -> Option<&ActorId> {
+        self.records
+            .iter()
+            .find(|e| e.id() == self.root_id)
+            .map(|e| e.meta().actor_id())
+    }
+
     /// Returns an iterator over all entries in this chain.
     pub(super) fn chain_entries(&self) -> impl Iterator<Item = &EventEntry<E, T>> {
         self.records
@@ -229,6 +237,129 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
 
         result
     }
+}
+
+impl<E: Event + Label, T: Topic<E>> EventChain<E, T> {
+    /// Print the event chain structure to stdout for debugging.
+    ///
+    /// Shows a tree view of the chain with event labels and actor flow.
+    pub fn pretty_print(&self) {
+        println!("{}", self.to_string_tree());
+    }
+
+    /// Returns a string representation of the chain as a tree.
+    pub fn to_string_tree(&self) -> String {
+        let mut output = String::new();
+        output.push_str(&format!("EventChain (root: {})\n", self.root_id));
+
+        // Check if we have any actual entries for the root
+        let has_root = self.records.iter().any(|e| e.id() == self.root_id);
+        if !has_root {
+            output.push_str("  (empty)\n");
+            return output;
+        }
+
+        self.format_tree_node(&mut output, self.root_id, "", true);
+        output
+    }
+
+    fn format_tree_node(&self, output: &mut String, id: EventId, prefix: &str, is_last: bool) {
+        // Find the first entry for this event to get label and actors
+        if let Some(entry) = self.records.iter().find(|e| e.id() == id) {
+            let connector = if prefix.is_empty() {
+                ""
+            } else if is_last {
+                "└─ "
+            } else {
+                "├─ "
+            };
+
+            let label = entry.payload().label();
+            let sender = entry.sender();
+            let receiver = entry.receiver().name();
+
+            output.push_str(&format!(
+                "{}{}{} [{} -> {}]\n",
+                prefix, connector, label, sender, receiver
+            ));
+
+            // Format children
+            if let Some(children) = self.children_map.get(&id) {
+                let child_prefix = if prefix.is_empty() {
+                    "".to_string()
+                } else if is_last {
+                    format!("{}   ", prefix)
+                } else {
+                    format!("{}│  ", prefix)
+                };
+
+                for (i, child_id) in children.iter().enumerate() {
+                    let is_last_child = i == children.len() - 1;
+                    self.format_tree_node(output, *child_id, &child_prefix, is_last_child);
+                }
+            }
+        }
+    }
+
+    /// Generate a Mermaid sequence diagram of the event chain.
+    ///
+    /// The diagram shows actors as participants and events as messages
+    /// flowing between them in order of occurrence.
+    ///
+    /// # Example output
+    ///
+    /// ```text
+    /// sequenceDiagram
+    ///     alice->>bob: Start
+    ///     bob->>charlie: Process
+    ///     charlie->>alice: Complete
+    /// ```
+    pub fn to_mermaid(&self) -> String {
+        let mut output = String::new();
+        output.push_str("sequenceDiagram\n");
+
+        if self.chain_ids.is_empty() {
+            return output;
+        }
+
+        // Collect unique events in BFS order
+        let mut seen_ids = HashSet::new();
+        let ordered: Vec<_> = self
+            .ordered_entries()
+            .into_iter()
+            .filter(|e| seen_ids.insert(e.id()))
+            .collect();
+
+        for entry in ordered {
+            let sender = entry.sender();
+            let receiver = entry.receiver().name();
+            let label = entry.payload().label();
+
+            // Sanitize actor names for mermaid (replace spaces, special chars)
+            let sender_safe = sanitize_mermaid_id(sender);
+            let receiver_safe = sanitize_mermaid_id(receiver);
+
+            output.push_str(&format!(
+                "    {}->>{}:{}\n",
+                sender_safe, receiver_safe, label
+            ));
+        }
+
+        output
+    }
+}
+
+/// Sanitize a string for use as a Mermaid identifier.
+fn sanitize_mermaid_id(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -332,15 +463,44 @@ mod tests {
     // ==================== ActorFlow Tests ====================
 
     #[test]
+    fn actor_flow_all_includes_sender_and_receivers() {
+        let (records, root_id) = build_linear_chain();
+        let chain = EventChain::new(records, root_id);
+
+        let alice = actor("alice");
+        let bob = actor("bob");
+        let charlie = actor("charlie");
+
+        let actors = chain.actors();
+        let all = actors.all();
+        assert_eq!(all.len(), 3);
+        assert!(all.iter().any(|a| ***a == *alice));
+        assert!(all.iter().any(|a| ***a == *bob));
+        assert!(all.iter().any(|a| ***a == *charlie));
+    }
+
+    #[test]
+    fn actor_flow_ordered_starts_with_root_sender() {
+        let (records, root_id) = build_linear_chain();
+        let chain = EventChain::new(records, root_id);
+
+        let actors = chain.actors();
+        let ordered = actors.ordered();
+
+        // alice is the root sender, should be first
+        assert_eq!(ordered[0].name(), "alice");
+    }
+
+    #[test]
     fn actor_flow_visited_all_returns_true_when_all_present() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
+        let alice = actor("alice");
         let bob = actor("bob");
         let charlie = actor("charlie");
-        let alice = actor("alice");
 
-        assert!(chain.actors().visited_all(&[&bob, &charlie, &alice]));
+        assert!(chain.actors().visited_all(&[&alice, &bob, &charlie]));
     }
 
     #[test]
@@ -359,12 +519,12 @@ mod tests {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
+        let alice = actor("alice");
         let bob = actor("bob");
         let charlie = actor("charlie");
-        let alice = actor("alice");
 
-        // bob -> charlie -> alice (order they received events)
-        assert!(chain.actors().through(&[&bob, &charlie, &alice]));
+        // alice (sender) -> bob -> charlie (receivers in order)
+        assert!(chain.actors().through(&[&alice, &bob, &charlie]));
     }
 
     #[test]
@@ -372,11 +532,11 @@ mod tests {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
-        let bob = actor("bob");
         let alice = actor("alice");
+        let charlie = actor("charlie");
 
-        // bob -> alice with charlie skipped
-        assert!(chain.actors().through(&[&bob, &alice]));
+        // alice -> charlie with bob skipped
+        assert!(chain.actors().through(&[&alice, &charlie]));
     }
 
     #[test]
@@ -384,11 +544,11 @@ mod tests {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
-        let bob = actor("bob");
         let alice = actor("alice");
+        let bob = actor("bob");
 
-        // alice appears after charlie, so alice -> bob is wrong order
-        assert!(!chain.actors().through(&[&alice, &bob]));
+        // bob comes after alice, so bob -> alice is wrong order
+        assert!(!chain.actors().through(&[&bob, &alice]));
     }
 
     #[test]
@@ -396,11 +556,12 @@ mod tests {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
+        let alice = actor("alice");
         let bob = actor("bob");
         let charlie = actor("charlie");
-        let alice = actor("alice");
 
-        assert!(chain.actors().exactly(&[&bob, &charlie, &alice]));
+        // alice (sender) -> bob -> charlie (order of participation)
+        assert!(chain.actors().exactly(&[&alice, &bob, &charlie]));
     }
 
     #[test]
@@ -408,10 +569,10 @@ mod tests {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
+        let alice = actor("alice");
         let bob = actor("bob");
-        let charlie = actor("charlie");
 
-        assert!(!chain.actors().exactly(&[&bob, &charlie]));
+        assert!(!chain.actors().exactly(&[&alice, &bob]));
     }
 
     #[test]
@@ -419,9 +580,9 @@ mod tests {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
+        let alice = actor("alice");
         let bob = actor("bob");
         let charlie = actor("charlie");
-        let alice = actor("alice");
 
         assert!(!chain.actors().exactly(&[&bob, &alice, &charlie]));
     }
@@ -555,5 +716,64 @@ mod tests {
 
         assert!(chain.actors().through(empty_actors));
         assert!(chain.events().through(empty_events));
+    }
+
+    // ==================== Debug Output Tests ====================
+
+    #[test]
+    fn to_string_tree_shows_chain_structure() {
+        let (records, root_id) = build_linear_chain();
+        let chain = EventChain::new(records, root_id);
+
+        let tree = chain.to_string_tree();
+
+        assert!(tree.contains("EventChain"));
+        assert!(tree.contains("Start"));
+        assert!(tree.contains("Process"));
+        assert!(tree.contains("Complete"));
+        assert!(tree.contains("alice"));
+        assert!(tree.contains("bob"));
+        assert!(tree.contains("charlie"));
+    }
+
+    #[test]
+    fn to_string_tree_handles_empty_chain() {
+        let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(vec![], 0);
+        let tree = chain.to_string_tree();
+
+        assert!(tree.contains("(empty)"));
+    }
+
+    #[test]
+    fn to_mermaid_generates_sequence_diagram() {
+        let (records, root_id) = build_linear_chain();
+        let chain = EventChain::new(records, root_id);
+
+        let mermaid = chain.to_mermaid();
+
+        assert!(mermaid.starts_with("sequenceDiagram\n"));
+        assert!(mermaid.contains("alice->>bob:Start"));
+        assert!(mermaid.contains("bob->>charlie:Process"));
+        assert!(mermaid.contains("charlie->>alice:Complete"));
+    }
+
+    #[test]
+    fn to_mermaid_handles_branching() {
+        let (records, root_id) = build_branching_chain();
+        let chain = EventChain::new(records, root_id);
+
+        let mermaid = chain.to_mermaid();
+
+        assert!(mermaid.contains("alice->>bob:Start"));
+        // Both branches should appear
+        assert!(mermaid.contains("Process") || mermaid.contains("Branch"));
+    }
+
+    #[test]
+    fn to_mermaid_handles_empty_chain() {
+        let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(vec![], 0);
+        let mermaid = chain.to_mermaid();
+
+        assert_eq!(mermaid, "sequenceDiagram\n");
     }
 }

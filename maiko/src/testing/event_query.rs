@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use crate::{
-    ActorId, Event, EventId, Topic,
-    testing::{EventEntry, EventRecords},
+    ActorId, Event, EventId, Label, Topic,
+    testing::{EventEntry, EventMatcher, EventRecords},
 };
 
 type Filter<E, T> = Rc<dyn Fn(&EventEntry<E, T>) -> bool>;
@@ -175,12 +175,46 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         self.add_filter(move |e| e.meta().correlation_id() == Some(parent_id));
         self
     }
+
+    /// Filter using an EventMatcher.
+    ///
+    /// This provides consistency with EventChain's matcher-based API,
+    /// allowing the same matchers to be used in both contexts.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use maiko::testing::EventMatcher;
+    ///
+    /// let matcher = EventMatcher::label("KeyPress");
+    /// let count = test.events().with_matcher(matcher).count();
+    /// ```
+    pub fn with_matcher(mut self, matcher: EventMatcher<E, T>) -> Self
+    where
+        E: Label,
+    {
+        self.add_filter(move |e| matcher.matches(e));
+        self
+    }
+
+    /// Filter to events matching the given label.
+    ///
+    /// This is a convenience method equivalent to `with_matcher(EventMatcher::label(name))`.
+    ///
+    /// Requires the event type to implement `Label`.
+    pub fn with_label(self, label: impl Into<std::borrow::Cow<'static, str>>) -> Self
+    where
+        E: Label,
+    {
+        self.with_matcher(EventMatcher::label(label))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{DefaultTopic, Envelope, Event};
+    use std::borrow::Cow;
     use std::sync::Arc;
 
     #[derive(Clone, Debug)]
@@ -190,6 +224,16 @@ mod tests {
         Data(i32),
     }
     impl Event for TestEvent {}
+
+    impl Label for TestEvent {
+        fn label(&self) -> Cow<'static, str> {
+            Cow::Borrowed(match self {
+                TestEvent::Ping => "Ping",
+                TestEvent::Pong => "Pong",
+                TestEvent::Data(_) => "Data",
+            })
+        }
+    }
 
     /// Shared actor IDs for tests - ensures pointer equality works
     struct TestActors {
@@ -429,5 +473,29 @@ mod tests {
         let query = EventQuery::new(records).correlated_with(parent_id);
         assert_eq!(query.count(), 1);
         assert!(query.first().unwrap().sender() == "bob");
+    }
+
+    #[test]
+    fn with_matcher_filters_by_matcher() {
+        let actors = TestActors::new();
+        let matcher = EventMatcher::label("Ping");
+        let query = EventQuery::new(sample_records_with_actors(&actors)).with_matcher(matcher);
+        assert_eq!(query.count(), 2); // Two Ping events in sample
+    }
+
+    #[test]
+    fn with_label_filters_by_label() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors)).with_label("Pong");
+        assert_eq!(query.count(), 1);
+    }
+
+    #[test]
+    fn with_label_combined_with_other_filters() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors))
+            .with_label("Ping")
+            .sent_by(&actors.alice);
+        assert_eq!(query.count(), 1);
     }
 }

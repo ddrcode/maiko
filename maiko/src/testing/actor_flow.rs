@@ -12,52 +12,67 @@ pub struct ActorFlow<'a, E: Event, T: Topic<E>> {
 }
 
 impl<E: Event, T: Topic<E>> ActorFlow<'_, E, T> {
-    /// Returns the list of actors that received events in this chain.
-    fn receivers(&self) -> Vec<&ActorId> {
-        self.chain
-            .chain_entries()
-            .map(|e| e.receiver())
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect()
+    /// Returns all actors involved in this chain (sender + receivers).
+    ///
+    /// The list includes the root event's sender followed by all actors
+    /// that received events. Order is not guaranteed.
+    pub fn all(&self) -> Vec<&ActorId> {
+        let mut actors: HashSet<&ActorId> =
+            self.chain.chain_entries().map(|e| e.receiver()).collect();
+
+        // Include root sender
+        if let Some(sender) = self.chain.root_sender() {
+            actors.insert(sender);
+        }
+
+        actors.into_iter().collect()
     }
 
-    /// Returns the ordered list of actors that received events (in BFS order).
-    fn ordered_receivers(&self) -> Vec<&ActorId> {
+    /// Returns actors in order of participation (BFS order).
+    ///
+    /// Starts with the root event's sender, followed by receivers in the
+    /// order they appear in the chain traversal.
+    pub fn ordered(&self) -> Vec<&ActorId> {
+        let mut result = Vec::new();
         let mut seen = HashSet::new();
-        self.chain
-            .ordered_entries()
-            .into_iter()
-            .filter_map(|e| {
-                let actor = e.receiver();
-                if seen.insert(actor) {
-                    Some(actor)
-                } else {
-                    None
-                }
-            })
-            .collect()
+
+        // Start with root sender
+        if let Some(sender) = self.chain.root_sender() {
+            if seen.insert(sender) {
+                result.push(sender);
+            }
+        }
+
+        // Add receivers in BFS order
+        for entry in self.chain.ordered_entries() {
+            let actor = entry.receiver();
+            if seen.insert(actor) {
+                result.push(actor);
+            }
+        }
+
+        result
     }
 
-    /// Returns true if all specified actors received events from this chain (any order).
+    /// Returns true if all specified actors participated in this chain (any order).
     pub fn visited_all(&self, actors: &[&ActorId]) -> bool {
-        let receivers: HashSet<_> = self.receivers().into_iter().collect();
-        actors.iter().all(|a| receivers.contains(*a))
+        let all_actors: HashSet<_> = self.all().into_iter().collect();
+        actors.iter().all(|a| all_actors.contains(*a))
     }
 
-    /// Returns true if events passed through the specified actors in order (gaps allowed).
+    /// Returns true if actors participated in the specified order (gaps allowed).
     pub fn through(&self, actors: &[&ActorId]) -> bool {
         if actors.is_empty() {
             return true;
         }
 
-        let ordered = self.ordered_receivers();
+        let ordered = self.ordered();
         let mut actor_iter = actors.iter();
         let mut current = actor_iter.next();
 
-        for receiver in &ordered {
+        for participant in &ordered {
             if let Some(expected) = current {
-                if **receiver == **expected {
+                if **participant == **expected {
                     current = actor_iter.next();
                 }
             }
@@ -66,9 +81,9 @@ impl<E: Event, T: Topic<E>> ActorFlow<'_, E, T> {
         current.is_none() // All actors were found in order
     }
 
-    /// Returns true if the chain visited exactly these actors in this order.
+    /// Returns true if the chain involved exactly these actors in this order.
     pub fn exactly(&self, actors: &[&ActorId]) -> bool {
-        let ordered = self.ordered_receivers();
+        let ordered = self.ordered();
         if ordered.len() != actors.len() {
             return false;
         }

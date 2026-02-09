@@ -12,6 +12,28 @@ pub struct EventFlow<'a, E: Event, T: Topic<E>> {
 }
 
 impl<E: Event + Label, T: Topic<E>> EventFlow<'_, E, T> {
+    /// Returns all unique events in this chain (unordered).
+    pub fn all(&self) -> Vec<&EventEntry<E, T>> {
+        let mut seen_ids = HashSet::new();
+        self.chain
+            .chain_entries()
+            .filter(|e| seen_ids.insert(e.id()))
+            .collect()
+    }
+
+    /// Returns events in order of occurrence (BFS from root).
+    ///
+    /// Each unique event appears once, in the order it was reached
+    /// during chain traversal.
+    pub fn ordered(&self) -> Vec<&EventEntry<E, T>> {
+        let mut seen_ids = HashSet::new();
+        self.chain
+            .ordered_entries()
+            .into_iter()
+            .filter(|e| seen_ids.insert(e.id()))
+            .collect()
+    }
+
     /// Returns true if the chain contains an event matching the given matcher.
     pub fn contains(&self, matcher: impl Into<EventMatcher<E, T>>) -> bool {
         let matcher = matcher.into();
@@ -27,7 +49,7 @@ impl<E: Event + Label, T: Topic<E>> EventFlow<'_, E, T> {
             return true;
         }
 
-        let ordered = self.ordered_events();
+        let ordered = self.ordered();
         let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
 
         // Look for consecutive matches
@@ -61,7 +83,7 @@ impl<E: Event + Label, T: Topic<E>> EventFlow<'_, E, T> {
             return true;
         }
 
-        let ordered = self.ordered_events();
+        let ordered = self.ordered();
         let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
         let mut matcher_idx = 0;
 
@@ -75,15 +97,5 @@ impl<E: Event + Label, T: Topic<E>> EventFlow<'_, E, T> {
         }
 
         matcher_idx == matchers.len()
-    }
-
-    /// Returns ordered unique events (by label, BFS order).
-    fn ordered_events(&self) -> Vec<&EventEntry<E, T>> {
-        let mut seen_ids = HashSet::new();
-        self.chain
-            .ordered_entries()
-            .into_iter()
-            .filter(|e| seen_ids.insert(e.id()))
-            .collect()
     }
 }
