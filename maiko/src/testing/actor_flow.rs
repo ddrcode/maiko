@@ -34,26 +34,64 @@ impl<'a, E: Event, T: Topic<E>> ActorFlow<'a, E, T> {
         actors.iter().all(|a| all_actors.contains(*a))
     }
 
-    /// Returns true if any path through the chain visits the specified actors in order.
+    /// Returns true if a path exactly matches the specified actors from root to leaf.
     ///
-    /// A path is a sequence from the root event through correlated children to a leaf.
-    /// This checks if there exists at least one path where the actors appear in the
-    /// given order (gaps between actors are allowed).
+    /// This requires an exact match - every actor in the path must match.
     ///
     /// # Example
     ///
-    /// For a chain that branches:
-    /// ```text
-    /// Scanner -> Pipeline -> Writer -> Telemetry
-    ///         -> Telemetry (direct)
-    /// ```
-    ///
-    /// Both of these return true:
+    /// For a chain with path `[Scanner, Pipeline, Writer, Telemetry]`:
     /// ```ignore
-    /// chain.actors().path(&[&scanner, &telemetry])  // direct path
-    /// chain.actors().path(&[&scanner, &pipeline, &writer, &telemetry])  // full path
+    /// chain.actors().path(&[&scanner, &pipeline, &writer, &telemetry])  // true
+    /// chain.actors().path(&[&scanner, &pipeline, &writer])  // false - incomplete
+    /// chain.actors().path(&[&scanner, &telemetry])  // false - missing actors
     /// ```
     pub fn path(&self, actors: &[&ActorId]) -> bool {
+        if actors.is_empty() {
+            return true;
+        }
+
+        let paths = self.paths();
+        paths.iter().any(|path| {
+            path.len() == actors.len() && path.iter().zip(actors.iter()).all(|(a, b)| *a == *b)
+        })
+    }
+
+    /// Returns true if any path contains the specified actors as a contiguous subsequence.
+    ///
+    /// Unlike `path`, this matches partial paths but requires no gaps between actors.
+    ///
+    /// # Example
+    ///
+    /// For a chain with path `[Scanner, Pipeline, Writer, Telemetry]`:
+    /// ```ignore
+    /// chain.actors().subpath(&[&pipeline, &writer])  // true - contiguous
+    /// chain.actors().subpath(&[&scanner, &writer])  // false - gap (missing Pipeline)
+    /// ```
+    pub fn subpath(&self, actors: &[&ActorId]) -> bool {
+        if actors.is_empty() {
+            return true;
+        }
+
+        let paths = self.paths();
+        paths
+            .iter()
+            .any(|path| Self::contains_contiguous(path, actors))
+    }
+
+    /// Returns true if any path visits the specified actors in order (gaps allowed).
+    ///
+    /// Use this for sparse assertions where you care about ordering but not
+    /// the intermediate actors.
+    ///
+    /// # Example
+    ///
+    /// For a chain with path `[Scanner, Pipeline, Writer, Telemetry]`:
+    /// ```ignore
+    /// chain.actors().reaches(&[&scanner, &telemetry])  // true - in order with gaps
+    /// chain.actors().reaches(&[&telemetry, &scanner])  // false - wrong order
+    /// ```
+    pub fn reaches(&self, actors: &[&ActorId]) -> bool {
         if actors.is_empty() {
             return true;
         }
@@ -164,5 +202,15 @@ impl<'a, E: Event, T: Topic<E>> ActorFlow<'a, E, T> {
         }
 
         current.is_none()
+    }
+
+    /// Check if `path` contains `subsequence` as a contiguous block (no gaps).
+    fn contains_contiguous(path: &[&ActorId], subsequence: &[&ActorId]) -> bool {
+        if subsequence.len() > path.len() {
+            return false;
+        }
+
+        path.windows(subsequence.len())
+            .any(|window| window.iter().zip(subsequence.iter()).all(|(a, b)| *a == *b))
     }
 }

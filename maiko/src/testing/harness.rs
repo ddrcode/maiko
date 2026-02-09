@@ -192,14 +192,17 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     /// ```ignore
     /// let chain = test.chain(root_event_id);
     ///
-    /// // Verify actors were visited in order
-    /// assert!(chain.actors().path(&[&scanner, &pipeline, &writer]));
+    /// // Verify exact path from root to leaf
+    /// assert!(chain.actors().path(&[&scanner, &pipeline, &writer, &telemetry]));
+    ///
+    /// // Verify contiguous sub-path
+    /// assert!(chain.actors().subpath(&[&pipeline, &writer]));
+    ///
+    /// // Verify reachability (gaps allowed)
+    /// assert!(chain.actors().reaches(&[&scanner, &telemetry]));
     ///
     /// // Verify event sequence
     /// assert!(chain.events().sequence(&["KeyPress", "HidReport"]));
-    ///
-    /// // Check for branching
-    /// assert!(chain.diverges_after("KeyPress"));
     /// ```
     pub fn chain(&self, id: EventId) -> EventChain<E, T> {
         EventChain::new(self.snapshot.clone(), id)

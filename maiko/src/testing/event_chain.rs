@@ -20,14 +20,17 @@ use super::{ActorFlow, EventEntry, EventFlow, EventMatcher, EventRecords};
 /// ```ignore
 /// let chain = harness.chain(root_event_id);
 ///
-/// // Verify actor flow
-/// assert!(chain.actors().path(&[&scanner, &pipeline, &writer]));
+/// // Verify exact path from root to leaf
+/// assert!(chain.actors().path(&[&scanner, &pipeline, &writer, &telemetry]));
+///
+/// // Verify contiguous sub-path
+/// assert!(chain.actors().subpath(&[&pipeline, &writer]));
+///
+/// // Verify reachability with gaps
+/// assert!(chain.actors().reaches(&[&scanner, &telemetry]));
 ///
 /// // Verify event sequence
 /// assert!(chain.events().sequence(&["KeyPress", "HidReport"]));
-///
-/// // Check branching
-/// assert!(chain.diverges_after("KeyPress"));
 /// ```
 pub struct EventChain<E: Event, T: Topic<E>> {
     root_id: EventId,
@@ -566,12 +569,12 @@ mod tests {
         let bob = actor("bob");
         let charlie = actor("charlie");
 
-        // Full path exists
-        assert!(chain.actors().path(&[&alice, &bob, &charlie]));
+        // Full path: alice -> bob -> charlie -> alice (Complete loops back)
+        assert!(chain.actors().path(&[&alice, &bob, &charlie, &alice]));
     }
 
     #[test]
-    fn actor_flow_path_allows_gaps() {
+    fn actor_flow_reaches_allows_gaps() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -579,7 +582,22 @@ mod tests {
         let charlie = actor("charlie");
 
         // alice -> charlie with bob skipped
-        assert!(chain.actors().path(&[&alice, &charlie]));
+        assert!(chain.actors().reaches(&[&alice, &charlie]));
+    }
+
+    #[test]
+    fn actor_flow_subpath_requires_contiguous() {
+        let (records, root_id) = build_linear_chain();
+        let chain = EventChain::new(records, root_id);
+
+        let alice = actor("alice");
+        let bob = actor("bob");
+        let charlie = actor("charlie");
+
+        // Contiguous subsequence exists
+        assert!(chain.actors().subpath(&[&bob, &charlie]));
+        // Gap between alice and charlie - not contiguous
+        assert!(!chain.actors().subpath(&[&alice, &charlie]));
     }
 
     #[test]

@@ -32,7 +32,9 @@
 //!
 //! // Or trace event propagation with EventChain
 //! let chain = test.chain(id);
-//! assert!(chain.actors().path(&[&producer, &processor, &writer]));
+//! assert!(chain.actors().path(&[&producer, &processor, &writer]));  // exact path
+//! assert!(chain.actors().subpath(&[&processor, &writer]));  // contiguous sub-path
+//! assert!(chain.actors().reaches(&[&producer, &writer]));  // gaps allowed
 //! assert!(chain.events().sequence(&["Input", "Processed", "Output"]));
 //! ```
 //!
