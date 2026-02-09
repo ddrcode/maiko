@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::{ActorId, Event, Topic};
+use crate::{ActorId, Event, EventId, Topic};
 
 use super::EventChain;
 
@@ -11,11 +11,11 @@ pub struct ActorFlow<'a, E: Event, T: Topic<E>> {
     pub(super) chain: &'a EventChain<E, T>,
 }
 
-impl<E: Event, T: Topic<E>> ActorFlow<'_, E, T> {
+impl<'a, E: Event, T: Topic<E>> ActorFlow<'a, E, T> {
     /// Returns all actors involved in this chain (sender + receivers).
     ///
-    /// The list includes the root event's sender followed by all actors
-    /// that received events. Order is not guaranteed.
+    /// The list includes the root event's sender and all actors
+    /// that received events in any branch. Order is not guaranteed.
     pub fn all(&self) -> Vec<&ActorId> {
         let mut actors: HashSet<&ActorId> =
             self.chain.chain_entries().map(|e| e.receiver()).collect();
@@ -28,65 +28,141 @@ impl<E: Event, T: Topic<E>> ActorFlow<'_, E, T> {
         actors.into_iter().collect()
     }
 
-    /// Returns actors in order of participation (BFS order).
-    ///
-    /// Starts with the root event's sender, followed by receivers in the
-    /// order they appear in the chain traversal.
-    pub fn ordered(&self) -> Vec<&ActorId> {
-        let mut result = Vec::new();
-        let mut seen = HashSet::new();
-
-        // Start with root sender
-        if let Some(sender) = self.chain.root_sender() {
-            if seen.insert(sender) {
-                result.push(sender);
-            }
-        }
-
-        // Add receivers in BFS order
-        for entry in self.chain.ordered_entries() {
-            let actor = entry.receiver();
-            if seen.insert(actor) {
-                result.push(actor);
-            }
-        }
-
-        result
-    }
-
-    /// Returns true if all specified actors participated in this chain (any order).
-    pub fn visited_all(&self, actors: &[&ActorId]) -> bool {
+    /// Returns true if all specified actors received events from this chain (any branch).
+    pub fn visited(&self, actors: &[&ActorId]) -> bool {
         let all_actors: HashSet<_> = self.all().into_iter().collect();
         actors.iter().all(|a| all_actors.contains(*a))
     }
 
-    /// Returns true if actors participated in the specified order (gaps allowed).
-    pub fn through(&self, actors: &[&ActorId]) -> bool {
+    /// Returns true if any path through the chain visits the specified actors in order.
+    ///
+    /// A path is a sequence from the root event through correlated children to a leaf.
+    /// This checks if there exists at least one path where the actors appear in the
+    /// given order (gaps between actors are allowed).
+    ///
+    /// # Example
+    ///
+    /// For a chain that branches:
+    /// ```text
+    /// Scanner -> Pipeline -> Writer -> Telemetry
+    ///         -> Telemetry (direct)
+    /// ```
+    ///
+    /// Both of these return true:
+    /// ```ignore
+    /// chain.actors().path(&[&scanner, &telemetry])  // direct path
+    /// chain.actors().path(&[&scanner, &pipeline, &writer, &telemetry])  // full path
+    /// ```
+    pub fn path(&self, actors: &[&ActorId]) -> bool {
         if actors.is_empty() {
             return true;
         }
 
-        let ordered = self.ordered();
-        let mut actor_iter = actors.iter();
-        let mut current = actor_iter.next();
+        let paths = self.paths();
+        paths
+            .iter()
+            .any(|path| Self::contains_subsequence(path, actors))
+    }
 
-        for participant in &ordered {
+    /// Returns the number of distinct paths in the event chain.
+    ///
+    /// Each path represents a branch from the root event to a leaf (an event
+    /// with no correlated children).
+    pub fn path_count(&self) -> usize {
+        self.paths().len()
+    }
+
+    /// Returns all distinct paths through the chain.
+    ///
+    /// Each path is a sequence of actors from the root sender to a leaf event's receiver.
+    pub fn paths(&self) -> Vec<Vec<&'a ActorId>> {
+        let mut paths = Vec::new();
+
+        let Some(root_sender) = self.chain.root_sender() else {
+            return paths;
+        };
+
+        // Start DFS from root
+        self.build_paths_dfs(self.chain.root_id(), vec![root_sender], &mut paths);
+
+        paths
+    }
+
+    /// DFS to build all paths from current event to leaves.
+    fn build_paths_dfs(
+        &self,
+        event_id: EventId,
+        current_path: Vec<&'a ActorId>,
+        paths: &mut Vec<Vec<&'a ActorId>>,
+    ) {
+        // Find all receivers for this event (same event delivered to multiple receivers)
+        let receivers: Vec<&ActorId> = self
+            .chain
+            .chain_entries()
+            .filter(|e| e.id() == event_id)
+            .map(|e| e.receiver())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        // Get children of this event
+        let children = self.chain.children_of(event_id);
+
+        if children.is_empty() {
+            // Leaf node - each receiver creates a complete path
+            for receiver in receivers {
+                let mut path = current_path.clone();
+                if path.last().copied() != Some(receiver) {
+                    path.push(receiver);
+                }
+                paths.push(path);
+            }
+        } else {
+            // For each child, find which receiver sent it and continue that path
+            for child_id in &children {
+                // Find who sent this child event
+                if let Some(child_sender) = self.chain.sender_of(*child_id) {
+                    let mut path = current_path.clone();
+                    // Add the receiver who became the sender of the child
+                    if path.last().copied() != Some(child_sender) {
+                        path.push(child_sender);
+                    }
+                    self.build_paths_dfs(*child_id, path, paths);
+                }
+            }
+
+            // Also add paths for receivers who didn't send children (leaf branches)
+            let child_senders: HashSet<&ActorId> = children
+                .iter()
+                .filter_map(|&id| self.chain.sender_of(id))
+                .collect();
+
+            for receiver in receivers {
+                if !child_senders.contains(receiver) {
+                    // This receiver didn't continue the chain - it's a leaf
+                    let mut path = current_path.clone();
+                    if path.last().copied() != Some(receiver) {
+                        path.push(receiver);
+                    }
+                    paths.push(path);
+                }
+            }
+        }
+    }
+
+    /// Check if `path` contains `subsequence` in order (with gaps allowed).
+    fn contains_subsequence(path: &[&ActorId], subsequence: &[&ActorId]) -> bool {
+        let mut sub_iter = subsequence.iter();
+        let mut current = sub_iter.next();
+
+        for actor in path {
             if let Some(expected) = current {
-                if **participant == **expected {
-                    current = actor_iter.next();
+                if *actor == *expected {
+                    current = sub_iter.next();
                 }
             }
         }
 
-        current.is_none() // All actors were found in order
-    }
-
-    /// Returns true if the chain involved exactly these actors in this order.
-    pub fn exactly(&self, actors: &[&ActorId]) -> bool {
-        let ordered = self.ordered();
-        if ordered.len() != actors.len() {
-            return false;
-        }
-        ordered.iter().zip(actors.iter()).all(|(a, b)| **a == **b)
+        current.is_none()
     }
 }

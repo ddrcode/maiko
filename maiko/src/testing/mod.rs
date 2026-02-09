@@ -32,7 +32,7 @@
 //!
 //! // Or trace event propagation with EventChain
 //! let chain = test.chain(id);
-//! assert!(chain.actors().through(&[&producer, &processor, &writer]));
+//! assert!(chain.actors().path(&[&producer, &processor, &writer]));
 //! assert!(chain.events().sequence(&["Input", "Processed", "Output"]));
 //! ```
 //!

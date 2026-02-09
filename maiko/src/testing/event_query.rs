@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::{
@@ -80,6 +81,19 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
     /// Collects all matching events into a Vec.
     pub fn collect(&self) -> Vec<EventEntry<E, T>> {
         self.apply_filters().into_iter().cloned().collect()
+    }
+
+    /// Collects unique events (deduplicated by event ID).
+    ///
+    /// When the same event is delivered to multiple actors, this returns
+    /// only one entry per event ID, preserving the order of first occurrence.
+    pub fn unique(&self) -> Vec<EventEntry<E, T>> {
+        let mut seen = HashSet::new();
+        self.apply_filters()
+            .into_iter()
+            .filter(|e| seen.insert(e.id()))
+            .cloned()
+            .collect()
     }
 
     /// Returns true if all matching events satisfy the predicate.
@@ -497,5 +511,29 @@ mod tests {
             .with_label("Ping")
             .sent_by(&actors.alice);
         assert_eq!(query.count(), 1);
+    }
+
+    #[test]
+    fn unique_deduplicates_by_event_id() {
+        let actors = TestActors::new();
+        let topic = Arc::new(DefaultTopic);
+
+        // Same event delivered to multiple actors
+        let envelope = Arc::new(Envelope::new(TestEvent::Ping, actors.alice.clone()));
+        let entry1 = EventEntry::new(envelope.clone(), topic.clone(), actors.bob.clone());
+        let entry2 = EventEntry::new(envelope.clone(), topic.clone(), actors.charlie.clone());
+        // Different event
+        let envelope2 = Arc::new(Envelope::new(TestEvent::Pong, actors.alice.clone()));
+        let entry3 = EventEntry::new(envelope2, topic, actors.bob.clone());
+
+        let records = vec![entry1, entry2, entry3];
+        let query = EventQuery::new(records);
+
+        // collect() returns all 3 entries
+        assert_eq!(query.collect().len(), 3);
+
+        // unique() returns 2 (one Ping, one Pong)
+        let unique = query.unique();
+        assert_eq!(unique.len(), 2);
     }
 }

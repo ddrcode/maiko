@@ -193,7 +193,7 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     /// let chain = test.chain(root_event_id);
     ///
     /// // Verify actors were visited in order
-    /// assert!(chain.actors().through(&[&scanner, &pipeline, &writer]));
+    /// assert!(chain.actors().path(&[&scanner, &pipeline, &writer]));
     ///
     /// // Verify event sequence
     /// assert!(chain.events().sequence(&["KeyPress", "HidReport"]));

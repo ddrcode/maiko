@@ -21,7 +21,7 @@ use super::{ActorFlow, EventEntry, EventFlow, EventMatcher, EventRecords};
 /// let chain = harness.chain(root_event_id);
 ///
 /// // Verify actor flow
-/// assert!(chain.actors().through(&[&scanner, &pipeline, &writer]));
+/// assert!(chain.actors().path(&[&scanner, &pipeline, &writer]));
 ///
 /// // Verify event sequence
 /// assert!(chain.events().sequence(&["KeyPress", "HidReport"]));
@@ -193,12 +193,33 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
         }
     }
 
+    /// Returns the root event ID.
+    pub(super) fn root_id(&self) -> EventId {
+        self.root_id
+    }
+
     /// Returns the sender of the root event (the actor who initiated the chain).
     pub(super) fn root_sender(&self) -> Option<&ActorId> {
         self.records
             .iter()
             .find(|e| e.id() == self.root_id)
             .map(|e| e.meta().actor_id())
+    }
+
+    /// Returns the sender of a specific event in the chain.
+    pub(super) fn sender_of(&self, event_id: EventId) -> Option<&ActorId> {
+        self.records
+            .iter()
+            .find(|e| e.id() == event_id)
+            .map(|e| e.meta().actor_id())
+    }
+
+    /// Returns the children event IDs of a specific event.
+    pub(super) fn children_of(&self, event_id: EventId) -> Vec<EventId> {
+        self.children_map
+            .get(&event_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Returns an iterator over all entries in this chain.
@@ -480,19 +501,41 @@ mod tests {
     }
 
     #[test]
-    fn actor_flow_ordered_starts_with_root_sender() {
+    fn actor_flow_paths_returns_all_paths() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
-        let actors = chain.actors();
-        let ordered = actors.ordered();
+        let paths = chain.actors().paths();
 
-        // alice is the root sender, should be first
-        assert_eq!(ordered[0].name(), "alice");
+        // Linear chain has one path
+        assert_eq!(paths.len(), 1);
+        // Path: alice -> bob -> charlie -> alice
+        assert_eq!(paths[0].len(), 4);
+        assert_eq!(paths[0][0].name(), "alice");
+        assert_eq!(paths[0][1].name(), "bob");
+        assert_eq!(paths[0][2].name(), "charlie");
+        assert_eq!(paths[0][3].name(), "alice"); // receives Complete
     }
 
     #[test]
-    fn actor_flow_visited_all_returns_true_when_all_present() {
+    fn actor_flow_path_count_for_linear() {
+        let (records, root_id) = build_linear_chain();
+        let chain = EventChain::new(records, root_id);
+
+        assert_eq!(chain.actors().path_count(), 1);
+    }
+
+    #[test]
+    fn actor_flow_path_count_for_branching() {
+        let (records, root_id) = build_branching_chain();
+        let chain = EventChain::new(records, root_id);
+
+        // Two branches: alice->bob->charlie and alice->bob->alice
+        assert_eq!(chain.actors().path_count(), 2);
+    }
+
+    #[test]
+    fn actor_flow_visited_returns_true_when_all_present() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -500,22 +543,22 @@ mod tests {
         let bob = actor("bob");
         let charlie = actor("charlie");
 
-        assert!(chain.actors().visited_all(&[&alice, &bob, &charlie]));
+        assert!(chain.actors().visited(&[&alice, &bob, &charlie]));
     }
 
     #[test]
-    fn actor_flow_visited_all_returns_false_when_missing() {
+    fn actor_flow_visited_returns_false_when_missing() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
         let bob = actor("bob");
         let dave = actor("dave");
 
-        assert!(!chain.actors().visited_all(&[&bob, &dave]));
+        assert!(!chain.actors().visited(&[&bob, &dave]));
     }
 
     #[test]
-    fn actor_flow_through_returns_true_for_correct_order() {
+    fn actor_flow_path_returns_true_for_valid_path() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -523,12 +566,12 @@ mod tests {
         let bob = actor("bob");
         let charlie = actor("charlie");
 
-        // alice (sender) -> bob -> charlie (receivers in order)
-        assert!(chain.actors().through(&[&alice, &bob, &charlie]));
+        // Full path exists
+        assert!(chain.actors().path(&[&alice, &bob, &charlie]));
     }
 
     #[test]
-    fn actor_flow_through_allows_gaps() {
+    fn actor_flow_path_allows_gaps() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -536,55 +579,33 @@ mod tests {
         let charlie = actor("charlie");
 
         // alice -> charlie with bob skipped
-        assert!(chain.actors().through(&[&alice, &charlie]));
+        assert!(chain.actors().path(&[&alice, &charlie]));
     }
 
     #[test]
-    fn actor_flow_through_returns_false_for_wrong_order() {
+    fn actor_flow_path_returns_false_for_nonexistent_path() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
-        let alice = actor("alice");
+        let dave = actor("dave");
         let bob = actor("bob");
 
-        // bob comes after alice, so bob -> alice is wrong order
-        assert!(!chain.actors().through(&[&bob, &alice]));
+        // dave doesn't exist in the chain
+        assert!(!chain.actors().path(&[&dave, &bob]));
     }
 
     #[test]
-    fn actor_flow_exactly_returns_true_for_exact_match() {
-        let (records, root_id) = build_linear_chain();
-        let chain = EventChain::new(records, root_id);
-
-        let alice = actor("alice");
-        let bob = actor("bob");
-        let charlie = actor("charlie");
-
-        // alice (sender) -> bob -> charlie (order of participation)
-        assert!(chain.actors().exactly(&[&alice, &bob, &charlie]));
-    }
-
-    #[test]
-    fn actor_flow_exactly_returns_false_for_partial() {
-        let (records, root_id) = build_linear_chain();
-        let chain = EventChain::new(records, root_id);
-
-        let alice = actor("alice");
-        let bob = actor("bob");
-
-        assert!(!chain.actors().exactly(&[&alice, &bob]));
-    }
-
-    #[test]
-    fn actor_flow_exactly_returns_false_for_wrong_order() {
-        let (records, root_id) = build_linear_chain();
+    fn actor_flow_branching_paths_are_distinct() {
+        let (records, root_id) = build_branching_chain();
         let chain = EventChain::new(records, root_id);
 
         let alice = actor("alice");
         let bob = actor("bob");
         let charlie = actor("charlie");
 
-        assert!(!chain.actors().exactly(&[&bob, &alice, &charlie]));
+        // Both paths exist
+        assert!(chain.actors().path(&[&alice, &bob, &charlie])); // Process branch
+        assert!(chain.actors().path(&[&alice, &bob, &alice])); // Branch branch (alice receives)
     }
 
     // ==================== EventFlow Tests ====================
@@ -702,7 +723,7 @@ mod tests {
 
         assert!(!chain.diverges_after("Anything"));
         assert_eq!(chain.branches_after("Anything"), 0);
-        assert!(chain.actors().visited_all(&[]));
+        assert!(chain.actors().visited(&[]));
         assert!(chain.events().through(&[] as &[&str]));
     }
 
@@ -714,7 +735,7 @@ mod tests {
         let empty_actors: &[&ActorId] = &[];
         let empty_events: &[&str] = &[];
 
-        assert!(chain.actors().through(empty_actors));
+        assert!(chain.actors().path(empty_actors));
         assert!(chain.events().through(empty_events));
     }
 
