@@ -108,12 +108,12 @@ mod tests {
     }
 
     fn sample_records_with_actors(actors: &TestActors) -> EventRecords<TestEvent, TestTopic> {
-        vec![
+        Arc::new(vec![
             make_entry(TestEvent(1), &actors.alice, &actors.bob), // Data
             make_entry(TestEvent(2), &actors.alice, &actors.charlie), // Data
             make_entry(TestEvent(100), &actors.bob, &actors.alice), // Control
             make_entry(TestEvent(101), &actors.bob, &actors.charlie), // Control
-        ]
+        ])
     }
 
     #[test]
@@ -126,9 +126,9 @@ mod tests {
     #[test]
     fn was_published_returns_false_when_no_events() {
         let actors = TestActors::new();
-        let records: EventRecords<TestEvent, TestTopic> = vec![
+        let records: EventRecords<TestEvent, TestTopic> = Arc::new(vec![
             make_entry(TestEvent(100), &actors.alice, &actors.bob), // Only Control
-        ];
+        ]);
         let spy = TopicSpy::new(records, TestTopic::Data);
         assert!(!spy.was_published());
     }
@@ -148,10 +148,10 @@ mod tests {
         // Same event delivered to multiple actors
         let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
         let topic = Arc::new(TestTopic::Data);
-        let records = vec![
+        let records = Arc::new(vec![
             EventEntry::new(envelope.clone(), topic.clone(), bob),
             EventEntry::new(envelope, topic, charlie),
-        ];
+        ]);
 
         let spy = TopicSpy::new(records, TestTopic::Data);
         assert_eq!(spy.event_count(), 2); // 2 deliveries
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn empty_topic_has_zero_counts() {
-        let records: EventRecords<TestEvent, TestTopic> = vec![];
+        let records: EventRecords<TestEvent, TestTopic> = Arc::new(vec![]);
         let spy = TopicSpy::new(records, TestTopic::Data);
 
         assert!(!spy.was_published());

@@ -1,9 +1,28 @@
 # 0.2.3 Unreleased
 
+**Contains Breaking changes** (in the test harness only)
+
 ### Added
 
 - `Label` trait and derive macro
 - `to_mermaid` method in `Supervisor`
+- `EventChain` in test harness for correlation tracking
+- `ActorTrace` and `EventTrace` views on `EventChain` with `exact()`, `segment()`, and `passes_through()` methods
+- `EventQuery.senders()`, `.receivers()`, `.count_by_label()`
+- `EventQuery.all_deliveries()` (returns all delivery records including duplicates)
+- `EventSpy.not_delivered_to()`, `.was_delivered_to_all()`, `.delivery_ratio()`
+- `EventTrace.exact()` for full-sequence matching
+- `EventTrace.path_count()` and `ActorTrace.path_count()` for counting distinct paths
+
+### Changed
+
+- **Breaking:** `EventRecords` now uses `Arc<Vec<EventEntry>>` internally (zero-copy sharing across spies/queries)
+- **Breaking:** `ActorSpy.inbound_count()` renamed to `events_received()`, `outbound_count()` renamed to `events_sent()`
+- **Breaking:** `EventQuery.collect()` now returns unique events (deduplicated by ID); old behavior available via `all_deliveries()`
+- `EventTrace` methods (`exact`, `segment`, `passes_through`) now operate per-path instead of on a flat list, correctly handling branching chains
+- `to_mermaid()` on `EventChain` now shows all deliveries including fan-out
+- `to_string_tree()` on `EventChain` now shows all receivers per event
+- Deterministic sibling ordering in `EventChain` (sorted by timestamp)
 
 ---
 
@@ -42,7 +61,7 @@
 
 # [0.2.0](https://github.com/ddrcode/maiko/compare/v0.1.1...v0.2.0) (January 27th, 2026)
 
-** Contains Breaking changes **
+**Contains Breaking changes**
 
 ### Key new Features
 
