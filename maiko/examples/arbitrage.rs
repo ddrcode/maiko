@@ -287,11 +287,11 @@ async fn main() -> maiko::Result {
     let normalizer_spy = test.actor(&normalizer);
     println!(
         "  Normalizer inbound count: {}",
-        normalizer_spy.inbound_count()
+        normalizer_spy.events_received()
     );
     println!(
         "  Normalizer outbound count: {}",
-        normalizer_spy.outbound_count()
+        normalizer_spy.events_sent()
     );
     println!(
         "  Normalizer received from: {:?}",
@@ -301,19 +301,19 @@ async fn main() -> maiko::Result {
 
     assert_eq!(
         1,
-        normalizer_spy.inbound_count(),
+        normalizer_spy.events_received(),
         "Normalizer should receive 1 event"
     );
     assert_eq!(
         1,
-        normalizer_spy.outbound_count(),
+        normalizer_spy.events_sent(),
         "Normalizer should send 1 event"
     );
 
     let telemetry_spy = test.actor(&telemetry);
     println!(
         "  Telemetry inbound count: {}",
-        telemetry_spy.inbound_count()
+        telemetry_spy.events_received()
     );
     println!(
         "  Telemetry received from: {:?}",
@@ -321,7 +321,7 @@ async fn main() -> maiko::Result {
     );
     assert_eq!(
         0,
-        telemetry_spy.outbound_count(),
+        telemetry_spy.events_sent(),
         "Telemetry is passive (no outbound)"
     );
 
@@ -408,8 +408,8 @@ async fn main() -> maiko::Result {
 
     // Verify trader's activity
     let trader_spy = test.actor(&trader);
-    println!("  Trader inbound: {}", trader_spy.inbound_count());
-    println!("  Trader outbound: {}", trader_spy.outbound_count());
+    println!("  Trader inbound: {}", trader_spy.events_received());
+    println!("  Trader outbound: {}", trader_spy.events_sent());
 
     // Dump all events for debugging
     println!("\n--- Event Dump ---");

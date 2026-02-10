@@ -1,6 +1,6 @@
 use crate::{
     ActorId, Event, EventId, Topic,
-    testing::{EventChain, EventQuery, EventRecords},
+    testing::{EventQuery, EventRecords},
 };
 
 /// A spy for observing the delivery and effects of a specific event.
@@ -62,12 +62,25 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
         EventQuery::new(self.records.clone()).correlated_with(self.id)
     }
 
-    /// Returns an event chain for tracing this event's propagation.
+    /// Returns true if the event was NOT delivered to the specified actor.
+    pub fn not_delivered_to(&self, actor_id: &ActorId) -> bool {
+        !self.was_delivered_to(actor_id)
+    }
+
+    /// Returns true if the event was delivered to all specified actors.
+    pub fn was_delivered_to_all(&self, actors: &[&ActorId]) -> bool {
+        actors.iter().all(|a| self.was_delivered_to(a))
+    }
+
+    /// Returns the ratio of specified actors that received this event.
     ///
-    /// The chain captures all events correlated to this event (children, grandchildren, etc.)
-    /// and provides methods to verify actor flow and event sequences.
-    pub fn chain(&self) -> EventChain<E, T> {
-        EventChain::new(self.records.clone(), self.id)
+    /// Returns 1.0 if the actors slice is empty.
+    pub fn delivery_ratio(&self, actors: &[&ActorId]) -> f64 {
+        if actors.is_empty() {
+            return 1.0;
+        }
+        let delivered = actors.iter().filter(|a| self.was_delivered_to(a)).count();
+        delivered as f64 / actors.len() as f64
     }
 }
 
@@ -94,7 +107,7 @@ mod tests {
         let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
         let id = envelope.id();
         let entry = EventEntry::new(envelope, topic(), bob);
-        let records = vec![entry];
+        let records = Arc::new(vec![entry]);
 
         let spy = EventSpy::new(records, id);
         assert!(spy.was_delivered());
@@ -106,7 +119,7 @@ mod tests {
         let bob = ActorId::new(Arc::from("bob"));
         let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
         let entry = EventEntry::new(envelope, topic(), bob);
-        let records = vec![entry];
+        let records = Arc::new(vec![entry]);
 
         let spy = EventSpy::new(records, 99999u128);
         assert!(!spy.was_delivered());
@@ -119,7 +132,7 @@ mod tests {
         let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
         let id = envelope.id();
         let entry = EventEntry::new(envelope, topic(), bob.clone());
-        let records = vec![entry];
+        let records = Arc::new(vec![entry]);
 
         let spy = EventSpy::new(records, id);
         assert!(spy.was_delivered_to(&bob));
@@ -133,7 +146,7 @@ mod tests {
         let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
         let id = envelope.id();
         let entry = EventEntry::new(envelope, topic(), bob);
-        let records = vec![entry];
+        let records = Arc::new(vec![entry]);
 
         let spy = EventSpy::new(records, id);
         assert!(!spy.was_delivered_to(&charlie));
@@ -146,7 +159,7 @@ mod tests {
         let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
         let id = envelope.id();
         let entry = EventEntry::new(envelope, topic(), bob);
-        let records = vec![entry];
+        let records = Arc::new(vec![entry]);
 
         let spy = EventSpy::new(records, id);
         assert_eq!(&*spy.sender(), "alice");
@@ -164,7 +177,7 @@ mod tests {
         let entry1 = EventEntry::new(envelope.clone(), t.clone(), bob.clone());
         let entry2 = EventEntry::new(envelope.clone(), t.clone(), charlie);
         let entry3 = EventEntry::new(envelope, t, bob); // duplicate
-        let records = vec![entry1, entry2, entry3];
+        let records = Arc::new(vec![entry1, entry2, entry3]);
 
         let spy = EventSpy::new(records, id);
         let receivers = spy.receivers();
@@ -183,7 +196,7 @@ mod tests {
         let t = topic();
         let entry1 = EventEntry::new(envelope.clone(), t.clone(), bob);
         let entry2 = EventEntry::new(envelope, t, charlie);
-        let records = vec![entry1, entry2];
+        let records = Arc::new(vec![entry1, entry2]);
 
         let spy = EventSpy::new(records, id);
         assert_eq!(spy.receivers_count(), 2);
@@ -209,11 +222,87 @@ mod tests {
         let unrelated = Arc::new(Envelope::new(TestEvent(3), charlie));
         let unrelated_entry = EventEntry::new(unrelated, t, alice);
 
-        let records = vec![parent_entry, child_entry, unrelated_entry];
+        let records = Arc::new(vec![parent_entry, child_entry, unrelated_entry]);
 
         let spy = EventSpy::new(records, parent_id);
         let children = spy.children();
         assert_eq!(children.count(), 1);
         assert_eq!(children.first().unwrap().payload().0, 2);
+    }
+
+    #[test]
+    fn not_delivered_to_returns_true_for_non_receiver() {
+        let alice = ActorId::new(Arc::from("alice"));
+        let bob = ActorId::new(Arc::from("bob"));
+        let charlie = ActorId::new(Arc::from("charlie"));
+        let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
+        let id = envelope.id();
+        let entry = EventEntry::new(envelope, topic(), bob);
+        let records = Arc::new(vec![entry]);
+
+        let spy = EventSpy::new(records, id);
+        assert!(spy.not_delivered_to(&charlie));
+    }
+
+    #[test]
+    fn was_delivered_to_all_returns_true_when_all_received() {
+        let alice = ActorId::new(Arc::from("alice"));
+        let bob = ActorId::new(Arc::from("bob"));
+        let charlie = ActorId::new(Arc::from("charlie"));
+        let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
+        let id = envelope.id();
+        let t = topic();
+        let entry1 = EventEntry::new(envelope.clone(), t.clone(), bob.clone());
+        let entry2 = EventEntry::new(envelope, t, charlie.clone());
+        let records = Arc::new(vec![entry1, entry2]);
+
+        let spy = EventSpy::new(records, id);
+        assert!(spy.was_delivered_to_all(&[&bob, &charlie]));
+    }
+
+    #[test]
+    fn was_delivered_to_all_returns_false_when_some_missing() {
+        let alice = ActorId::new(Arc::from("alice"));
+        let bob = ActorId::new(Arc::from("bob"));
+        let charlie = ActorId::new(Arc::from("charlie"));
+        let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
+        let id = envelope.id();
+        let entry = EventEntry::new(envelope, topic(), bob.clone());
+        let records = Arc::new(vec![entry]);
+
+        let spy = EventSpy::new(records, id);
+        assert!(!spy.was_delivered_to_all(&[&bob, &charlie]));
+    }
+
+    #[test]
+    fn delivery_ratio_returns_correct_ratio() {
+        let alice = ActorId::new(Arc::from("alice"));
+        let bob = ActorId::new(Arc::from("bob"));
+        let charlie = ActorId::new(Arc::from("charlie"));
+        let dave = ActorId::new(Arc::from("dave"));
+        let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
+        let id = envelope.id();
+        let t = topic();
+        let entry1 = EventEntry::new(envelope.clone(), t.clone(), bob.clone());
+        let entry2 = EventEntry::new(envelope, t, charlie.clone());
+        let records = Arc::new(vec![entry1, entry2]);
+
+        let spy = EventSpy::new(records, id);
+        // 2 out of 3 actors received it
+        let ratio = spy.delivery_ratio(&[&bob, &charlie, &dave]);
+        assert!((ratio - 2.0 / 3.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn delivery_ratio_returns_one_for_empty_slice() {
+        let alice = ActorId::new(Arc::from("alice"));
+        let bob = ActorId::new(Arc::from("bob"));
+        let envelope = Arc::new(Envelope::new(TestEvent(1), alice));
+        let id = envelope.id();
+        let entry = EventEntry::new(envelope, topic(), bob);
+        let records = Arc::new(vec![entry]);
+
+        let spy = EventSpy::new(records, id);
+        assert_eq!(spy.delivery_ratio(&[]), 1.0);
     }
 }

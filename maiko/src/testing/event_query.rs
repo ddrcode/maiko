@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::{
     ActorId, Event, EventId, Label, Topic,
-    testing::{EventEntry, EventMatcher, EventRecords},
+    testing::{EventEntry, EventRecords},
 };
 
 type Filter<E, T> = Rc<dyn Fn(&EventEntry<E, T>) -> bool>;
@@ -78,22 +78,71 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         self.apply_filters().get(index).cloned().cloned()
     }
 
-    /// Collects all matching events into a Vec.
-    pub fn collect(&self) -> Vec<EventEntry<E, T>> {
-        self.apply_filters().into_iter().cloned().collect()
-    }
-
     /// Collects unique events (deduplicated by event ID).
     ///
     /// When the same event is delivered to multiple actors, this returns
     /// only one entry per event ID, preserving the order of first occurrence.
-    pub fn unique(&self) -> Vec<EventEntry<E, T>> {
+    pub fn collect(&self) -> Vec<EventEntry<E, T>> {
         let mut seen = HashSet::new();
         self.apply_filters()
             .into_iter()
             .filter(|e| seen.insert(e.id()))
             .cloned()
             .collect()
+    }
+
+    /// Returns all matching delivery records, including duplicates.
+    ///
+    /// Unlike `collect()`, this includes every delivery of the same event
+    /// to different actors.
+    pub fn all_deliveries(&self) -> Vec<EventEntry<E, T>> {
+        self.apply_filters().into_iter().cloned().collect()
+    }
+
+    /// Returns the unique senders (actor IDs) of matching events.
+    pub fn senders(&self) -> Vec<ActorId> {
+        let mut seen = HashSet::new();
+        self.apply_filters()
+            .into_iter()
+            .filter_map(|e| {
+                let id = e.meta().actor_id.clone();
+                if seen.insert(id.clone()) {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Returns the unique receivers (actor IDs) of matching events.
+    pub fn receivers(&self) -> Vec<ActorId> {
+        let mut seen = HashSet::new();
+        self.apply_filters()
+            .into_iter()
+            .filter_map(|e| {
+                let id = e.actor_id.clone();
+                if seen.insert(id.clone()) {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Returns a count of matching events grouped by label.
+    pub fn count_by_label(&self) -> HashMap<String, usize>
+    where
+        E: Label,
+    {
+        let mut counts = HashMap::new();
+        for entry in self.apply_filters() {
+            *counts
+                .entry(entry.payload().label().to_string())
+                .or_insert(0) += 1;
+        }
+        counts
     }
 
     /// Returns true if all matching events satisfy the predicate.
@@ -190,37 +239,15 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         self
     }
 
-    /// Filter using an EventMatcher.
-    ///
-    /// This provides consistency with EventChain's matcher-based API,
-    /// allowing the same matchers to be used in both contexts.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use maiko::testing::EventMatcher;
-    ///
-    /// let matcher = EventMatcher::label("KeyPress");
-    /// let count = test.events().with_matcher(matcher).count();
-    /// ```
-    pub fn with_matcher(mut self, matcher: EventMatcher<E, T>) -> Self
-    where
-        E: Label,
-    {
-        self.add_filter(move |e| matcher.matches(e));
-        self
-    }
-
     /// Filter to events matching the given label.
-    ///
-    /// This is a convenience method equivalent to `with_matcher(EventMatcher::label(name))`.
     ///
     /// Requires the event type to implement `Label`.
     pub fn with_label(self, label: impl Into<std::borrow::Cow<'static, str>>) -> Self
     where
         E: Label,
     {
-        self.with_matcher(EventMatcher::label(label))
+        let name: std::borrow::Cow<'static, str> = label.into();
+        self.matching(move |entry| entry.payload().label() == name)
     }
 }
 
@@ -276,13 +303,13 @@ mod tests {
     }
 
     fn sample_records_with_actors(actors: &TestActors) -> EventRecords<TestEvent, DefaultTopic> {
-        vec![
+        Arc::new(vec![
             make_entry(TestEvent::Ping, &actors.alice, &actors.bob),
             make_entry(TestEvent::Pong, &actors.bob, &actors.alice),
             make_entry(TestEvent::Data(42), &actors.alice, &actors.bob),
             make_entry(TestEvent::Data(42), &actors.alice, &actors.charlie),
             make_entry(TestEvent::Ping, &actors.charlie, &actors.alice),
-        ]
+        ])
     }
 
     #[test]
@@ -301,7 +328,7 @@ mod tests {
 
     #[test]
     fn is_empty_returns_true_for_empty_records() {
-        let query: EventQuery<TestEvent, DefaultTopic> = EventQuery::new(vec![]);
+        let query: EventQuery<TestEvent, DefaultTopic> = EventQuery::new(Arc::new(vec![]));
         assert!(query.is_empty());
     }
 
@@ -341,10 +368,10 @@ mod tests {
     }
 
     #[test]
-    fn collect_returns_all_matching() {
+    fn all_deliveries_returns_all_matching() {
         let actors = TestActors::new();
         let query = EventQuery::new(sample_records_with_actors(&actors));
-        let all = query.collect();
+        let all = query.all_deliveries();
         assert_eq!(all.len(), 5);
     }
 
@@ -379,11 +406,11 @@ mod tests {
         let envelope = Arc::new(Envelope::new(TestEvent::Data(42), actors.alice.clone()));
         let target_id = envelope.id();
         let topic = Arc::new(DefaultTopic);
-        let records = vec![
+        let records = Arc::new(vec![
             make_entry(TestEvent::Ping, &actors.bob, &actors.charlie),
             EventEntry::new(envelope.clone(), topic.clone(), actors.bob.clone()),
             EventEntry::new(envelope, topic, actors.charlie.clone()),
-        ];
+        ]);
         let query = EventQuery::new(records).with_id(target_id);
         // Same event delivered to bob and charlie
         assert_eq!(query.count(), 2);
@@ -483,18 +510,10 @@ mod tests {
             Arc::new(Envelope::new(TestEvent::Data(1), actors.charlie.clone()));
         let unrelated = EventEntry::new(unrelated_envelope, topic, actors.alice.clone());
 
-        let records = vec![parent, child, unrelated];
+        let records = Arc::new(vec![parent, child, unrelated]);
         let query = EventQuery::new(records).correlated_with(parent_id);
         assert_eq!(query.count(), 1);
         assert!(query.first().unwrap().sender() == "bob");
-    }
-
-    #[test]
-    fn with_matcher_filters_by_matcher() {
-        let actors = TestActors::new();
-        let matcher = EventMatcher::label("Ping");
-        let query = EventQuery::new(sample_records_with_actors(&actors)).with_matcher(matcher);
-        assert_eq!(query.count(), 2); // Two Ping events in sample
     }
 
     #[test]
@@ -514,7 +533,7 @@ mod tests {
     }
 
     #[test]
-    fn unique_deduplicates_by_event_id() {
+    fn collect_deduplicates_by_event_id() {
         let actors = TestActors::new();
         let topic = Arc::new(DefaultTopic);
 
@@ -526,14 +545,47 @@ mod tests {
         let envelope2 = Arc::new(Envelope::new(TestEvent::Pong, actors.alice.clone()));
         let entry3 = EventEntry::new(envelope2, topic, actors.bob.clone());
 
-        let records = vec![entry1, entry2, entry3];
+        let records = Arc::new(vec![entry1, entry2, entry3]);
         let query = EventQuery::new(records);
 
-        // collect() returns all 3 entries
-        assert_eq!(query.collect().len(), 3);
+        // all_deliveries() returns all 3 entries
+        assert_eq!(query.all_deliveries().len(), 3);
 
-        // unique() returns 2 (one Ping, one Pong)
-        let unique = query.unique();
-        assert_eq!(unique.len(), 2);
+        // collect() returns 2 (one Ping, one Pong)
+        assert_eq!(query.collect().len(), 2);
+    }
+
+    #[test]
+    fn senders_returns_unique_sender_ids() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        let senders = query.senders();
+        assert_eq!(senders.len(), 3); // alice, bob, charlie
+    }
+
+    #[test]
+    fn senders_with_filter_returns_filtered_senders() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors)).received_by(&actors.alice);
+        let senders = query.senders();
+        assert_eq!(senders.len(), 2); // bob and charlie send to alice
+    }
+
+    #[test]
+    fn receivers_returns_unique_receiver_ids() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        let receivers = query.receivers();
+        assert_eq!(receivers.len(), 3); // alice, bob, charlie
+    }
+
+    #[test]
+    fn count_by_label_groups_by_label() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        let counts = query.count_by_label();
+        assert_eq!(counts["Ping"], 2);
+        assert_eq!(counts["Pong"], 1);
+        assert_eq!(counts["Data"], 2);
     }
 }

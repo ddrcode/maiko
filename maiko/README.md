@@ -149,7 +149,7 @@ async fn test_event_delivery() -> Result<()> {
     test.stop_recording().await;
 
     assert!(test.event(id).was_delivered_to(&consumer));
-    assert_eq!(1, test.actor(&consumer).inbound_count());
+    assert_eq!(1, test.actor(&consumer).events_received());
 
     sup.stop().await
 }

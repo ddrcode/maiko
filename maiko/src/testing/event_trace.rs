@@ -1,4 +1,4 @@
-//! Event flow view for querying the sequence of events in a chain.
+//! Event trace view for querying the sequence of events in a chain.
 
 use std::collections::HashSet;
 
@@ -6,12 +6,12 @@ use crate::{Event, Label, Topic};
 
 use super::{EventChain, EventEntry, EventMatcher};
 
-/// Event flow view for querying the sequence of events in the chain.
-pub struct EventFlow<'a, E: Event, T: Topic<E>> {
+/// Event trace view for querying the sequence of events in the chain.
+pub struct EventTrace<'a, E: Event, T: Topic<E>> {
     pub(super) chain: &'a EventChain<E, T>,
 }
 
-impl<E: Event + Label, T: Topic<E>> EventFlow<'_, E, T> {
+impl<E: Event + Label, T: Topic<E>> EventTrace<'_, E, T> {
     /// Returns all unique events in this chain (unordered).
     pub fn all(&self) -> Vec<&EventEntry<E, T>> {
         let mut seen_ids = HashSet::new();
@@ -40,8 +40,24 @@ impl<E: Event + Label, T: Topic<E>> EventFlow<'_, E, T> {
         self.chain.chain_entries().any(|e| matcher.matches(e))
     }
 
+    /// Returns true if all ordered events match all matchers exactly (same length and order).
+    pub fn exact<M>(&self, matchers: &[M]) -> bool
+    where
+        M: Into<EventMatcher<E, T>> + Clone,
+    {
+        let ordered = self.ordered();
+        let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
+        if ordered.len() != matchers.len() {
+            return false;
+        }
+        ordered
+            .iter()
+            .zip(matchers.iter())
+            .all(|(entry, matcher)| matcher.matches(entry))
+    }
+
     /// Returns true if events matching the matchers appear consecutively in the chain.
-    pub fn sequence<M>(&self, matchers: &[M]) -> bool
+    pub fn segment<M>(&self, matchers: &[M]) -> bool
     where
         M: Into<EventMatcher<E, T>> + Clone,
     {
@@ -75,7 +91,7 @@ impl<E: Event + Label, T: Topic<E>> EventFlow<'_, E, T> {
     }
 
     /// Returns true if events matching the matchers appear in order (gaps allowed).
-    pub fn through<M>(&self, matchers: &[M]) -> bool
+    pub fn passes_through<M>(&self, matchers: &[M]) -> bool
     where
         M: Into<EventMatcher<E, T>> + Clone,
     {

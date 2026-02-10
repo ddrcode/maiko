@@ -1,4 +1,4 @@
-//! Actor flow view for querying which actors were visited by an event chain.
+//! Actor trace view for querying which actors were visited by an event chain.
 
 use std::collections::HashSet;
 
@@ -6,12 +6,12 @@ use crate::{ActorId, Event, EventId, Topic};
 
 use super::EventChain;
 
-/// Actor flow view for querying which actors were visited by the chain.
-pub struct ActorFlow<'a, E: Event, T: Topic<E>> {
+/// Actor trace view for querying which actors were visited by the chain.
+pub struct ActorTrace<'a, E: Event, T: Topic<E>> {
     pub(super) chain: &'a EventChain<E, T>,
 }
 
-impl<'a, E: Event, T: Topic<E>> ActorFlow<'a, E, T> {
+impl<'a, E: Event, T: Topic<E>> ActorTrace<'a, E, T> {
     /// Returns all actors involved in this chain (sender + receivers).
     ///
     /// The list includes the root event's sender and all actors
@@ -42,11 +42,11 @@ impl<'a, E: Event, T: Topic<E>> ActorFlow<'a, E, T> {
     ///
     /// For a chain with path `[Scanner, Pipeline, Writer, Telemetry]`:
     /// ```ignore
-    /// chain.actors().path(&[&scanner, &pipeline, &writer, &telemetry])  // true
-    /// chain.actors().path(&[&scanner, &pipeline, &writer])  // false - incomplete
-    /// chain.actors().path(&[&scanner, &telemetry])  // false - missing actors
+    /// chain.actors().exact(&[&scanner, &pipeline, &writer, &telemetry])  // true
+    /// chain.actors().exact(&[&scanner, &pipeline, &writer])  // false - incomplete
+    /// chain.actors().exact(&[&scanner, &telemetry])  // false - missing actors
     /// ```
-    pub fn path(&self, actors: &[&ActorId]) -> bool {
+    pub fn exact(&self, actors: &[&ActorId]) -> bool {
         if actors.is_empty() {
             return true;
         }
@@ -59,16 +59,16 @@ impl<'a, E: Event, T: Topic<E>> ActorFlow<'a, E, T> {
 
     /// Returns true if any path contains the specified actors as a contiguous subsequence.
     ///
-    /// Unlike `path`, this matches partial paths but requires no gaps between actors.
+    /// Unlike `exact`, this matches partial paths but requires no gaps between actors.
     ///
     /// # Example
     ///
     /// For a chain with path `[Scanner, Pipeline, Writer, Telemetry]`:
     /// ```ignore
-    /// chain.actors().subpath(&[&pipeline, &writer])  // true - contiguous
-    /// chain.actors().subpath(&[&scanner, &writer])  // false - gap (missing Pipeline)
+    /// chain.actors().segment(&[&pipeline, &writer])  // true - contiguous
+    /// chain.actors().segment(&[&scanner, &writer])  // false - gap (missing Pipeline)
     /// ```
-    pub fn subpath(&self, actors: &[&ActorId]) -> bool {
+    pub fn segment(&self, actors: &[&ActorId]) -> bool {
         if actors.is_empty() {
             return true;
         }
@@ -88,10 +88,10 @@ impl<'a, E: Event, T: Topic<E>> ActorFlow<'a, E, T> {
     ///
     /// For a chain with path `[Scanner, Pipeline, Writer, Telemetry]`:
     /// ```ignore
-    /// chain.actors().reaches(&[&scanner, &telemetry])  // true - in order with gaps
-    /// chain.actors().reaches(&[&telemetry, &scanner])  // false - wrong order
+    /// chain.actors().passes_through(&[&scanner, &telemetry])  // true - in order with gaps
+    /// chain.actors().passes_through(&[&telemetry, &scanner])  // false - wrong order
     /// ```
-    pub fn reaches(&self, actors: &[&ActorId]) -> bool {
+    pub fn passes_through(&self, actors: &[&ActorId]) -> bool {
         if actors.is_empty() {
             return true;
         }

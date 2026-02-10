@@ -33,7 +33,7 @@ use crate::{
 /// test.stop_recording().await;
 ///
 /// assert!(test.event(id).was_delivered_to(&consumer));
-/// assert_eq!(1, test.actor(&consumer).inbound_count());
+/// assert_eq!(1, test.actor(&consumer).events_received());
 /// ```
 ///
 /// # Warning
@@ -42,7 +42,8 @@ use crate::{
 /// for event collection, which can lead to memory exhaustion under high load.
 /// For production monitoring, use the [`monitoring`](crate::monitoring) API directly.
 pub struct Harness<E: Event, T: Topic<E>> {
-    snapshot: EventRecords<E, T>,
+    snapshot: Vec<EventEntry<E, T>>,
+    records: EventRecords<E, T>,
     monitor_handle: MonitorHandle<E, T>,
     receiver: UnboundedReceiver<EventEntry<E, T>>,
     actor_sender: Sender<Arc<Envelope<E>>>,
@@ -56,6 +57,7 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         // monitor_handle.pause().await;
         Self {
             snapshot: Vec::new(),
+            records: Arc::new(Vec::new()),
             monitor_handle,
             receiver: rx,
             actor_sender: supervior.sender.clone(),
@@ -75,11 +77,13 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     pub async fn stop_recording(&mut self) {
         self.settle().await;
         self.monitor_handle.pause().await;
+        self.records = Arc::new(std::mem::take(&mut self.snapshot));
     }
 
     /// Clear all recorded events and reset the snapshot.
     pub fn reset(&mut self) {
         self.snapshot.clear();
+        self.records = Arc::new(Vec::new());
         while let Ok(_entry) = self.receiver.try_recv() {}
     }
 
@@ -158,28 +162,28 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     ///     .count();
     /// ```
     pub fn events(&self) -> EventQuery<E, T> {
-        EventQuery::new(self.snapshot.clone())
+        EventQuery::new(self.records.clone())
     }
 
     /// Returns a spy for observing a specific event by ID.
     ///
     /// Use this to inspect delivery and child events.
     pub fn event(&self, id: EventId) -> EventSpy<E, T> {
-        EventSpy::new(self.snapshot.clone(), id)
+        EventSpy::new(self.records.clone(), id)
     }
 
     /// Returns a spy for observing events from a specific actor's perspective.
     ///
     /// Use this to inspect what an actor sent and received.
     pub fn actor(&self, actor: &ActorId) -> ActorSpy<E, T> {
-        ActorSpy::new(self.snapshot.clone(), actor.clone())
+        ActorSpy::new(self.records.clone(), actor.clone())
     }
 
     /// Returns a spy for observing events on a specific topic.
     ///
     /// Use this to inspect event flow through a topic.
     pub fn topic(&self, topic: T) -> TopicSpy<E, T> {
-        TopicSpy::new(self.snapshot.clone(), topic)
+        TopicSpy::new(self.records.clone(), topic)
     }
 
     /// Returns an event chain for tracing event propagation from a root event.
@@ -193,19 +197,19 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     /// let chain = test.chain(root_event_id);
     ///
     /// // Verify exact path from root to leaf
-    /// assert!(chain.actors().path(&[&scanner, &pipeline, &writer, &telemetry]));
+    /// assert!(chain.actors().exact(&[&scanner, &pipeline, &writer, &telemetry]));
     ///
     /// // Verify contiguous sub-path
-    /// assert!(chain.actors().subpath(&[&pipeline, &writer]));
+    /// assert!(chain.actors().segment(&[&pipeline, &writer]));
     ///
     /// // Verify reachability (gaps allowed)
-    /// assert!(chain.actors().reaches(&[&scanner, &telemetry]));
+    /// assert!(chain.actors().passes_through(&[&scanner, &telemetry]));
     ///
     /// // Verify event sequence
-    /// assert!(chain.events().sequence(&["KeyPress", "HidReport"]));
+    /// assert!(chain.events().segment(&["KeyPress", "HidReport"]));
     /// ```
     pub fn chain(&self, id: EventId) -> EventChain<E, T> {
-        EventChain::new(self.snapshot.clone(), id)
+        EventChain::new(self.records.clone(), id)
     }
 
     // ==================== Debugging ====================
@@ -214,12 +218,12 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     ///
     /// Shows sender, receiver, and event ID for each recorded delivery.
     pub fn dump(&self) {
-        if self.snapshot.is_empty() {
+        if self.records.is_empty() {
             println!("(no events recorded)");
             return;
         }
-        println!("Recorded events ({} deliveries):", self.snapshot.len());
-        for (i, entry) in self.snapshot.iter().enumerate() {
+        println!("Recorded events ({} deliveries):", self.records.len());
+        for (i, entry) in self.records.iter().enumerate() {
             println!(
                 "  {}: [{}] --> [{}]  (id: {})",
                 i,
@@ -232,6 +236,6 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
 
     /// Returns the number of recorded events.
     pub fn event_count(&self) -> usize {
-        self.snapshot.len()
+        self.records.len()
     }
 }

@@ -5,10 +5,11 @@
 //! through the expected actors and trigger the expected child events.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::{ActorId, Event, EventId, Label, Topic};
 
-use super::{ActorFlow, EventEntry, EventFlow, EventMatcher, EventRecords};
+use super::{ActorTrace, EventEntry, EventMatcher, EventRecords, EventTrace};
 
 /// A chain of events originating from a single root event.
 ///
@@ -21,16 +22,16 @@ use super::{ActorFlow, EventEntry, EventFlow, EventMatcher, EventRecords};
 /// let chain = harness.chain(root_event_id);
 ///
 /// // Verify exact path from root to leaf
-/// assert!(chain.actors().path(&[&scanner, &pipeline, &writer, &telemetry]));
+/// assert!(chain.actors().exact(&[&scanner, &pipeline, &writer, &telemetry]));
 ///
 /// // Verify contiguous sub-path
-/// assert!(chain.actors().subpath(&[&pipeline, &writer]));
+/// assert!(chain.actors().segment(&[&pipeline, &writer]));
 ///
 /// // Verify reachability with gaps
-/// assert!(chain.actors().reaches(&[&scanner, &telemetry]));
+/// assert!(chain.actors().passes_through(&[&scanner, &telemetry]));
 ///
 /// // Verify event sequence
-/// assert!(chain.events().sequence(&["KeyPress", "HidReport"]));
+/// assert!(chain.events().segment(&["KeyPress", "HidReport"]));
 /// ```
 pub struct EventChain<E: Event, T: Topic<E>> {
     root_id: EventId,
@@ -50,7 +51,7 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
         // Build the tree structure from correlation IDs
         // First, collect all unique event IDs and their correlation relationships
         let mut event_correlations: HashMap<EventId, Option<EventId>> = HashMap::new();
-        for entry in &records {
+        for entry in records.iter() {
             let id = entry.id();
             let correlation = entry.meta().correlation_id();
             event_correlations.entry(id).or_insert(correlation);
@@ -79,14 +80,14 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
         }
     }
 
-    /// Returns an actor flow view for querying actor-based patterns.
-    pub fn actors(&self) -> ActorFlow<'_, E, T> {
-        ActorFlow { chain: self }
+    /// Returns an actor trace view for querying actor-based patterns.
+    pub fn actors(&self) -> ActorTrace<'_, E, T> {
+        ActorTrace { chain: self }
     }
 
-    /// Returns an event flow view for querying event-based patterns.
-    pub fn events(&self) -> EventFlow<'_, E, T> {
-        EventFlow { chain: self }
+    /// Returns an event trace view for querying event-based patterns.
+    pub fn events(&self) -> EventTrace<'_, E, T> {
+        EventTrace { chain: self }
     }
 
     /// Returns true if the chain diverges (has multiple children) after the specified event.
@@ -139,7 +140,7 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
             // No path to this actor
             return EventChain {
                 root_id: self.root_id,
-                records: vec![],
+                records: Arc::new(vec![]),
                 chain_ids: HashSet::new(),
                 children_map: HashMap::new(),
             };
@@ -190,7 +191,7 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
 
         EventChain {
             root_id: self.root_id,
-            records: path_records,
+            records: Arc::new(path_records),
             chain_ids: path_ids,
             children_map: path_children,
         }
@@ -454,7 +455,10 @@ mod tests {
         ));
         let complete_entry = EventEntry::new(complete, t, alice);
 
-        (vec![start_entry, process_entry, complete_entry], start_id)
+        (
+            Arc::new(vec![start_entry, process_entry, complete_entry]),
+            start_id,
+        )
     }
 
     /// Build a branching chain: Start -> [Process, Branch]
@@ -481,13 +485,16 @@ mod tests {
         let branch = Arc::new(Envelope::with_correlation(TestEvent::Branch, bob, start_id));
         let branch_entry = EventEntry::new(branch, t, alice);
 
-        (vec![start_entry, process_entry, branch_entry], start_id)
+        (
+            Arc::new(vec![start_entry, process_entry, branch_entry]),
+            start_id,
+        )
     }
 
-    // ==================== ActorFlow Tests ====================
+    // ==================== ActorTrace Tests ====================
 
     #[test]
-    fn actor_flow_all_includes_sender_and_receivers() {
+    fn actor_trace_all_includes_sender_and_receivers() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -504,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn actor_flow_paths_returns_all_paths() {
+    fn actor_trace_paths_returns_all_paths() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -521,7 +528,7 @@ mod tests {
     }
 
     #[test]
-    fn actor_flow_path_count_for_linear() {
+    fn actor_trace_path_count_for_linear() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -529,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn actor_flow_path_count_for_branching() {
+    fn actor_trace_path_count_for_branching() {
         let (records, root_id) = build_branching_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -538,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn actor_flow_visited_returns_true_when_all_present() {
+    fn actor_trace_visited_returns_true_when_all_present() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -550,7 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn actor_flow_visited_returns_false_when_missing() {
+    fn actor_trace_visited_returns_false_when_missing() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -561,7 +568,7 @@ mod tests {
     }
 
     #[test]
-    fn actor_flow_path_returns_true_for_valid_path() {
+    fn actor_trace_exact_returns_true_for_valid_path() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -570,11 +577,11 @@ mod tests {
         let charlie = actor("charlie");
 
         // Full path: alice -> bob -> charlie -> alice (Complete loops back)
-        assert!(chain.actors().path(&[&alice, &bob, &charlie, &alice]));
+        assert!(chain.actors().exact(&[&alice, &bob, &charlie, &alice]));
     }
 
     #[test]
-    fn actor_flow_reaches_allows_gaps() {
+    fn actor_trace_passes_through_allows_gaps() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -582,11 +589,11 @@ mod tests {
         let charlie = actor("charlie");
 
         // alice -> charlie with bob skipped
-        assert!(chain.actors().reaches(&[&alice, &charlie]));
+        assert!(chain.actors().passes_through(&[&alice, &charlie]));
     }
 
     #[test]
-    fn actor_flow_subpath_requires_contiguous() {
+    fn actor_trace_segment_requires_contiguous() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -595,13 +602,13 @@ mod tests {
         let charlie = actor("charlie");
 
         // Contiguous subsequence exists
-        assert!(chain.actors().subpath(&[&bob, &charlie]));
+        assert!(chain.actors().segment(&[&bob, &charlie]));
         // Gap between alice and charlie - not contiguous
-        assert!(!chain.actors().subpath(&[&alice, &charlie]));
+        assert!(!chain.actors().segment(&[&alice, &charlie]));
     }
 
     #[test]
-    fn actor_flow_path_returns_false_for_nonexistent_path() {
+    fn actor_trace_exact_returns_false_for_nonexistent_path() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -609,11 +616,11 @@ mod tests {
         let bob = actor("bob");
 
         // dave doesn't exist in the chain
-        assert!(!chain.actors().path(&[&dave, &bob]));
+        assert!(!chain.actors().exact(&[&dave, &bob]));
     }
 
     #[test]
-    fn actor_flow_branching_paths_are_distinct() {
+    fn actor_trace_branching_paths_are_distinct() {
         let (records, root_id) = build_branching_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -622,14 +629,14 @@ mod tests {
         let charlie = actor("charlie");
 
         // Both paths exist
-        assert!(chain.actors().path(&[&alice, &bob, &charlie])); // Process branch
-        assert!(chain.actors().path(&[&alice, &bob, &alice])); // Branch branch (alice receives)
+        assert!(chain.actors().exact(&[&alice, &bob, &charlie])); // Process branch
+        assert!(chain.actors().exact(&[&alice, &bob, &alice])); // Branch branch (alice receives)
     }
 
-    // ==================== EventFlow Tests ====================
+    // ==================== EventTrace Tests ====================
 
     #[test]
-    fn event_flow_contains_finds_event_by_label() {
+    fn event_trace_contains_finds_event_by_label() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
@@ -640,35 +647,52 @@ mod tests {
     }
 
     #[test]
-    fn event_flow_through_matches_order_with_gaps() {
+    fn event_trace_passes_through_matches_order_with_gaps() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
-        assert!(chain.events().through(&["Start", "Complete"]));
-        assert!(chain.events().through(&["Start", "Process", "Complete"]));
+        assert!(chain.events().passes_through(&["Start", "Complete"]));
+        assert!(
+            chain
+                .events()
+                .passes_through(&["Start", "Process", "Complete"])
+        );
     }
 
     #[test]
-    fn event_flow_through_returns_false_for_wrong_order() {
+    fn event_trace_passes_through_returns_false_for_wrong_order() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
-        assert!(!chain.events().through(&["Complete", "Start"]));
+        assert!(!chain.events().passes_through(&["Complete", "Start"]));
     }
 
     #[test]
-    fn event_flow_sequence_requires_consecutive() {
+    fn event_trace_segment_requires_consecutive() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
         // Consecutive: Start -> Process -> Complete
-        assert!(chain.events().sequence(&["Start", "Process", "Complete"]));
-        assert!(chain.events().sequence(&["Start", "Process"]));
-        assert!(chain.events().sequence(&["Process", "Complete"]));
+        assert!(chain.events().segment(&["Start", "Process", "Complete"]));
+        assert!(chain.events().segment(&["Start", "Process"]));
+        assert!(chain.events().segment(&["Process", "Complete"]));
 
         // Empty sequence is always true
         let empty: &[&str] = &[];
-        assert!(chain.events().sequence(empty));
+        assert!(chain.events().segment(empty));
+    }
+
+    #[test]
+    fn event_trace_exact_matches_full_sequence() {
+        let (records, root_id) = build_linear_chain();
+        let chain = EventChain::new(records, root_id);
+
+        // Exact match: all 3 events in order
+        assert!(chain.events().exact(&["Start", "Process", "Complete"]));
+        // Wrong length
+        assert!(!chain.events().exact(&["Start", "Process"]));
+        // Wrong order
+        assert!(!chain.events().exact(&["Process", "Start", "Complete"]));
     }
 
     // ==================== Branching Tests ====================
@@ -737,24 +761,24 @@ mod tests {
 
     #[test]
     fn empty_chain_handles_gracefully() {
-        let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(vec![], 0);
+        let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(Arc::new(vec![]), 0);
 
         assert!(!chain.diverges_after("Anything"));
         assert_eq!(chain.branches_after("Anything"), 0);
         assert!(chain.actors().visited(&[]));
-        assert!(chain.events().through(&[] as &[&str]));
+        assert!(chain.events().passes_through(&[] as &[&str]));
     }
 
     #[test]
-    fn through_with_empty_matchers_returns_true() {
+    fn empty_matchers_returns_true() {
         let (records, root_id) = build_linear_chain();
         let chain = EventChain::new(records, root_id);
 
         let empty_actors: &[&ActorId] = &[];
         let empty_events: &[&str] = &[];
 
-        assert!(chain.actors().path(empty_actors));
-        assert!(chain.events().through(empty_events));
+        assert!(chain.actors().exact(empty_actors));
+        assert!(chain.events().passes_through(empty_events));
     }
 
     // ==================== Debug Output Tests ====================
@@ -777,7 +801,7 @@ mod tests {
 
     #[test]
     fn to_string_tree_handles_empty_chain() {
-        let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(vec![], 0);
+        let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(Arc::new(vec![]), 0);
         let tree = chain.to_string_tree();
 
         assert!(tree.contains("(empty)"));
@@ -810,7 +834,7 @@ mod tests {
 
     #[test]
     fn to_mermaid_handles_empty_chain() {
-        let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(vec![], 0);
+        let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(Arc::new(vec![]), 0);
         let mermaid = chain.to_mermaid();
 
         assert_eq!(mermaid, "sequenceDiagram\n");

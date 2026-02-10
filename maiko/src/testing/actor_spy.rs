@@ -38,7 +38,7 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
     }
 
     /// Returns the number of events received by this actor.
-    pub fn inbound_count(&self) -> usize {
+    pub fn events_received(&self) -> usize {
         self.inbound.count()
     }
 
@@ -70,7 +70,7 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
     ///
     /// Note: This counts unique event IDs, not deliveries. A single event
     /// delivered to multiple actors counts as one.
-    pub fn outbound_count(&self) -> usize {
+    pub fn events_sent(&self) -> usize {
         distinct_by(&self.outbound, |e| e.id()).len()
     }
 
@@ -145,12 +145,12 @@ mod tests {
 
     fn sample_records_with_actors(actors: &TestActors) -> EventRecords<TestEvent, DefaultTopic> {
         // Scenario: alice sends to bob and charlie, bob sends to alice
-        vec![
+        Arc::new(vec![
             make_entry(TestEvent(1), &actors.alice, &actors.bob),
             make_entry(TestEvent(2), &actors.alice, &actors.charlie),
             make_entry(TestEvent(3), &actors.bob, &actors.alice),
             make_entry(TestEvent(4), &actors.charlie, &actors.alice),
-        ]
+        ])
     }
 
     // ==================== Inbound Tests ====================
@@ -163,10 +163,10 @@ mod tests {
     }
 
     #[test]
-    fn inbound_count_returns_received_event_count() {
+    fn events_received_returns_received_event_count() {
         let actors = TestActors::new();
         let spy = ActorSpy::new(sample_records_with_actors(&actors), actors.bob);
-        assert_eq!(spy.inbound_count(), 1); // received from alice
+        assert_eq!(spy.events_received(), 1); // received from alice
     }
 
     #[test]
@@ -212,29 +212,29 @@ mod tests {
     }
 
     #[test]
-    fn outbound_count_returns_unique_event_count() {
+    fn events_sent_returns_unique_event_count() {
         let actors = TestActors::new();
         let spy = ActorSpy::new(sample_records_with_actors(&actors), actors.alice);
         // 2 distinct events sent (different IDs)
-        assert_eq!(spy.outbound_count(), 2);
+        assert_eq!(spy.events_sent(), 2);
     }
 
     #[test]
-    fn outbound_count_deduplicates_same_event_to_multiple_receivers() {
+    fn events_sent_deduplicates_same_event_to_multiple_receivers() {
         let alice = ActorId::new(Arc::from("alice"));
         let bob = ActorId::new(Arc::from("bob"));
         let charlie = ActorId::new(Arc::from("charlie"));
         // Same event delivered to multiple actors
         let envelope = Arc::new(Envelope::new(TestEvent(1), alice.clone()));
         let topic = Arc::new(DefaultTopic);
-        let records = vec![
+        let records = Arc::new(vec![
             EventEntry::new(envelope.clone(), topic.clone(), bob),
             EventEntry::new(envelope, topic, charlie),
-        ];
+        ]);
 
         let spy = ActorSpy::new(records, alice);
         // Only 1 unique event sent, even though delivered to 2 actors
-        assert_eq!(spy.outbound_count(), 1);
+        assert_eq!(spy.events_sent(), 1);
     }
 
     #[test]
@@ -275,8 +275,8 @@ mod tests {
         let actors = TestActors::new();
         let unknown = ActorId::new(Arc::from("unknown"));
         let spy = ActorSpy::new(sample_records_with_actors(&actors), unknown);
-        assert_eq!(spy.inbound_count(), 0);
-        assert_eq!(spy.outbound_count(), 0);
+        assert_eq!(spy.events_received(), 0);
+        assert_eq!(spy.events_sent(), 0);
         assert_eq!(spy.received_from_count(), 0);
         assert_eq!(spy.sent_to_count(), 0);
     }

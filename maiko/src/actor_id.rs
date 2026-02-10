@@ -21,7 +21,7 @@ use std::{hash::Hash, ops::Deref, sync::Arc};
 /// // Use in test harness
 /// let mut test = Harness::new(&mut sup).await;
 /// test.send_as(&producer, MyEvent::Data(42)).await?;
-/// assert!(test.actor(&consumer).inbound_count() > 0);
+/// assert!(test.actor(&consumer).events_received() > 0);
 ///
 /// // Access sender from event metadata
 /// let sender: &ActorId = envelope.meta().actor_id();

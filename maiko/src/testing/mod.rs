@@ -22,7 +22,7 @@
 //!
 //! // Query using spies
 //! assert!(test.event(id).was_delivered_to(&consumer));
-//! assert_eq!(1, test.actor(&consumer).inbound_count());
+//! assert_eq!(1, test.actor(&consumer).events_received());
 //!
 //! // Or use EventQuery for complex queries
 //! let orders = test.events()
@@ -32,38 +32,38 @@
 //!
 //! // Or trace event propagation with EventChain
 //! let chain = test.chain(id);
-//! assert!(chain.actors().path(&[&producer, &processor, &writer]));  // exact path
-//! assert!(chain.actors().subpath(&[&processor, &writer]));  // contiguous sub-path
-//! assert!(chain.actors().reaches(&[&producer, &writer]));  // gaps allowed
-//! assert!(chain.events().sequence(&["Input", "Processed", "Output"]));
+//! assert!(chain.actors().exact(&[&producer, &processor, &writer]));  // exact path
+//! assert!(chain.actors().segment(&[&processor, &writer]));  // contiguous sub-path
+//! assert!(chain.actors().passes_through(&[&producer, &writer]));  // gaps allowed
+//! assert!(chain.events().segment(&["Input", "Processed", "Output"]));
 //! ```
 //!
 //! # Warning
 //!
 //! **Do not use in production.** See [`Harness`] documentation for details.
 
-mod actor_flow;
 mod actor_spy;
+mod actor_trace;
 mod event_chain;
 mod event_collector;
 mod event_entry;
-mod event_flow;
 mod event_matcher;
 mod event_query;
 mod event_spy;
+mod event_trace;
 mod harness;
 mod topic_spy;
 
-pub use actor_flow::ActorFlow;
 pub use actor_spy::ActorSpy;
+pub use actor_trace::ActorTrace;
 pub use event_chain::EventChain;
 pub(crate) use event_collector::EventCollector;
 pub use event_entry::EventEntry;
-pub use event_flow::EventFlow;
 pub use event_matcher::EventMatcher;
 pub use event_query::EventQuery;
 pub use event_spy::EventSpy;
+pub use event_trace::EventTrace;
 pub use harness::Harness;
 pub use topic_spy::TopicSpy;
 
-pub(crate) type EventRecords<E, T> = Vec<EventEntry<E, T>>;
+pub(crate) type EventRecords<E, T> = std::sync::Arc<Vec<EventEntry<E, T>>>;
