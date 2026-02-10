@@ -351,16 +351,6 @@ impl<E: Event, T: Topic<E>> Drop for Supervisor<E, T> {
 }
 
 #[cfg(feature = "serde")]
-use serde::Serialize;
-
-#[cfg(feature = "serde")]
-#[derive(Serialize)]
-struct ActorSubscriptionExport {
-    actor_id: String,
-    subscriptions: Vec<String>,
-}
-
-#[cfg(feature = "serde")]
 impl<E, T> Supervisor<E, T>
 where
     E: Event,
@@ -399,8 +389,16 @@ where
     /// let json = supervisor.to_json()?;
     /// println!("{json}");
     /// ```
+    #[cfg(feature = "serde")]
     pub fn to_json(&self) -> serde_json::Result<String> {
+        use serde::Serialize;
         use std::collections::HashSet;
+
+        #[derive(Serialize)]
+        struct ActorSubscriptionExport {
+            actor_id: String,
+            subscriptions: Vec<String>,
+        }
 
         let mut all_topics: HashSet<T> = HashSet::new();
         for (_, subscription) in &self.registrations {
@@ -413,9 +411,9 @@ where
 
         for (actor_id, subscription) in &self.registrations {
             let subs: Vec<String> = match subscription {
-                Subscription::All => all_topics.iter().map(|t| t.label()).collect(),
+                Subscription::All => all_topics.iter().map(|t| t.label().into()).collect(),
 
-                Subscription::Topics(topics) => topics.iter().map(|t| t.label()).collect(),
+                Subscription::Topics(topics) => topics.iter().map(|t| t.label().into()).collect(),
 
                 Subscription::None => Vec::new(),
             };
