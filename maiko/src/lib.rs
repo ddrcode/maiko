@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 //! # Maiko
 //!
 //! A lightweight actor runtime for Tokio with topic-based pub/sub routing.
@@ -55,7 +56,7 @@
 //! ## Topic-Based Routing
 //!
 //! Actors subscribe to topics, and events are automatically routed to all interested subscribers.
-//! Use [`DefaultTopic`] for simple broadcasting, or implement [`Topic`] for custom routing:
+//! Use [`DefaultTopic`] when you don't need routing, or implement [`Topic`] for custom filtering:
 //!
 //! ```rust,ignore
 //! #[derive(Debug, Hash, Eq, PartialEq, Clone)]
@@ -75,8 +76,11 @@
 //!
 //! ## Features
 //!
-//! - **`macros`** (default)  - Enables `#[derive(Event)]` macro
-//! - **`test-harness`**  - Enables test utilities for asserting on event flow
+//! - **`macros`** (default) — `#[derive(Event)]`, `#[derive(Label)]`, and `#[derive(SelfRouting)]` macros
+//! - **`monitoring`** — Event lifecycle hooks for debugging, metrics, and logging
+//! - **`test-harness`** — Test utilities for recording, spying, and asserting on event flow (enables `monitoring`)
+//! - **`serde`** — JSON serialization support (e.g. `Supervisor::to_json()`)
+//! - **`recorder`** — Built-in `Recorder` monitor for writing events to JSON Lines files (enables `monitoring` + `serde`)
 //!
 //! ## Examples
 //!
@@ -103,12 +107,15 @@ mod topic;
 mod internal;
 
 #[cfg(feature = "test-harness")]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-harness")))]
 pub mod testing;
 
 #[cfg(feature = "monitoring")]
+#[cfg_attr(docsrs, doc(cfg(feature = "monitoring")))]
 pub mod monitoring;
 
 #[cfg(feature = "monitoring")]
+#[cfg_attr(docsrs, doc(cfg(feature = "monitoring")))]
 pub mod monitors;
 
 pub use actor::Actor;
@@ -126,6 +133,7 @@ pub use supervisor::Supervisor;
 pub use topic::{DefaultTopic, Topic};
 
 #[cfg(feature = "macros")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 pub use maiko_macros::{Event, Label, SelfRouting};
 
 pub type Result<T = ()> = std::result::Result<T, Error>;

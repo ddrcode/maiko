@@ -8,4 +8,6 @@
 ///
 /// The broker wraps events in an `Envelope` carrying metadata
 /// such as sender name and timestamp.
+///
+/// Use `#[derive(Event)]` instead of implementing this trait manually.
 pub trait Event: Send + Sync + Clone + 'static {}

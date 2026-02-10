@@ -23,11 +23,12 @@ pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone + Send + Sync + 'static
         Self: Sized;
 }
 
-/// Default topic for simple systems that don't need topic-based routing.
+/// Unit topic for systems that don't need topic-based routing.
 ///
-/// Use `DefaultTopic` when you don't need topic-based filtering and want
-/// all actors to receive all events. This is the simplest routing strategy,
-/// acting as an identity/unit type for the topic system.
+/// Since every event maps to the same single topic, actors subscribing to
+/// `DefaultTopic` will receive all events. This is the default generic
+/// parameter on [`Supervisor`](crate::Supervisor), keeping simple setups
+/// free of a custom topic type.
 ///
 /// # Examples
 ///

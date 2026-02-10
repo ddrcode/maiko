@@ -50,17 +50,17 @@ pub struct Harness<E: Event, T: Topic<E>> {
 }
 
 impl<E: Event, T: Topic<E>> Harness<E, T> {
-    pub async fn new(supervior: &mut Supervisor<E, T>) -> Self {
+    pub async fn new(supervisor: &mut Supervisor<E, T>) -> Self {
         let (tx, rx) = unbounded_channel();
         let monitor = EventCollector::new(tx);
-        let monitor_handle = supervior.monitors().add(monitor).await;
+        let monitor_handle = supervisor.monitors().add(monitor).await;
         // monitor_handle.pause().await;
         Self {
             snapshot: Vec::new(),
             records: Arc::new(Vec::new()),
             monitor_handle,
             receiver: rx,
-            actor_sender: supervior.sender.clone(),
+            actor_sender: supervisor.sender.clone(),
         }
     }
 
@@ -80,7 +80,7 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         self.records = Arc::new(std::mem::take(&mut self.snapshot));
     }
 
-    /// Clear all recorded events and reset the snapshot.
+    /// Clears all recorded events, resetting the harness for the next test phase.
     pub fn reset(&mut self) {
         self.snapshot.clear();
         self.records = Arc::new(Vec::new());
