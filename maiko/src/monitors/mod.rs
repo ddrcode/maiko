@@ -23,4 +23,5 @@ pub use tracer::Tracer;
 mod recorder;
 
 #[cfg(feature = "recorder")]
+#[cfg_attr(docsrs, doc(cfg(feature = "recorder")))]
 pub use recorder::Recorder;

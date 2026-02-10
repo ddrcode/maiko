@@ -261,11 +261,13 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         Ok(())
     }
 
+    /// Returns the supervisor's configuration.
     pub fn config(&self) -> &Config {
         self.config.as_ref()
     }
 
     #[cfg(feature = "monitoring")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "monitoring")))]
     pub fn monitors(&mut self) -> &mut MonitorRegistry<E, T> {
         &mut self.monitoring
     }
@@ -390,6 +392,7 @@ where
     /// println!("{json}");
     /// ```
     #[cfg(feature = "serde")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     pub fn to_json(&self) -> serde_json::Result<String> {
         use serde::Serialize;
         use std::collections::HashSet;
