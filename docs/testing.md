@@ -35,7 +35,7 @@ async fn test_event_flow() -> Result<()> {
 
     // Assert on recorded events
     assert!(test.event(id).was_delivered_to(&consumer));
-    assert_eq!(1, test.actor(&consumer).inbound_count());
+    assert_eq!(1, test.actor(&consumer).events_received());
 
     sup.stop().await
 }
@@ -104,6 +104,9 @@ let spy = test.event(event_id);
 
 spy.was_delivered()              // true if delivered to any actor
 spy.was_delivered_to(&consumer)  // true if delivered to specific actor
+spy.not_delivered_to(&consumer)  // true if NOT delivered to specific actor
+spy.was_delivered_to_all(&[&a, &b])  // true if delivered to all listed actors
+spy.delivery_ratio(&[&a, &b, &c])   // fraction of listed actors that received it
 spy.sender()                     // name of sending actor
 spy.receivers()                  // list of receiving actors
 spy.receivers_count()            // number of receivers
@@ -119,14 +122,14 @@ let spy = test.actor(&consumer);
 
 // Inbound (events received)
 spy.inbound()              // EventQuery of received events
-spy.inbound_count()        // number of events received
+spy.events_received()      // number of events received
 spy.last_received()        // most recent received event
 spy.received_from()        // actors that sent events to this actor
 spy.received_from_count()  // count of distinct senders
 
 // Outbound (events sent)
 spy.outbound()             // EventQuery of sent events
-spy.outbound_count()       // number of distinct events sent
+spy.events_sent()          // number of distinct events sent
 spy.last_sent()            // most recent sent event
 spy.sent_to()              // actors that received events from this actor
 spy.sent_to_count()        // count of distinct receivers
@@ -167,15 +170,22 @@ query.received_by(&actor)       // events received by actor
 query.with_topic(topic)         // events on specific topic
 query.with_id(event_id)         // events with specific ID
 query.correlated_with(id)       // events correlated to parent ID
+query.with_label("MyVariant")   // events with specific label (requires Label trait)
 query.matching_event(|e| ...)   // custom event predicate
+query.matching(|entry| ...)     // custom entry predicate (access to metadata)
 
 // Accessors
-query.count()      // number of matching events
-query.is_empty()   // true if no matches
-query.first()      // first matching event
-query.last()       // last matching event
-query.nth(n)       // nth matching event
-query.iter()       // iterator over matches
+query.count()           // number of matching events
+query.is_empty()        // true if no matches
+query.first()           // first matching event
+query.last()            // last matching event
+query.nth(n)            // nth matching event
+query.iter()            // iterator over matches
+query.collect()         // unique events (deduplicated by event ID)
+query.all_deliveries()  // all delivery records (including duplicates)
+query.senders()         // unique sender actor IDs
+query.receivers()       // unique receiver actor IDs
+query.count_by_label()  // HashMap<String, usize> of event counts per label
 ```
 
 Queries can be chained from spies:
@@ -235,9 +245,9 @@ async fn test_order_processing_pipeline() -> Result<()> {
     test.stop_recording().await;
 
     // Verify pipeline
-    assert_eq!(1, test.actor(&validator).inbound_count());
-    assert_eq!(1, test.actor(&processor).inbound_count());
-    assert_eq!(1, test.actor(&notifier).inbound_count());
+    assert_eq!(1, test.actor(&validator).events_received());
+    assert_eq!(1, test.actor(&processor).events_received());
+    assert_eq!(1, test.actor(&notifier).events_received());
 
     // Verify event flow
     assert!(test.topic(OrderTopic::Incoming).was_published());

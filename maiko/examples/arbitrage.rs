@@ -264,12 +264,8 @@ async fn main() -> maiko::Result {
     let event_spy = test.event(tick_id);
     assert!(event_spy.was_delivered(), "Event should be delivered");
     assert!(
-        event_spy.was_delivered_to(&normalizer),
-        "Should reach Normalizer"
-    );
-    assert!(
-        event_spy.was_delivered_to(&telemetry),
-        "Should reach Telemetry"
+        event_spy.was_delivered_to_all(&[&normalizer, &telemetry]),
+        "Should reach both Normalizer and Telemetry"
     );
     assert_eq!(2, event_spy.receivers_count(), "Should have 2 receivers");
 
@@ -348,6 +344,12 @@ async fn main() -> maiko::Result {
     // Find all events sent by Normalizer
     let normalizer_events = test.events().sent_by(&normalizer).count();
     println!("  Events sent by Normalizer: {}", normalizer_events);
+
+    // Get unique senders and receivers across all events
+    let senders = test.events().senders();
+    let receivers = test.events().receivers();
+    println!("  Unique senders: {:?}", senders);
+    println!("  Unique receivers: {:?}", receivers);
 
     // Find all MarketTick events
     let market_ticks = test
