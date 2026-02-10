@@ -18,7 +18,7 @@ exclude = [".gitignore", ".github/"]
 default = ["macros"]
 macros = ["dep:maiko-macros"]
 serde = ["dep:serde", "dep:serde_json"]
-recorder = ["monitoring", "serde", "dep:serde_json"]
+recorder = ["monitoring", "serde"]
 monitoring = []
 test-harness = ["monitoring"]
 

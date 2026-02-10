@@ -40,23 +40,33 @@ impl<E: Event + Label, T: Topic<E>> EventTrace<'_, E, T> {
         self.chain.chain_entries().any(|e| matcher.matches(e))
     }
 
-    /// Returns true if all ordered events match all matchers exactly (same length and order).
+    /// Returns true if any event path exactly matches all matchers (same length and order).
+    ///
+    /// Each path follows the correlation tree from root to leaf. For branching
+    /// chains, returns true if any single branch matches.
     pub fn exact<M>(&self, matchers: &[M]) -> bool
     where
         M: Into<EventMatcher<E, T>> + Clone,
     {
-        let ordered = self.ordered();
-        let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
-        if ordered.len() != matchers.len() {
-            return false;
+        if matchers.is_empty() {
+            return true;
         }
-        ordered
-            .iter()
-            .zip(matchers.iter())
-            .all(|(entry, matcher)| matcher.matches(entry))
+
+        let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
+        let paths = self.chain.event_paths();
+        paths.iter().any(|path| {
+            path.len() == matchers.len()
+                && path
+                    .iter()
+                    .zip(matchers.iter())
+                    .all(|(entry, matcher)| matcher.matches(entry))
+        })
     }
 
-    /// Returns true if events matching the matchers appear consecutively in the chain.
+    /// Returns true if events matching the matchers appear consecutively in any event path.
+    ///
+    /// Each path follows the correlation tree from root to leaf. For branching
+    /// chains, returns true if any single branch contains the contiguous segment.
     pub fn segment<M>(&self, matchers: &[M]) -> bool
     where
         M: Into<EventMatcher<E, T>> + Clone,
@@ -65,32 +75,17 @@ impl<E: Event + Label, T: Topic<E>> EventTrace<'_, E, T> {
             return true;
         }
 
-        let ordered = self.ordered();
         let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
-
-        // Look for consecutive matches
-        'outer: for start in 0..ordered.len() {
-            if matchers[0].matches(ordered[start]) {
-                let mut match_idx = 1;
-                for entry in ordered.iter().skip(start + 1) {
-                    if match_idx >= matchers.len() {
-                        return true;
-                    }
-                    if matchers[match_idx].matches(entry) {
-                        match_idx += 1;
-                    } else {
-                        continue 'outer;
-                    }
-                }
-                if match_idx == matchers.len() {
-                    return true;
-                }
-            }
-        }
-        false
+        let paths = self.chain.event_paths();
+        paths
+            .iter()
+            .any(|path| Self::contains_contiguous(path, &matchers))
     }
 
-    /// Returns true if events matching the matchers appear in order (gaps allowed).
+    /// Returns true if events matching the matchers appear in order in any event path (gaps allowed).
+    ///
+    /// Each path follows the correlation tree from root to leaf. For branching
+    /// chains, returns true if any single branch passes through the matchers.
     pub fn passes_through<M>(&self, matchers: &[M]) -> bool
     where
         M: Into<EventMatcher<E, T>> + Clone,
@@ -99,11 +94,33 @@ impl<E: Event + Label, T: Topic<E>> EventTrace<'_, E, T> {
             return true;
         }
 
-        let ordered = self.ordered();
         let matchers: Vec<_> = matchers.iter().cloned().map(|m| m.into()).collect();
-        let mut matcher_idx = 0;
+        let paths = self.chain.event_paths();
+        paths
+            .iter()
+            .any(|path| Self::contains_subsequence(path, &matchers))
+    }
 
-        for entry in &ordered {
+    /// Returns the number of distinct event paths in the chain.
+    pub fn path_count(&self) -> usize {
+        self.chain.event_paths().len()
+    }
+
+    fn contains_contiguous(path: &[&EventEntry<E, T>], matchers: &[EventMatcher<E, T>]) -> bool {
+        if matchers.len() > path.len() {
+            return false;
+        }
+        path.windows(matchers.len()).any(|window| {
+            window
+                .iter()
+                .zip(matchers.iter())
+                .all(|(entry, matcher)| matcher.matches(entry))
+        })
+    }
+
+    fn contains_subsequence(path: &[&EventEntry<E, T>], matchers: &[EventMatcher<E, T>]) -> bool {
+        let mut matcher_idx = 0;
+        for entry in path {
             if matcher_idx >= matchers.len() {
                 break;
             }
@@ -111,7 +128,6 @@ impl<E: Event + Label, T: Topic<E>> EventTrace<'_, E, T> {
                 matcher_idx += 1;
             }
         }
-
         matcher_idx == matchers.len()
     }
 }

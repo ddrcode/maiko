@@ -4,7 +4,7 @@
 //! tracked via correlation IDs. Use it to verify that events propagate
 //! through the expected actors and trigger the expected child events.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use crate::{ActorId, Event, EventId, Label, Topic};
@@ -70,6 +70,21 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
                     children_map.entry(current_id).or_default().push(*id);
                 }
             }
+        }
+
+        // Sort children by timestamp for deterministic creation-order
+        // (EventId is UUID-based and not monotonic)
+        let ts_lookup: HashMap<EventId, u64> = event_correlations
+            .keys()
+            .filter_map(|&id| {
+                records
+                    .iter()
+                    .find(|e| e.id() == id)
+                    .map(|e| (id, e.meta().timestamp()))
+            })
+            .collect();
+        for children in children_map.values_mut() {
+            children.sort_by_key(|id| ts_lookup.get(id).copied().unwrap_or(0));
         }
 
         Self {
@@ -226,6 +241,42 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
             .unwrap_or_default()
     }
 
+    /// Returns all distinct root-to-leaf event paths through the chain.
+    ///
+    /// Each path is a sequence of event entries following the correlation tree.
+    /// One representative entry per event (fan-out to multiple receivers does not
+    /// create separate event paths — only distinct child events do).
+    pub(super) fn event_paths(&self) -> Vec<Vec<&EventEntry<E, T>>> {
+        let mut paths = Vec::new();
+
+        if let Some(root_entry) = self.records.iter().find(|e| e.id() == self.root_id) {
+            self.build_event_paths_dfs(self.root_id, vec![root_entry], &mut paths);
+        }
+
+        paths
+    }
+
+    fn build_event_paths_dfs<'a>(
+        &'a self,
+        event_id: EventId,
+        current_path: Vec<&'a EventEntry<E, T>>,
+        paths: &mut Vec<Vec<&'a EventEntry<E, T>>>,
+    ) {
+        let children = self.children_of(event_id);
+
+        if children.is_empty() {
+            paths.push(current_path);
+        } else {
+            for child_id in &children {
+                if let Some(child_entry) = self.records.iter().find(|e| e.id() == *child_id) {
+                    let mut path = current_path.clone();
+                    path.push(child_entry);
+                    self.build_event_paths_dfs(*child_id, path, paths);
+                }
+            }
+        }
+    }
+
     /// Returns an iterator over all entries in this chain.
     pub(super) fn chain_entries(&self) -> impl Iterator<Item = &EventEntry<E, T>> {
         self.records
@@ -236,7 +287,8 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
     /// Returns events in order (BFS from root).
     pub(super) fn ordered_entries(&self) -> Vec<&EventEntry<E, T>> {
         let mut result = Vec::new();
-        let mut queue = vec![self.root_id];
+        let mut queue = VecDeque::new();
+        queue.push_back(self.root_id);
         let mut visited = HashSet::new();
 
         // Build id -> entries map (an event can have multiple entries for different receivers)
@@ -249,7 +301,7 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
                 acc
             });
 
-        while let Some(id) = queue.pop() {
+        while let Some(id) = queue.pop_front() {
             if visited.insert(id) {
                 if let Some(entries) = entries_by_id.get(&id) {
                     result.extend(entries.iter().copied());
@@ -289,8 +341,10 @@ impl<E: Event + Label, T: Topic<E>> EventChain<E, T> {
     }
 
     fn format_tree_node(&self, output: &mut String, id: EventId, prefix: &str, is_last: bool) {
-        // Find the first entry for this event to get label and actors
-        if let Some(entry) = self.records.iter().find(|e| e.id() == id) {
+        // Find all entries for this event to show fan-out
+        let entries: Vec<_> = self.records.iter().filter(|e| e.id() == id).collect();
+
+        if let Some(first) = entries.first() {
             let connector = if prefix.is_empty() {
                 ""
             } else if is_last {
@@ -299,13 +353,22 @@ impl<E: Event + Label, T: Topic<E>> EventChain<E, T> {
                 "├─ "
             };
 
-            let label = entry.payload().label();
-            let sender = entry.sender();
-            let receiver = entry.receiver().name();
+            let label = first.payload().label();
+            let sender = first.sender();
+
+            // Collect unique receivers in stable order
+            let mut seen = HashSet::new();
+            let mut receivers: Vec<&str> = entries
+                .iter()
+                .map(|e| e.receiver().name())
+                .filter(|name| seen.insert(*name))
+                .collect();
+            receivers.sort();
+            let receivers_str = receivers.join(", ");
 
             output.push_str(&format!(
                 "{}{}{} [{} -> {}]\n",
-                prefix, connector, label, sender, receiver
+                prefix, connector, label, sender, receivers_str
             ));
 
             // Format children
@@ -347,13 +410,8 @@ impl<E: Event + Label, T: Topic<E>> EventChain<E, T> {
             return output;
         }
 
-        // Collect unique events in BFS order
-        let mut seen_ids = HashSet::new();
-        let ordered: Vec<_> = self
-            .ordered_entries()
-            .into_iter()
-            .filter(|e| seen_ids.insert(e.id()))
-            .collect();
+        // Collect all deliveries in BFS order (including fan-out to multiple receivers)
+        let ordered = self.ordered_entries();
 
         for entry in ordered {
             let sender = entry.sender();
@@ -695,6 +753,53 @@ mod tests {
         assert!(!chain.events().exact(&["Process", "Start", "Complete"]));
     }
 
+    // ==================== EventTrace Branching Tests ====================
+
+    #[test]
+    fn event_trace_exact_matches_individual_branches() {
+        let (records, root_id) = build_branching_chain();
+        let chain = EventChain::new(records, root_id);
+
+        // Each branch is a distinct path
+        assert!(chain.events().exact(&["Start", "Process"]));
+        assert!(chain.events().exact(&["Start", "Branch"]));
+        // Full chain is NOT a single path
+        assert!(!chain.events().exact(&["Start", "Process", "Branch"]));
+    }
+
+    #[test]
+    fn event_trace_segment_works_per_branch() {
+        let (records, root_id) = build_branching_chain();
+        let chain = EventChain::new(records, root_id);
+
+        assert!(chain.events().segment(&["Start", "Process"]));
+        assert!(chain.events().segment(&["Start", "Branch"]));
+        // Process and Branch are on different branches - not contiguous
+        assert!(!chain.events().segment(&["Process", "Branch"]));
+    }
+
+    #[test]
+    fn event_trace_passes_through_works_per_branch() {
+        let (records, root_id) = build_branching_chain();
+        let chain = EventChain::new(records, root_id);
+
+        assert!(chain.events().passes_through(&["Start", "Process"]));
+        assert!(chain.events().passes_through(&["Start", "Branch"]));
+        // Process and Branch are on different branches
+        assert!(!chain.events().passes_through(&["Process", "Branch"]));
+    }
+
+    #[test]
+    fn event_trace_path_count() {
+        let (records, root_id) = build_linear_chain();
+        let chain = EventChain::new(records, root_id);
+        assert_eq!(chain.events().path_count(), 1);
+
+        let (records, root_id) = build_branching_chain();
+        let chain = EventChain::new(records, root_id);
+        assert_eq!(chain.events().path_count(), 2);
+    }
+
     // ==================== Branching Tests ====================
 
     #[test]
@@ -800,6 +905,27 @@ mod tests {
     }
 
     #[test]
+    fn to_string_tree_shows_fan_out_receivers() {
+        let alice = actor("alice");
+        let bob = actor("bob");
+        let charlie = actor("charlie");
+        let t = topic();
+
+        // Same event delivered to two receivers
+        let start = Arc::new(Envelope::new(TestEvent::Start, alice.clone()));
+        let start_id = start.id();
+        let entry1 = EventEntry::new(start.clone(), t.clone(), bob);
+        let entry2 = EventEntry::new(start, t, charlie);
+        let records = Arc::new(vec![entry1, entry2]);
+
+        let chain = EventChain::new(records, start_id);
+        let tree = chain.to_string_tree();
+
+        // Both receivers should appear on the same line (sorted alphabetically)
+        assert!(tree.contains("bob, charlie"));
+    }
+
+    #[test]
     fn to_string_tree_handles_empty_chain() {
         let chain: EventChain<TestEvent, DefaultTopic> = EventChain::new(Arc::new(vec![]), 0);
         let tree = chain.to_string_tree();
@@ -829,7 +955,41 @@ mod tests {
 
         assert!(mermaid.contains("alice->>bob:Start"));
         // Both branches should appear
-        assert!(mermaid.contains("Process") || mermaid.contains("Branch"));
+        assert!(mermaid.contains("bob->>charlie:Process"));
+        assert!(mermaid.contains("bob->>alice:Branch"));
+    }
+
+    #[test]
+    fn to_mermaid_shows_fan_out() {
+        let alice = actor("alice");
+        let bob = actor("bob");
+        let charlie = actor("charlie");
+        let t = topic();
+
+        // Same event delivered to two receivers (fan-out)
+        let start = Arc::new(Envelope::new(TestEvent::Start, alice.clone()));
+        let start_id = start.id();
+        let entry1 = EventEntry::new(start.clone(), t.clone(), bob.clone());
+        let entry2 = EventEntry::new(start, t.clone(), charlie.clone());
+
+        // Child event from bob to charlie
+        let process = Arc::new(Envelope::with_correlation(
+            TestEvent::Process,
+            bob.clone(),
+            start_id,
+        ));
+        let process_entry = EventEntry::new(process, t, charlie);
+
+        let records = Arc::new(vec![entry1, entry2, process_entry]);
+        let chain = EventChain::new(records, start_id);
+
+        let mermaid = chain.to_mermaid();
+
+        // Both deliveries of Start should appear
+        assert!(mermaid.contains("alice->>bob:Start"));
+        assert!(mermaid.contains("alice->>charlie:Start"));
+        // Child event should also appear
+        assert!(mermaid.contains("bob->>charlie:Process"));
     }
 
     #[test]

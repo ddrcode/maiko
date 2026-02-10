@@ -198,6 +198,88 @@ let events = test.actor(&normalizer)
     .count();
 ```
 
+## Event Chains
+
+`EventChain` traces causally related events through correlation IDs, building a tree from a root event to all its descendants.
+
+```rust
+let chain = test.chain(root_event_id);
+```
+
+### Actor Tracing
+
+Query which actors were visited and in what order:
+
+```rust
+// All actors involved (any branch)
+chain.actors().all();
+
+// Verify an exact root-to-leaf path exists
+chain.actors().exact(&[&scanner, &pipeline, &writer, &telemetry]);
+
+// Verify a contiguous sub-path within any branch
+chain.actors().segment(&[&pipeline, &writer]);
+
+// Verify reachability with gaps (any branch)
+chain.actors().passes_through(&[&scanner, &telemetry]);
+
+// Count distinct paths
+chain.actors().path_count();
+```
+
+### Event Tracing
+
+Query the event sequence along correlation paths:
+
+```rust
+// Check if a specific event label appears anywhere
+chain.events().contains("HidReport");
+
+// Verify an exact event path (root to leaf)
+chain.events().exact(&["KeyPress", "HidReport", "ReportSent"]);
+
+// Verify a contiguous segment within any branch
+chain.events().segment(&["KeyPress", "HidReport"]);
+
+// Verify ordering with gaps (any branch)
+chain.events().passes_through(&["KeyPress", "ReportSent"]);
+
+// Count distinct event paths
+chain.events().path_count();
+```
+
+For branching chains (one event triggering multiple children), `exact`, `segment`, and `passes_through` check each branch independently.
+
+### Branching
+
+Inspect fan-out patterns:
+
+```rust
+chain.diverges_after("KeyPress");     // true if multiple children
+chain.branches_after("KeyPress");     // number of child events
+chain.path_to(&telemetry);            // sub-chain to a specific actor
+```
+
+### Debug Output
+
+```rust
+// Tree view
+chain.pretty_print();
+// EventChain (root: 123...)
+// KeyPress [KeyScanner -> KeyEventPipeline, Telemetry]
+// └─ HidReport [KeyEventPipeline -> KeyWriter, Telemetry]
+//    └─ ReportSent [KeyWriter -> Telemetry]
+
+// Mermaid sequence diagram
+let diagram = chain.to_mermaid();
+// sequenceDiagram
+//     KeyScanner->>KeyEventPipeline:KeyPress
+//     KeyScanner->>Telemetry:KeyPress
+//     KeyEventPipeline->>KeyWriter:HidReport
+//     KeyEventPipeline->>Telemetry:HidReport
+//     KeyWriter->>Telemetry:ReportSent
+```
+
 ## Debugging
 
 Dump all recorded events for debugging:
