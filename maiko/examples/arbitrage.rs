@@ -248,7 +248,7 @@ async fn main() -> maiko::Result {
     // ========================================================================
     println!("--- Test 1: Basic Event Delivery ---");
 
-    test.start_recording().await;
+    test.record().await;
     let tick_id = test
         .send_as(
             &alpha_ticker,
@@ -258,7 +258,7 @@ async fn main() -> maiko::Result {
             },
         )
         .await?;
-    test.stop_recording().await;
+    test.settle().await;
 
     // Use EventSpy to inspect the sent event
     let event_spy = test.event(tick_id);
@@ -375,7 +375,7 @@ async fn main() -> maiko::Result {
     println!("\n--- Test 5: Full Arbitrage Scenario ---");
 
     test.reset();
-    test.start_recording().await;
+    test.record().await;
 
     // Send ticks that will trigger arbitrage
     // Alpha: ask at 100
@@ -399,7 +399,7 @@ async fn main() -> maiko::Result {
     )
     .await?;
 
-    test.stop_recording().await;
+    test.settle().await;
 
     // Check if orders were generated
     let alpha_orders = test.topic(Order(Alpha));

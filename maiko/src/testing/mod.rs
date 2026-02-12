@@ -16,9 +16,9 @@
 //! let mut test = Harness::new(&mut supervisor).await;
 //! supervisor.start().await?;
 //!
-//! test.start_recording().await;
+//! test.record().await;
 //! let id = test.send_as(&producer, MyEvent::Data(42)).await?;
-//! test.stop_recording().await;
+//! test.settle().await;
 //!
 //! // Query using spies
 //! assert!(test.event(id).was_delivered_to(&consumer));
@@ -51,6 +51,7 @@ mod event_matcher;
 mod event_query;
 mod event_spy;
 mod event_trace;
+pub(crate) mod expectation;
 mod harness;
 mod topic_spy;
 
@@ -63,6 +64,7 @@ pub use event_matcher::EventMatcher;
 pub use event_query::EventQuery;
 pub use event_spy::EventSpy;
 pub use event_trace::EventTrace;
+pub use expectation::Expectation;
 pub use harness::Harness;
 pub use topic_spy::TopicSpy;
 

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::{
     ActorId, Event, EventId, Label, Topic,
-    testing::{EventEntry, EventRecords},
+    testing::{EventEntry, EventMatcher, EventRecords},
 };
 
 type Filter<E, T> = Rc<dyn Fn(&EventEntry<E, T>) -> bool>;
@@ -61,6 +61,11 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
     /// Returns true if no events match the filters.
     pub fn is_empty(&self) -> bool {
         self.apply_filters().is_empty()
+    }
+
+    /// Returns true if any events match the filters.
+    pub fn exists(&self) -> bool {
+        !self.is_empty()
     }
 
     /// Returns the first matching event, if any.
@@ -158,6 +163,34 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
     /// Returns an iterator over references to matching events.
     pub(crate) fn iter(&self) -> impl Iterator<Item = &EventEntry<E, T>> {
         self.apply_filters().into_iter()
+    }
+
+    // ==================== Boolean Convenience Methods ====================
+
+    /// Returns true if any event matches the given matcher.
+    ///
+    /// Accepts anything that converts to `EventMatcher`: `&str` or `String`
+    /// (by label, requires `E: Label`), `EventId`, or `EventMatcher` directly.
+    pub fn has_event(&self, matcher: impl Into<EventMatcher<E, T>>) -> bool {
+        let matcher = matcher.into();
+        self.clone()
+            .matching(move |entry| matcher.matches(entry))
+            .exists()
+    }
+
+    /// Returns true if any matching event was sent by the given actor.
+    pub fn has_sender(&self, actor_id: &ActorId) -> bool {
+        self.clone().sent_by(actor_id).exists()
+    }
+
+    /// Returns true if any matching event was received by the given actor.
+    pub fn has_receiver(&self, actor_id: &ActorId) -> bool {
+        self.clone().received_by(actor_id).exists()
+    }
+
+    /// Returns true if any matching event satisfies the predicate.
+    pub fn has(&self, predicate: impl Fn(&EventEntry<E, T>) -> bool + 'static) -> bool {
+        self.clone().matching(predicate).exists()
     }
 
     // ==================== Filter Operations ====================
@@ -587,5 +620,90 @@ mod tests {
         assert_eq!(counts["Ping"], 2);
         assert_eq!(counts["Pong"], 1);
         assert_eq!(counts["Data"], 2);
+    }
+
+    // ==================== exists() ====================
+
+    #[test]
+    fn exists_returns_true_when_records_exist() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        assert!(query.exists());
+    }
+
+    #[test]
+    fn exists_returns_false_for_empty_records() {
+        let query: EventQuery<TestEvent, DefaultTopic> = EventQuery::new(Arc::new(vec![]));
+        assert!(!query.exists());
+    }
+
+    #[test]
+    fn exists_respects_filters() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors)).with_label("NonExistent");
+        assert!(!query.exists());
+    }
+
+    // ==================== has_event() ====================
+
+    #[test]
+    fn has_event_by_label() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        assert!(query.has_event("Ping"));
+        assert!(!query.has_event("NonExistent"));
+    }
+
+    #[test]
+    fn has_event_by_matcher() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        assert!(query.has_event(EventMatcher::by_event(|e| {
+            matches!(e, TestEvent::Data(42))
+        })));
+        assert!(!query.has_event(EventMatcher::by_event(|e| {
+            matches!(e, TestEvent::Data(999))
+        })));
+    }
+
+    #[test]
+    fn has_event_respects_existing_filters() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors)).sent_by(&actors.bob);
+        // Bob only sends Pong
+        assert!(query.has_event("Pong"));
+        assert!(!query.has_event("Ping"));
+    }
+
+    // ==================== has_sender() / has_receiver() / has() ====================
+
+    #[test]
+    fn has_sender_returns_true_for_matching_sender() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        assert!(query.has_sender(&actors.alice));
+        assert!(query.has_sender(&actors.bob));
+
+        let unknown = ActorId::new(Arc::from("unknown"));
+        assert!(!query.has_sender(&unknown));
+    }
+
+    #[test]
+    fn has_receiver_returns_true_for_matching_receiver() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        assert!(query.has_receiver(&actors.bob));
+        assert!(query.has_receiver(&actors.alice));
+
+        let unknown = ActorId::new(Arc::from("unknown"));
+        assert!(!query.has_receiver(&unknown));
+    }
+
+    #[test]
+    fn has_returns_true_for_matching_entry() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        assert!(query.has(|e| e.sender() == "charlie"));
+        assert!(!query.has(|e| e.sender() == "unknown"));
     }
 }

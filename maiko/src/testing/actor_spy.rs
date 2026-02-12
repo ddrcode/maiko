@@ -53,7 +53,7 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
     }
 
     /// Returns the count of distinct actors that sent events to this actor.
-    pub fn received_from_count(&self) -> usize {
+    pub fn sender_count(&self) -> usize {
         self.received_from().len()
     }
 
@@ -85,7 +85,7 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
     }
 
     /// Returns the count of distinct actors that received events from this actor.
-    pub fn sent_to_count(&self) -> usize {
+    pub fn receiver_count(&self) -> usize {
         self.sent_to().len()
     }
 }
@@ -196,10 +196,10 @@ mod tests {
     }
 
     #[test]
-    fn received_from_count_returns_unique_sender_count() {
+    fn sender_count_returns_unique_sender_count() {
         let actors = TestActors::new();
         let spy = ActorSpy::new(sample_records_with_actors(&actors), actors.alice);
-        assert_eq!(spy.received_from_count(), 2);
+        assert_eq!(spy.sender_count(), 2);
     }
 
     // ==================== Outbound Tests ====================
@@ -264,10 +264,10 @@ mod tests {
     }
 
     #[test]
-    fn sent_to_count_returns_unique_receiver_count() {
+    fn receiver_count_returns_unique_receiver_count() {
         let actors = TestActors::new();
         let spy = ActorSpy::new(sample_records_with_actors(&actors), actors.alice);
-        assert_eq!(spy.sent_to_count(), 2);
+        assert_eq!(spy.receiver_count(), 2);
     }
 
     #[test]
@@ -277,7 +277,7 @@ mod tests {
         let spy = ActorSpy::new(sample_records_with_actors(&actors), unknown);
         assert_eq!(spy.events_received(), 0);
         assert_eq!(spy.events_sent(), 0);
-        assert_eq!(spy.received_from_count(), 0);
-        assert_eq!(spy.sent_to_count(), 0);
+        assert_eq!(spy.sender_count(), 0);
+        assert_eq!(spy.receiver_count(), 0);
     }
 }

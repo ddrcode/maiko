@@ -12,8 +12,10 @@ maiko = { version = "0.2", features = ["test-harness"] }
 The test harness enables:
 - **Event recording** — capture all event deliveries during a test
 - **Event injection** — send events as if they came from specific actors
+- **Condition-based settling** — wait until specific events appear
 - **Spies** — inspect events from different perspectives (event, actor, topic)
 - **Queries** — filter and search recorded events
+- **Event chains** — trace event propagation through correlation IDs
 
 ## Basic Usage
 
@@ -21,17 +23,17 @@ The test harness enables:
 #[tokio::test]
 async fn test_event_flow() -> Result<()> {
     let mut sup = Supervisor::<MyEvent>::default();
-    let producer = sup.add_actor("producer", |ctx| Producer::new(ctx), &[DefaultTopic])?;
-    let consumer = sup.add_actor("consumer", |ctx| Consumer::new(ctx), &[DefaultTopic])?;
+    let producer = sup.add_actor("producer", |ctx| Producer::new(ctx), Subscribe::all())?;
+    let consumer = sup.add_actor("consumer", |ctx| Consumer::new(ctx), Subscribe::all())?;
 
     // Initialize harness BEFORE starting
     let mut test = Harness::new(&mut sup).await;
     sup.start().await?;
 
-    // Record events
-    test.start_recording().await;
+    // Record, send, settle
+    test.record().await;
     let id = test.send_as(&producer, MyEvent::Data(42)).await?;
-    test.stop_recording().await;
+    test.settle().await;
 
     // Assert on recorded events
     assert!(test.event(id).was_delivered_to(&consumer));
@@ -45,15 +47,15 @@ async fn test_event_flow() -> Result<()> {
 
 ```rust
 // Start recording events
-test.start_recording().await;
+test.record().await;
 
 // ... send events, run test scenario ...
 
-// Stop recording and capture snapshot
-test.stop_recording().await;
+// Settle (drain events until quiet, then freeze snapshot)
+test.settle().await;
 
 // Clear recorded events for next test phase
-test.reset().await;
+test.reset();
 ```
 
 ## Event Injection
@@ -68,27 +70,46 @@ The returned `event_id` can be used to inspect the event's delivery.
 
 ## Settling
 
-`stop_recording()` automatically calls `settle()` internally, so for most tests you don't need to call it explicitly:
+### settle() — silence-based
+
+Drains events until the system is quiet (no new events for 1ms, or 10ms total). Use for simple send-and-check tests:
 
 ```rust
-test.start_recording().await;
+test.record().await;
 test.send_as(&producer, MyEvent::Trigger).await?;
-test.stop_recording().await;  // Settles and captures snapshot
+test.settle().await;
 ```
 
-For cascading events (actor A triggers actor B triggers actor C), call `settle()` between sends to let each level propagate:
+### settle_on() — condition-based
+
+Waits until a predicate is satisfied. Returns `Error::SettleTimeout` if the condition isn't met within the timeout (default 1 second):
 
 ```rust
-test.settle().await;  // First cascade level
-test.settle().await;  // Second cascade level
+// Wait until 5 HidReport events are recorded
+test.settle_on(|events| events.with_label("HidReport").count() >= 5).await?;
+
+// With a custom timeout
+test.settle_on(|events| events.with_label("Pong").exists())
+    .within(Duration::from_secs(3))
+    .await?;
+
+// Filter chains with exists()
+test.settle_on(|events| events.sent_by(&alice).with_label("Ping").exists()).await?;
 ```
 
-For actors that continuously produce events, use `settle_with_timeout()`:
+### settle_on_event() — wait for a specific event
+
+Shorthand for the most common case — waiting for a specific event to appear:
 
 ```rust
-if !test.settle_with_timeout(Duration::from_millis(100)).await {
-    // Timeout elapsed, system may still have events in flight
-}
+// By label (requires Event: Label)
+test.settle_on_event("Pong").await?;
+
+// By matcher
+test.settle_on_event(EventMatcher::by_event(|e| matches!(e, MyEvent::Pong))).await?;
+
+// With timeout
+test.settle_on_event("Pong").within(Duration::from_secs(3)).await?;
 ```
 
 ## Spies
@@ -121,18 +142,18 @@ Inspect events from an actor's perspective:
 let spy = test.actor(&consumer);
 
 // Inbound (events received)
-spy.inbound()              // EventQuery of received events
-spy.events_received()      // number of events received
-spy.last_received()        // most recent received event
-spy.received_from()        // actors that sent events to this actor
-spy.received_from_count()  // count of distinct senders
+spy.inbound()          // EventQuery of received events
+spy.events_received()  // number of events received
+spy.last_received()    // most recent received event
+spy.received_from()    // actors that sent events to this actor
+spy.sender_count()     // count of distinct senders
 
 // Outbound (events sent)
-spy.outbound()             // EventQuery of sent events
-spy.events_sent()          // number of distinct events sent
-spy.last_sent()            // most recent sent event
-spy.sent_to()              // actors that received events from this actor
-spy.sent_to_count()        // count of distinct receivers
+spy.outbound()         // EventQuery of sent events
+spy.events_sent()      // number of distinct events sent
+spy.last_sent()        // most recent sent event
+spy.sent_to()          // actors that received events from this actor
+spy.receiver_count()   // count of distinct receivers
 ```
 
 ### TopicSpy
@@ -164,7 +185,7 @@ let orders = test.events()
     .matching_event(|e| matches!(e, MyEvent::Order(_)))
     .count();
 
-// Available filters
+// Filter operations (chainable, return Self)
 query.sent_by(&actor)           // events sent by actor
 query.received_by(&actor)       // events received by actor
 query.with_topic(topic)         // events on specific topic
@@ -173,19 +194,29 @@ query.correlated_with(id)       // events correlated to parent ID
 query.with_label("MyVariant")   // events with specific label (requires Label trait)
 query.matching_event(|e| ...)   // custom event predicate
 query.matching(|entry| ...)     // custom entry predicate (access to metadata)
+query.after(&entry)             // events after a given event (by timestamp)
+query.before(&entry)            // events before a given event (by timestamp)
 
-// Accessors
+// Terminal operations
 query.count()           // number of matching events
 query.is_empty()        // true if no matches
+query.exists()          // true if any matches
 query.first()           // first matching event
 query.last()            // last matching event
 query.nth(n)            // nth matching event
-query.iter()            // iterator over matches
 query.collect()         // unique events (deduplicated by event ID)
 query.all_deliveries()  // all delivery records (including duplicates)
 query.senders()         // unique sender actor IDs
 query.receivers()       // unique receiver actor IDs
 query.count_by_label()  // HashMap<String, usize> of event counts per label
+query.all(|entry| ...)  // true if all matching events satisfy predicate
+query.any(|entry| ...)  // true if any matching event satisfies predicate
+
+// Boolean convenience methods
+query.has_event("Ping")         // true if any event matches (by label, ID, or matcher)
+query.has_sender(&actor)        // true if any event was sent by actor
+query.has_receiver(&actor)      // true if any event was received by actor
+query.has(|entry| ...)          // true if any event satisfies predicate
 ```
 
 Queries can be chained from spies:
@@ -196,6 +227,22 @@ let events = test.actor(&normalizer)
     .outbound()
     .received_by(&trader)
     .count();
+```
+
+## EventMatcher
+
+`EventMatcher` identifies a single event by criteria. Used with `settle_on_event()`, `has_event()`, and chain queries:
+
+```rust
+// Factory methods
+EventMatcher::by_label("KeyPress")                              // by label
+EventMatcher::by_id(event_id)                                   // by event ID
+EventMatcher::by_event(|e| matches!(e, MyEvent::KeyPress(_)))   // by event payload
+EventMatcher::by_entry(|entry| entry.sender() == "scanner")     // by entry (full metadata)
+
+// Into<EventMatcher> conversions (used automatically)
+"KeyPress"    // &str → label matcher (requires E: Label)
+event_id      // EventId → id matcher
 ```
 
 ## Event Chains
@@ -306,25 +353,19 @@ let count = test.event_count();
 async fn test_order_processing_pipeline() -> Result<()> {
     let mut sup = Supervisor::<OrderEvent, OrderTopic>::default();
 
-    let gateway = sup.add_actor("gateway", |ctx| Gateway::new(ctx), &[OrderTopic::Incoming])?;
-    let validator = sup.add_actor("validator", |ctx| Validator::new(ctx), &[OrderTopic::Incoming])?;
-    let processor = sup.add_actor("processor", |ctx| Processor::new(ctx), &[OrderTopic::Validated])?;
-    let notifier = sup.add_actor("notifier", |ctx| Notifier::new(ctx), &[OrderTopic::Processed])?;
+    let gateway = sup.add_actor("gateway", |ctx| Gateway::new(ctx), Subscribe::to(&[OrderTopic::Incoming]))?;
+    let validator = sup.add_actor("validator", |ctx| Validator::new(ctx), Subscribe::to(&[OrderTopic::Incoming]))?;
+    let processor = sup.add_actor("processor", |ctx| Processor::new(ctx), Subscribe::to(&[OrderTopic::Validated]))?;
+    let notifier = sup.add_actor("notifier", |ctx| Notifier::new(ctx), Subscribe::to(&[OrderTopic::Processed]))?;
 
     let mut test = Harness::new(&mut sup).await;
     sup.start().await?;
 
-    test.start_recording().await;
-
-    // Inject order at gateway
+    test.record().await;
     test.send_as(&gateway, OrderEvent::NewOrder(order)).await?;
 
-    // Wait for full cascade: gateway -> validator -> processor -> notifier
-    test.settle().await;
-    test.settle().await;
-    test.settle().await;
-
-    test.stop_recording().await;
+    // Wait for the notifier to receive the processed order
+    test.settle_on(|events| events.received_by(&notifier).exists()).await?;
 
     // Verify pipeline
     assert_eq!(1, test.actor(&validator).events_received());
@@ -346,7 +387,7 @@ See [`examples/arbitrage.rs`](../maiko/examples/arbitrage.rs) for a comprehensiv
 
 ## Limitations
 
-- **Async timing**: `settle()` waits for actors to receive events, but not necessarily for them to finish processing. For long-running handlers, you may need additional synchronization.
+- **Async timing**: `settle()` waits for actors to receive events, but not necessarily for them to finish processing. For long-running handlers, use `settle_on()` with a condition that checks for expected output.
 - **Recording overhead**: When the test harness is enabled, there's minimal overhead even when not actively recording.
 - **Single supervisor**: The harness is tied to a single supervisor instance.
 
@@ -389,12 +430,4 @@ pub const DEFAULT_MAX_SETTLE: Duration = Duration::from_millis(10);
 - **Settle window** (1ms): Returns when no events arrive for this duration
 - **Max settle** (10ms): Maximum time to wait, even if events keep arriving
 
-For chatty actors that continuously produce events, the max settle prevents infinite waiting. Adjust with `settle_with_timeout()`:
-
-```rust
-// Longer settle for slow systems
-test.settle_with_timeout(Duration::from_millis(5), Duration::from_millis(50)).await;
-
-// Shorter settle for chatty actors
-test.settle_with_timeout(Duration::from_millis(1), Duration::from_millis(5)).await;
-```
+For condition-based settling, use `settle_on()` which defaults to a 1-second timeout, overridable with `.within()`.
