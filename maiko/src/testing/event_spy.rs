@@ -40,7 +40,7 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     }
 
     /// Returns the number of actors that received this event.
-    pub fn receivers_count(&self) -> usize {
+    pub fn receiver_count(&self) -> usize {
         self.receivers().len()
     }
 
@@ -187,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn receivers_count_returns_unique_receiver_count() {
+    fn receiver_count_returns_unique_receiver_count() {
         let alice = ActorId::new(Arc::from("alice"));
         let bob = ActorId::new(Arc::from("bob"));
         let charlie = ActorId::new(Arc::from("charlie"));
@@ -199,7 +199,7 @@ mod tests {
         let records = Arc::new(vec![entry1, entry2]);
 
         let spy = EventSpy::new(records, id);
-        assert_eq!(spy.receivers_count(), 2);
+        assert_eq!(spy.receiver_count(), 2);
     }
 
     #[test]

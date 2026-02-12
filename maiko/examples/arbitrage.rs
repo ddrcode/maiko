@@ -267,7 +267,7 @@ async fn main() -> maiko::Result {
         event_spy.was_delivered_to_all(&[&normalizer, &telemetry]),
         "Should reach both Normalizer and Telemetry"
     );
-    assert_eq!(2, event_spy.receivers_count(), "Should have 2 receivers");
+    assert_eq!(2, event_spy.receiver_count(), "Should have 2 receivers");
 
     println!("  AlphaTick delivered to: {:?}", event_spy.receivers());
     println!(

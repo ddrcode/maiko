@@ -130,7 +130,7 @@ spy.was_delivered_to_all(&[&a, &b])  // true if delivered to all listed actors
 spy.delivery_ratio(&[&a, &b, &c])   // fraction of listed actors that received it
 spy.sender()                     // name of sending actor
 spy.receivers()                  // list of receiving actors
-spy.receivers_count()            // number of receivers
+spy.receiver_count()            // number of receivers
 spy.children()                   // query for correlated child events
 ```
 
@@ -166,7 +166,7 @@ let spy = test.topic(MyTopic::Data);
 spy.was_published()    // true if any events on this topic
 spy.event_count()      // number of event deliveries
 spy.receivers()        // actors that received events on this topic
-spy.receivers_count()  // count of distinct receivers
+spy.receiver_count()  // count of distinct receivers
 spy.events()           // EventQuery for further filtering
 ```
 

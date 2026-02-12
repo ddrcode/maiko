@@ -136,6 +136,16 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
             .collect()
     }
 
+    /// Returns the number of distinct senders of matching events.
+    pub fn sender_count(&self) -> usize {
+        self.senders().len()
+    }
+
+    /// Returns the number of distinct receivers of matching events.
+    pub fn receiver_count(&self) -> usize {
+        self.receivers().len()
+    }
+
     /// Returns a count of matching events grouped by label.
     pub fn count_by_label(&self) -> HashMap<String, usize>
     where
@@ -620,6 +630,36 @@ mod tests {
         assert_eq!(counts["Ping"], 2);
         assert_eq!(counts["Pong"], 1);
         assert_eq!(counts["Data"], 2);
+    }
+
+    // ==================== sender_count() / receiver_count() ====================
+
+    #[test]
+    fn sender_count_returns_unique_sender_count() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        assert_eq!(query.sender_count(), 3); // alice, bob, charlie
+    }
+
+    #[test]
+    fn receiver_count_returns_unique_receiver_count() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors));
+        assert_eq!(query.receiver_count(), 3); // alice, bob, charlie
+    }
+
+    #[test]
+    fn sender_count_respects_filters() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors)).received_by(&actors.alice);
+        assert_eq!(query.sender_count(), 2); // bob and charlie send to alice
+    }
+
+    #[test]
+    fn receiver_count_respects_filters() {
+        let actors = TestActors::new();
+        let query = EventQuery::new(sample_records_with_actors(&actors)).sent_by(&actors.alice);
+        assert_eq!(query.receiver_count(), 2); // alice sends to bob and charlie
     }
 
     // ==================== exists() ====================

@@ -1,35 +1,34 @@
-# 0.2.3 Unreleased
+# [0.2.3](https://github.com/ddrcode/maiko/compare/v0.2.2...v0.2.3) (February 12th, 2026)
 
-**Contains Breaking changes** (in the test harness only)
+**Contains Breaking changes** (in test harness only)
 
 ### Added
 
-- `Label` trait and derive macro
-- `to_mermaid` method in `Supervisor`
-- `EventChain` in test harness for correlation tracking
-- `ActorTrace` and `EventTrace` views on `EventChain` with `exact()`, `segment()`, and `passes_through()` methods
-- `EventQuery.senders()`, `.receivers()`, `.count_by_label()`
-- `EventQuery.all_deliveries()` (returns all delivery records including duplicates)
-- `EventQuery.exists()`, `.has_event()`, `.has_sender()`, `.has_receiver()`, `.has()` boolean convenience methods
+- `Label` trait and derive macro ([#56])
+- `to_mermaid` method in `Supervisor` ([#56])
+- `to_json` method in `Supervisor` ([#59])
+- `EventChain` in test harness for correlation tracking ([#62])
+- `ActorTrace` and `EventTrace` views on `EventChain` with `exact()`, `segment()`, and `passes_through()` methods ([#62])
+- `EventQuery` - multiple new methods ([#66])
 - `EventSpy.not_delivered_to()`, `.was_delivered_to_all()`, `.delivery_ratio()`
-- `EventTrace.exact()` for full-sequence matching
-- `EventTrace.path_count()` and `ActorTrace.path_count()` for counting distinct paths
-- `Harness.settle_on()` — condition-based settling with `Expectation` builder and `.within()` timeout
-- `Harness.settle_on_event()` — shorthand for waiting on a specific event (by label, ID, or matcher)
+- `Harness.settle_on()` — condition-based settling with `Expectation` builder and `.within()` timeout ([#66])
 - `Error::SettleTimeout` variant (cfg-gated behind `test-harness`)
 
 ### Changed
 
-- **Breaking:** `EventRecords` now uses `Arc<Vec<EventEntry>>` internally (zero-copy sharing across spies/queries)
-- **Breaking:** `ActorSpy.inbound_count()` renamed to `events_received()`, `outbound_count()` renamed to `events_sent()`
-- **Breaking:** `ActorSpy.received_from_count()` renamed to `sender_count()`, `.sent_to_count()` renamed to `receiver_count()`
-- **Breaking:** `EventQuery.collect()` now returns unique events (deduplicated by ID); old behavior available via `all_deliveries()`
-- **Breaking:** `EventMatcher` factory methods renamed: `label()` → `by_label()`, `id()` → `by_id()`, `matching()` → `by_entry()`, `matching_event()` → `by_event()`
-- **Breaking:** `Harness.start_recording()` renamed to `record()`, `stop_recording()` renamed to `settle()`
-- `EventTrace` methods (`exact`, `segment`, `passes_through`) now operate per-path instead of on a flat list, correctly handling branching chains
-- `to_mermaid()` on `EventChain` now shows all deliveries including fan-out
-- `to_string_tree()` on `EventChain` now shows all receivers per event
-- Deterministic sibling ordering in `EventChain` (sorted by timestamp)
+- Broker logic to drop events rather than fail on overflow
+- **Breaking:** `EventRecords` now uses `Arc<Vec<EventEntry>>` internally (zero-copy sharing across spies/queries) ([#62])
+- **Breaking:** `ActorSpy` and `EventSpy` - polished API with some methods renamed ([#62], [#66])
+- **Breaking:** `EventQuery.collect()` now returns unique events (deduplicated by ID); old behavior available via `all_deliveries()` ([#62])
+
+### Removed
+
+- **Breaking:** `Harness.start_recording()`, `stop_recording()`, `settle_with_timeout()` removed (use `record()`, `settle()`, `settle_on()` instead) ([#66])
+
+[#56]: https://github.com/ddrcode/maiko/pull/56
+[#59]: https://github.com/ddrcode/maiko/pull/59
+[#62]: https://github.com/ddrcode/maiko/pull/62
+[#66]: https://github.com/ddrcode/maiko/pull/66
 
 ---
 

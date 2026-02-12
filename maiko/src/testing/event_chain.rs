@@ -36,9 +36,9 @@ use super::{ActorTrace, EventEntry, EventMatcher, EventRecords, EventTrace};
 pub struct EventChain<E: Event, T: Topic<E>> {
     root_id: EventId,
     records: EventRecords<E, T>,
-    /// All event IDs in this chain (root + all descendants)
+    /// All event IDs in this chain (root and all descendants)
     chain_ids: HashSet<EventId>,
-    /// Parent -> Children mapping
+    /// Parent-to-children mapping
     children_map: HashMap<EventId, Vec<EventId>>,
 }
 
@@ -245,7 +245,7 @@ impl<E: Event, T: Topic<E>> EventChain<E, T> {
     ///
     /// Each path is a sequence of event entries following the correlation tree.
     /// One representative entry per event (fan-out to multiple receivers does not
-    /// create separate event paths — only distinct child events do).
+    /// create separate event paths - only distinct child events do).
     pub(super) fn event_paths(&self) -> Vec<Vec<&EventEntry<E, T>>> {
         let mut paths = Vec::new();
 
@@ -519,7 +519,7 @@ mod tests {
         )
     }
 
-    /// Build a branching chain: Start -> [Process, Branch]
+    /// Build a branching chain: Start dispatches to Process and Branch
     fn build_branching_chain() -> (EventRecords<TestEvent, DefaultTopic>, EventId) {
         let alice = actor("alice");
         let bob = actor("bob");

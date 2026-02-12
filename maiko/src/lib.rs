@@ -76,11 +76,11 @@
 //!
 //! ## Features
 //!
-//! - **`macros`** (default) — `#[derive(Event)]`, `#[derive(Label)]`, and `#[derive(SelfRouting)]` macros
-//! - **`monitoring`** — Event lifecycle hooks for debugging, metrics, and logging
-//! - **`test-harness`** — Test utilities for recording, spying, and asserting on event flow (enables `monitoring`)
-//! - **`serde`** — JSON serialization support (e.g. `Supervisor::to_json()`)
-//! - **`recorder`** — Built-in `Recorder` monitor for writing events to JSON Lines files (enables `monitoring` + `serde`)
+//! - **`macros`** (default) - `#[derive(Event)]`, `#[derive(Label)]`, and `#[derive(SelfRouting)]` macros
+//! - **`monitoring`** - Event lifecycle hooks for debugging, metrics, and logging
+//! - **`test-harness`** - Test utilities for recording, spying, and asserting on event flow (enables `monitoring`)
+//! - **`serde`** - JSON serialization support (e.g. `Supervisor::to_json()`)
+//! - **`recorder`** - Built-in `Recorder` monitor for writing events to JSON Lines files (enables `monitoring` and `serde`)
 //!
 //! ## Examples
 //!

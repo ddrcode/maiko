@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use tokio::{select, sync::mpsc::Receiver};
+use tokio::{
+    select,
+    sync::mpsc::{Receiver, error::TrySendError},
+};
 use tokio_util::sync::CancellationToken;
 
 use super::Subscriber;
@@ -44,7 +47,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(())
     }
 
-    fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<()> {
+    fn send_event(&mut self, e: &Arc<Envelope<E>>) {
         let topic = T::from_event(e.event());
 
         #[cfg(feature = "monitoring")]
@@ -58,28 +61,37 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             (active, t)
         };
 
-        self.subscribers
+        for subscriber in self
+            .subscribers
             .iter()
             .filter(|s| s.topics.contains(&topic))
             .filter(|s| !s.sender.is_closed())
             .filter(|s| s.actor_id != *e.meta().actor_id())
-            .try_for_each(|subscriber| {
-                let res = subscriber.sender.try_send(e.clone());
-
-                #[cfg(feature = "monitoring")]
-                if is_recording {
-                    if let Some(topic_for_monitor) = &topic_for_monitor {
-                        self.monitoring.send(MonitoringEvent::EventDispatched(
-                            e.clone(),
-                            topic_for_monitor.clone(),
-                            subscriber.actor_id.clone(),
-                        ));
+        {
+            match subscriber.sender.try_send(e.clone()) {
+                Ok(_) =>
+                {
+                    #[cfg(feature = "monitoring")]
+                    if is_recording {
+                        if let Some(topic_for_monitor) = &topic_for_monitor {
+                            self.monitoring.send(MonitoringEvent::EventDispatched(
+                                e.clone(),
+                                topic_for_monitor.clone(),
+                                subscriber.actor_id.clone(),
+                            ));
+                        }
                     }
                 }
-
-                res
-            })?;
-        Ok(())
+                Err(TrySendError::Full(_)) => {
+                    // Channel is full, skip this subscriber for now
+                    tracing::warn!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "subscriber channel full, dropping event");
+                }
+                Err(TrySendError::Closed(_)) => {
+                    // Channel is closed, will be cleaned up in the next maintenance cycle
+                    tracing::warn!(actor=%subscriber.actor_id.name(), "subscriber channel closed, will be removed in cleanup");
+                }
+            }
+        }
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -88,7 +100,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
-                    self.send_event(&e)?;
+                    self.send_event(&e);
                 },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
@@ -109,7 +121,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         // Send messages that were in the queue at the time of shutdown
         for _ in 0..self.receiver.len() {
             if let Ok(e) = self.receiver.try_recv() {
-                let _ = self.send_event(&e); // Best effort
+                self.send_event(&e); // Best effort
             } else {
                 break; // Queue drained faster than expected
             }

@@ -1,8 +1,10 @@
-# 0.2.3 Unreleased
+# [0.2.3](https://github.com/ddrcode/maiko/compare/v0.2.2...v0.2.3) (February 12th, 2026)
 
 ### Added
 
-- `Label` derive macro
+- `Label` derive macro ([#56])
+
+[#56]: https://github.com/ddrcode/maiko/pull/56
 
 ---
 # [0.2.2](https://github.com/ddrcode/maiko/compare/v0.2.1...v0.2.2) (February 4th, 2026)
