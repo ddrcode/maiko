@@ -10,15 +10,22 @@
 - `ActorTrace` and `EventTrace` views on `EventChain` with `exact()`, `segment()`, and `passes_through()` methods
 - `EventQuery.senders()`, `.receivers()`, `.count_by_label()`
 - `EventQuery.all_deliveries()` (returns all delivery records including duplicates)
+- `EventQuery.exists()`, `.has_event()`, `.has_sender()`, `.has_receiver()`, `.has()` boolean convenience methods
 - `EventSpy.not_delivered_to()`, `.was_delivered_to_all()`, `.delivery_ratio()`
 - `EventTrace.exact()` for full-sequence matching
 - `EventTrace.path_count()` and `ActorTrace.path_count()` for counting distinct paths
+- `Harness.settle_on()` — condition-based settling with `Expectation` builder and `.within()` timeout
+- `Harness.settle_on_event()` — shorthand for waiting on a specific event (by label, ID, or matcher)
+- `Error::SettleTimeout` variant (cfg-gated behind `test-harness`)
 
 ### Changed
 
 - **Breaking:** `EventRecords` now uses `Arc<Vec<EventEntry>>` internally (zero-copy sharing across spies/queries)
 - **Breaking:** `ActorSpy.inbound_count()` renamed to `events_received()`, `outbound_count()` renamed to `events_sent()`
+- **Breaking:** `ActorSpy.received_from_count()` renamed to `sender_count()`, `.sent_to_count()` renamed to `receiver_count()`
 - **Breaking:** `EventQuery.collect()` now returns unique events (deduplicated by ID); old behavior available via `all_deliveries()`
+- **Breaking:** `EventMatcher` factory methods renamed: `label()` → `by_label()`, `id()` → `by_id()`, `matching()` → `by_entry()`, `matching_event()` → `by_event()`
+- **Breaking:** `Harness.start_recording()` renamed to `record()`, `stop_recording()` renamed to `settle()`
 - `EventTrace` methods (`exact`, `segment`, `passes_through`) now operate per-path instead of on a flat list, correctly handling branching chains
 - `to_mermaid()` on `EventChain` now shows all deliveries including fan-out
 - `to_string_tree()` on `EventChain` now shows all receivers per event

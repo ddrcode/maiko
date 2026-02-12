@@ -22,13 +22,16 @@ type MatchFn<E, T> = Rc<dyn Fn(&EventEntry<E, T>) -> bool>;
 /// use maiko::testing::EventMatcher;
 ///
 /// // Match by label (requires Event: Label)
-/// let matcher = EventMatcher::label("KeyPress");
+/// let matcher = EventMatcher::by_label("KeyPress");
 ///
 /// // Match by ID
-/// let matcher = EventMatcher::id(event_id);
+/// let matcher = EventMatcher::by_id(event_id);
 ///
-/// // Match by predicate
-/// let matcher = EventMatcher::matching(|e| matches!(e.payload(), MyEvent::KeyPress(_)));
+/// // Match by event payload predicate
+/// let matcher = EventMatcher::by_event(|e| matches!(e, MyEvent::KeyPress(_)));
+///
+/// // Match by entry predicate (full access to metadata)
+/// let matcher = EventMatcher::by_entry(|e| e.sender() == "scanner");
 /// ```
 pub struct EventMatcher<E: Event, T: Topic<E>> {
     matcher: MatchFn<E, T>,
@@ -36,14 +39,14 @@ pub struct EventMatcher<E: Event, T: Topic<E>> {
 
 impl<E: Event, T: Topic<E>> EventMatcher<E, T> {
     /// Match events by their unique ID.
-    pub fn id(id: EventId) -> Self {
+    pub fn by_id(id: EventId) -> Self {
         Self {
             matcher: Rc::new(move |entry| entry.id() == id),
         }
     }
 
     /// Match events using a custom predicate on the event entry.
-    pub fn matching<F>(predicate: F) -> Self
+    pub fn by_entry<F>(predicate: F) -> Self
     where
         F: Fn(&EventEntry<E, T>) -> bool + 'static,
     {
@@ -53,7 +56,7 @@ impl<E: Event, T: Topic<E>> EventMatcher<E, T> {
     }
 
     /// Match events using a custom predicate on the event payload.
-    pub fn matching_event<F>(predicate: F) -> Self
+    pub fn by_event<F>(predicate: F) -> Self
     where
         F: Fn(&E) -> bool + 'static,
     {
@@ -72,7 +75,7 @@ impl<E: Event + Label, T: Topic<E>> EventMatcher<E, T> {
     /// Match events by their label (variant name for enums).
     ///
     /// Requires the event type to implement `Label`.
-    pub fn label(name: impl Into<Cow<'static, str>>) -> Self {
+    pub fn by_label(name: impl Into<Cow<'static, str>>) -> Self {
         let name: Cow<'static, str> = name.into();
         Self {
             matcher: Rc::new(move |entry| entry.payload().label() == name),
@@ -83,21 +86,21 @@ impl<E: Event + Label, T: Topic<E>> EventMatcher<E, T> {
 // Allow &str to be used directly as a label matcher
 impl<E: Event + Label, T: Topic<E>> From<&'static str> for EventMatcher<E, T> {
     fn from(label: &'static str) -> Self {
-        EventMatcher::label(label)
+        EventMatcher::by_label(label)
     }
 }
 
 // Allow String to be used as a label matcher
 impl<E: Event + Label, T: Topic<E>> From<String> for EventMatcher<E, T> {
     fn from(label: String) -> Self {
-        EventMatcher::label(label)
+        EventMatcher::by_label(label)
     }
 }
 
 // Allow EventId to be used directly as an id matcher
 impl<E: Event, T: Topic<E>> From<EventId> for EventMatcher<E, T> {
     fn from(id: EventId) -> Self {
-        EventMatcher::id(id)
+        EventMatcher::by_id(id)
     }
 }
 
@@ -135,10 +138,10 @@ mod tests {
     #[test]
     fn label_matcher_matches_by_name() {
         let entry = make_entry(TestEvent::Ping);
-        let matcher: EventMatcher<TestEvent, DefaultTopic> = EventMatcher::label("Ping");
+        let matcher: EventMatcher<TestEvent, DefaultTopic> = EventMatcher::by_label("Ping");
         assert!(matcher.matches(&entry));
 
-        let matcher: EventMatcher<TestEvent, DefaultTopic> = EventMatcher::label("Pong");
+        let matcher: EventMatcher<TestEvent, DefaultTopic> = EventMatcher::by_label("Pong");
         assert!(!matcher.matches(&entry));
     }
 
@@ -147,10 +150,10 @@ mod tests {
         let entry = make_entry(TestEvent::Ping);
         let id = entry.id();
 
-        let matcher = EventMatcher::id(id);
+        let matcher = EventMatcher::by_id(id);
         assert!(matcher.matches(&entry));
 
-        let matcher = EventMatcher::id(999999);
+        let matcher = EventMatcher::by_id(999999);
         assert!(!matcher.matches(&entry));
     }
 
@@ -158,10 +161,10 @@ mod tests {
     fn matching_event_uses_predicate() {
         let entry = make_entry(TestEvent::Ping);
 
-        let matcher = EventMatcher::matching_event(|e| matches!(e, TestEvent::Ping));
+        let matcher = EventMatcher::by_event(|e| matches!(e, TestEvent::Ping));
         assert!(matcher.matches(&entry));
 
-        let matcher = EventMatcher::matching_event(|e| matches!(e, TestEvent::Pong));
+        let matcher = EventMatcher::by_event(|e| matches!(e, TestEvent::Pong));
         assert!(!matcher.matches(&entry));
     }
 

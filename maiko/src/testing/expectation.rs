@@ -136,7 +136,10 @@ where
 mod tests {
     use std::time::Duration;
 
-    use crate::{Actor, Envelope, Event, Label, Subscribe, Supervisor, testing::Harness};
+    use crate::{
+        Actor, Envelope, Event, Label, Subscribe, Supervisor,
+        testing::{EventMatcher, Harness},
+    };
     use std::borrow::Cow;
 
     #[derive(Clone, Debug)]
@@ -181,9 +184,7 @@ mod tests {
         let echo = sup
             .add_actor("echo", |ctx| Echo { ctx }, Subscribe::all())
             .unwrap();
-        let sink = sup
-            .add_actor("sink", |_| Sink, Subscribe::all())
-            .unwrap();
+        let sink = sup.add_actor("sink", |_| Sink, Subscribe::all()).unwrap();
         (sup, echo, sink)
     }
 
@@ -197,9 +198,9 @@ mod tests {
         // The built-in drain lets the event propagate before checking.
         test.record().await;
         test.send_as(&sink, TestEvent::Ping).await.unwrap();
-        test.settle_on(|events| events.count() >= 1).await.unwrap();
+        test.settle_on(|events| events.exists()).await.unwrap();
 
-        assert!(test.events().count() >= 1);
+        assert!(test.events().exists());
         sup.stop().await.unwrap();
     }
 
@@ -219,10 +220,12 @@ mod tests {
         }
 
         // Wait until we see all 6 deliveries (3 Ping→echo + 3 Pong→sink)
-        test.settle_on(|events| events.count() >= 6)
+        test.settle_on(|events| events.with_label("Pong").count() >= 3)
             .await
             .unwrap();
 
+        assert!(test.events().has_event("Ping"));
+        assert!(test.events().has_event("Pong"));
         assert_eq!(test.events().with_label("Ping").count(), 3);
         assert_eq!(test.events().with_label("Pong").count(), 3);
         sup.stop().await.unwrap();
@@ -294,6 +297,60 @@ mod tests {
             elapsed
         );
 
+        sup.stop().await.unwrap();
+    }
+
+    // ==================== settle_on_event ====================
+
+    #[tokio::test]
+    async fn settle_on_event_by_label() {
+        let (mut sup, _echo, sink) = setup().await;
+        let mut test = Harness::new(&mut sup).await;
+        sup.start().await.unwrap();
+
+        test.record().await;
+        // sink sends Ping → echo receives it → echo sends Pong
+        test.send_as(&sink, TestEvent::Ping).await.unwrap();
+        test.settle_on_event("Pong").await.unwrap();
+
+        assert!(test.events().has_event("Pong"));
+        sup.stop().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn settle_on_event_with_timeout() {
+        let (mut sup, _echo, _sink) = setup().await;
+        let mut test = Harness::new(&mut sup).await;
+        sup.start().await.unwrap();
+
+        test.record().await;
+        // No events sent — condition will never be met
+        let result = test
+            .settle_on_event("Pong")
+            .within(Duration::from_millis(50))
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::Error::SettleTimeout(_, _)
+        ));
+        sup.stop().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn settle_on_event_by_matcher() {
+        let (mut sup, _echo, sink) = setup().await;
+        let mut test = Harness::new(&mut sup).await;
+        sup.start().await.unwrap();
+
+        test.record().await;
+        test.send_as(&sink, TestEvent::Ping).await.unwrap();
+        test.settle_on_event(EventMatcher::by_event(|e| matches!(e, TestEvent::Pong)))
+            .await
+            .unwrap();
+
+        assert!(test.events().with_label("Pong").exists());
         sup.stop().await.unwrap();
     }
 }

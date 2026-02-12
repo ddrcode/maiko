@@ -9,8 +9,8 @@ use crate::{
     ActorId, Envelope, Event, EventId, Supervisor, Topic,
     monitoring::MonitorHandle,
     testing::{
-        ActorSpy, EventChain, EventCollector, EventEntry, EventQuery, EventRecords, EventSpy,
-        TopicSpy, expectation::Expectation,
+        ActorSpy, EventChain, EventCollector, EventEntry, EventMatcher, EventQuery, EventRecords,
+        EventSpy, TopicSpy, expectation::Expectation,
     },
 };
 
@@ -130,6 +130,36 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         Expectation::new(self, condition)
     }
 
+    /// Wait for a specific event to appear.
+    ///
+    /// Accepts anything that converts to `EventMatcher`: `&str` or `String`
+    /// (by label, requires `E: Label`), `EventId`, or `EventMatcher` directly.
+    /// Returns an `Expectation` so `.within()` and `.await` chain as usual.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // By label
+    /// test.settle_on_event("Pong").await?;
+    ///
+    /// // By matcher
+    /// test.settle_on_event(EventMatcher::by_event(|e| matches!(e, MyEvent::Pong)))
+    ///     .await?;
+    ///
+    /// // With timeout
+    /// test.settle_on_event("Pong").within(Duration::from_secs(3)).await?;
+    /// ```
+    pub fn settle_on_event<M>(
+        &mut self,
+        matcher: M,
+    ) -> Expectation<'_, E, T, impl Fn(EventQuery<E, T>) -> bool>
+    where
+        M: Into<EventMatcher<E, T>>,
+    {
+        let matcher = matcher.into();
+        self.settle_on(move |events| events.any(|entry| matcher.matches(entry)))
+    }
+
     /// Clears all recorded events, resetting the harness for the next test phase.
     pub fn reset(&mut self) {
         self.snapshot.clear();
@@ -156,7 +186,11 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
 
     /// Drain events until the system is quiet (no new events within `settle_window`)
     /// or until `max_settle` total time has elapsed.
-    pub(super) async fn drain_until_quiet(&mut self, settle_window: Duration, max_settle: Duration) {
+    pub(super) async fn drain_until_quiet(
+        &mut self,
+        settle_window: Duration,
+        max_settle: Duration,
+    ) {
         let deadline = Instant::now() + max_settle;
 
         loop {

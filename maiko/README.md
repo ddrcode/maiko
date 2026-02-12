@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Lightweight actor framework for Tokio**
+**Structure your Tokio app as actors, not channels and spawns**
 
 [![Crates.io](https://img.shields.io/crates/v/maiko.svg)](https://crates.io/crates/maiko)
 [![Documentation](https://docs.rs/maiko/badge.svg)](https://docs.rs/maiko)
@@ -14,15 +14,11 @@
 
 ## What is Maiko?
 
-**Maiko** is an [actor framework](https://en.wikipedia.org/wiki/Actor_model) for Tokio. Structure your application as independent components (actors) - each with its own state, logic, and lifecycle - communicating purely through events.
+**Maiko** lets you build concurrent Tokio applications without a single `spawn` or manual channel. Declare actors, declare subscriptions, and Maiko handles the routing. It is a topology-aware event router with actor lifecycle management for [Tokio](https://tokio.rs/).
 
-Each actor:
-- Runs in its own async task
-- Maintains private state (no shared memory, no locks)
-- Receives events through a dedicated channel
-- Publishes events without knowing who receives them
+Actors are named components with their own state and lifecycle. They communicate through events routed by topic, without knowing who's listening. Think Kafka-style pub/sub, but embedded in your Tokio application.
 
-Actors subscribe to topics, publish events, and Maiko routes automatically. Publishers don't need to know who's listening - think Kafka-style pub/sub, but for Tokio tasks instead of distributed systems.
+Maiko comes with a built-in [test harness](docs/testing.md) for asserting on event flow, correlation tracking for tracing event propagation, and monitoring hooks for observability — all without external infrastructure.
 
 ### No more channel spaghetti
 
@@ -45,13 +41,17 @@ sup.add_actor("logger",    |ctx| Logger::new(ctx),    Subscribe::all())?;       
 
 ### How it compares
 
-| | Maiko | Actix/Ractor | Kafka |
-|---|-------|--------------|-------|
-| Routing | Topic-based pub/sub | Direct addressing | Topic-based pub/sub |
-| Coupling | Loose (actors don't know each other) | Tight (need actor addresses) | Loose |
-| Communication | Events | Request-response | Events |
-| Scope | In-process | In-process | Distributed |
+| | Maiko | Raw Tokio | Actix/Ractor | Kafka |
+|---|-------|-----------|--------------|-------|
+| Routing | Topic-based pub/sub | Manual channels | Direct addressing | Topic-based pub/sub |
+| Coupling | Loose (actors don't know each other) | Explicit wiring | Tight (need actor addresses) | Loose |
+| Communication | Events | Channels | Request-response | Events |
+| Lifecycle | Managed (start, stop, hooks) | Manual spawns | Managed | Managed |
+| Testing | Built-in harness, spies, event chains | Roll your own | None built-in | External tools |
+| Correlation | First-class (correlation IDs, chain tracing) | Manual | Manual | Headers |
+| Scope | In-process | In-process | In-process | Distributed |
 
+Maiko sits between raw Tokio and full actor frameworks. Think of it as moving from breadboard to PCB — same components, reliable traces, testable as a whole.
 
 ### Where it fits
 
