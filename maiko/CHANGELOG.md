@@ -16,7 +16,7 @@
 
 ### Changed
 
-- Broker logic to drop events rather than fail on overflow
+- Broker logic to drop events rather than fail on overflow ([#67])
 - **Breaking:** `EventRecords` now uses `Arc<Vec<EventEntry>>` internally (zero-copy sharing across spies/queries) ([#62])
 - **Breaking:** `ActorSpy` and `EventSpy` - polished API with some methods renamed ([#62], [#66])
 - **Breaking:** `EventQuery.collect()` now returns unique events (deduplicated by ID); old behavior available via `all_deliveries()` ([#62])
@@ -29,6 +29,7 @@
 [#59]: https://github.com/ddrcode/maiko/pull/59
 [#62]: https://github.com/ddrcode/maiko/pull/62
 [#66]: https://github.com/ddrcode/maiko/pull/66
+[#67]: https://github.com/ddrcode/maiko/pull/67
 
 ---
 
