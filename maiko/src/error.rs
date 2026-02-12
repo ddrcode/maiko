@@ -29,6 +29,10 @@ pub enum Error {
 
     #[error("IO Error: {0}")]
     IOError(#[from] std::io::Error),
+
+    #[cfg(feature = "test-harness")]
+    #[error("settle_on condition not met within {0:?}: {1} events recorded")]
+    SettleTimeout(std::time::Duration, usize),
 }
 
 impl<E: Event> From<SendError<Arc<Envelope<E>>>> for Error {

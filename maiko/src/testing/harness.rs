@@ -10,7 +10,7 @@ use crate::{
     monitoring::MonitorHandle,
     testing::{
         ActorSpy, EventChain, EventCollector, EventEntry, EventQuery, EventRecords, EventSpy,
-        TopicSpy,
+        TopicSpy, expectation::Expectation,
     },
 };
 
@@ -18,7 +18,8 @@ use crate::{
 ///
 /// The harness provides:
 /// - Event injection via [`send_as`](Self::send_as)
-/// - Recording control via [`start_recording`](Self::start_recording) / [`stop_recording`](Self::stop_recording)
+/// - Recording control via [`record`](Self::record) / [`settle`](Self::settle)
+/// - Condition-based settling via [`settle_on`](Self::settle_on)
 /// - Query access via [`events`](Self::events), [`event`](Self::event), [`actor`](Self::actor), [`topic`](Self::topic)
 ///
 /// # Example
@@ -28,9 +29,9 @@ use crate::{
 /// let mut test = Harness::new(&mut supervisor).await;
 /// supervisor.start().await?;
 ///
-/// test.start_recording().await;
+/// test.record().await;
 /// let id = test.send_as(&producer, MyEvent::Data(42)).await?;
-/// test.stop_recording().await;
+/// test.settle().await;
 ///
 /// assert!(test.event(id).was_delivered_to(&consumer));
 /// assert_eq!(1, test.actor(&consumer).events_received());
@@ -42,10 +43,10 @@ use crate::{
 /// for event collection, which can lead to memory exhaustion under high load.
 /// For production monitoring, use the [`monitoring`](crate::monitoring) API directly.
 pub struct Harness<E: Event, T: Topic<E>> {
-    snapshot: Vec<EventEntry<E, T>>,
+    pub(super) snapshot: Vec<EventEntry<E, T>>,
     records: EventRecords<E, T>,
     monitor_handle: MonitorHandle<E, T>,
-    receiver: UnboundedReceiver<EventEntry<E, T>>,
+    pub(super) receiver: UnboundedReceiver<EventEntry<E, T>>,
     actor_sender: Sender<Arc<Envelope<E>>>,
 }
 
@@ -54,7 +55,6 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         let (tx, rx) = unbounded_channel();
         let monitor = EventCollector::new(tx);
         let monitor_handle = supervisor.monitors().add(monitor).await;
-        // monitor_handle.pause().await;
         Self {
             snapshot: Vec::new(),
             records: Arc::new(Vec::new()),
@@ -67,17 +67,67 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     // ==================== Recording Control ====================
 
     /// Start recording events. Call before sending test events.
-    pub async fn start_recording(&self) {
+    ///
+    /// Resumes the underlying monitor so that events flowing through the
+    /// system are captured. Pair with [`settle`](Self::settle) or
+    /// [`settle_on`](Self::settle_on) to end the recording phase.
+    pub async fn record(&self) {
         self.monitor_handle.resume().await;
     }
 
-    /// Stop recording and capture a snapshot for querying.
+    /// Start recording events.
+    #[deprecated(note = "use record()")]
+    pub async fn start_recording(&self) {
+        self.record().await;
+    }
+
+    /// Drain events until silence, then pause the monitor and freeze the snapshot.
+    ///
+    /// Collects events until no new events arrive for 1ms (settle window),
+    /// or until 10ms total have elapsed (max settle time). Then pauses the
+    /// monitor and freezes the snapshot for querying.
+    ///
+    /// For chatty actors that continuously produce events, the max settle
+    /// time prevents infinite waiting.
     ///
     /// After calling this, spy methods will query the captured snapshot.
+    pub async fn settle(&mut self) {
+        self.drain_until_quiet(Self::DEFAULT_SETTLE_WINDOW, Self::DEFAULT_MAX_SETTLE)
+            .await;
+        self.freeze().await;
+    }
+
+    /// Stop recording and capture a snapshot for querying.
+    #[deprecated(note = "use settle() or settle_on()")]
     pub async fn stop_recording(&mut self) {
         self.settle().await;
-        self.monitor_handle.pause().await;
-        self.records = Arc::new(std::mem::take(&mut self.snapshot));
+    }
+
+    /// Return a condition-based settle builder.
+    ///
+    /// The harness drains events and checks the provided predicate after
+    /// each arrival. When the condition returns `true`, recording stops and
+    /// the snapshot freezes. If the default 1-second timeout expires first,
+    /// returns [`Error::SettleTimeout`](crate::Error::SettleTimeout).
+    ///
+    /// The condition receives an [`EventQuery`] built from all events
+    /// recorded so far.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// test.settle_on(|events| events.with_label("HidReport").count() >= 5).await?;
+    ///
+    /// // With a custom timeout
+    /// test.settle_on(|events| events.with_label("HidReport").count() >= 5)
+    ///     .within(Duration::from_secs(3))
+    ///     .await?;
+    /// ```
+    pub fn settle_on<F>(&mut self, condition: F) -> Expectation<'_, E, T, F>
+    where
+        F: Fn(EventQuery<E, T>) -> bool,
+    {
+        Expectation::new(self, condition)
     }
 
     /// Clears all recorded events, resetting the harness for the next test phase.
@@ -93,29 +143,20 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     /// Default max settle time: give up waiting after 10ms.
     pub const DEFAULT_MAX_SETTLE: Duration = Duration::from_millis(10);
 
-    /// Wait for events to propagate through the system.
-    ///
-    /// Collects events until no new events arrive for 1ms (settle window),
-    /// or until 10ms total have elapsed (max settle time).
-    ///
-    /// For chatty actors that continuously produce events, the max settle
-    /// time prevents infinite waiting. Use [`settle_with_timeout`](Self::settle_with_timeout)
-    /// for custom timing.
-    pub async fn settle(&mut self) {
-        self.settle_with_timeout(Self::DEFAULT_SETTLE_WINDOW, Self::DEFAULT_MAX_SETTLE)
-            .await;
-    }
-
     /// Wait for events with custom timing parameters.
     ///
     /// # Arguments
     ///
     /// * `settle_window` - Return early if no events arrive for this duration
     /// * `max_settle` - Maximum total time to wait, regardless of activity
-    ///
-    /// Useful for chatty actors where you want a shorter max settle time,
-    /// or for slow systems where you need a longer settle window.
+    #[deprecated(note = "use settle_on()")]
     pub async fn settle_with_timeout(&mut self, settle_window: Duration, max_settle: Duration) {
+        self.drain_until_quiet(settle_window, max_settle).await;
+    }
+
+    /// Drain events until the system is quiet (no new events within `settle_window`)
+    /// or until `max_settle` total time has elapsed.
+    pub(super) async fn drain_until_quiet(&mut self, settle_window: Duration, max_settle: Duration) {
         let deadline = Instant::now() + max_settle;
 
         loop {
@@ -128,9 +169,15 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
             match tokio::time::timeout(timeout, self.receiver.recv()).await {
                 Ok(Some(entry)) => self.snapshot.push(entry),
                 Ok(None) => break, // Channel closed
-                Err(_) => break,   // Quiet for settle_window - system settled
+                Err(_) => break,   // Quiet for settle_window — system settled
             }
         }
+    }
+
+    /// Pause the monitor and freeze the current snapshot for querying.
+    pub(super) async fn freeze(&mut self) {
+        self.monitor_handle.pause().await;
+        self.records = Arc::new(std::mem::take(&mut self.snapshot));
     }
 
     // ==================== Event Injection ====================
