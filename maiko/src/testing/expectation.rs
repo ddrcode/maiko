@@ -93,7 +93,7 @@ where
                     }
                 }
                 Ok(None) => {
-                    // Channel closed — check one last time
+                    // Channel closed - check one last time
                     if self.check_condition() {
                         self.harness.freeze().await;
                         return Ok(());
@@ -238,7 +238,7 @@ mod tests {
         sup.start().await.unwrap();
 
         test.record().await;
-        // No events sent — condition will never be met
+        // No events sent - condition will never be met
         let result = test
             .settle_on(|events| events.count() >= 100)
             .within(Duration::from_millis(50))
@@ -324,7 +324,7 @@ mod tests {
         sup.start().await.unwrap();
 
         test.record().await;
-        // No events sent — condition will never be met
+        // No events sent - condition will never be met
         let result = test
             .settle_on_event("Pong")
             .within(Duration::from_millis(50))

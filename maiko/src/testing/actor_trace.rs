@@ -12,7 +12,7 @@ pub struct ActorTrace<'a, E: Event, T: Topic<E>> {
 }
 
 impl<'a, E: Event, T: Topic<E>> ActorTrace<'a, E, T> {
-    /// Returns all actors involved in this chain (sender + receivers).
+    /// Returns all actors involved in this chain (sender and receivers).
     ///
     /// The list includes the root event's sender and all actors
     /// that received events in any branch. Order is not guaranteed.

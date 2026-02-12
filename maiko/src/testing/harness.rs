@@ -75,12 +75,6 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         self.monitor_handle.resume().await;
     }
 
-    /// Start recording events.
-    #[deprecated(note = "use record()")]
-    pub async fn start_recording(&self) {
-        self.record().await;
-    }
-
     /// Drain events until silence, then pause the monitor and freeze the snapshot.
     ///
     /// Collects events until no new events arrive for 1ms (settle window),
@@ -95,12 +89,6 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
         self.drain_until_quiet(Self::DEFAULT_SETTLE_WINDOW, Self::DEFAULT_MAX_SETTLE)
             .await;
         self.freeze().await;
-    }
-
-    /// Stop recording and capture a snapshot for querying.
-    #[deprecated(note = "use settle() or settle_on()")]
-    pub async fn stop_recording(&mut self) {
-        self.settle().await;
     }
 
     /// Return a condition-based settle builder.
@@ -173,17 +161,6 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
     /// Default max settle time: give up waiting after 10ms.
     pub const DEFAULT_MAX_SETTLE: Duration = Duration::from_millis(10);
 
-    /// Wait for events with custom timing parameters.
-    ///
-    /// # Arguments
-    ///
-    /// * `settle_window` - Return early if no events arrive for this duration
-    /// * `max_settle` - Maximum total time to wait, regardless of activity
-    #[deprecated(note = "use settle_on()")]
-    pub async fn settle_with_timeout(&mut self, settle_window: Duration, max_settle: Duration) {
-        self.drain_until_quiet(settle_window, max_settle).await;
-    }
-
     /// Drain events until the system is quiet (no new events within `settle_window`)
     /// or until `max_settle` total time has elapsed.
     pub(super) async fn drain_until_quiet(
@@ -203,7 +180,7 @@ impl<E: Event, T: Topic<E>> Harness<E, T> {
             match tokio::time::timeout(timeout, self.receiver.recv()).await {
                 Ok(Some(entry)) => self.snapshot.push(entry),
                 Ok(None) => break, // Channel closed
-                Err(_) => break,   // Quiet for settle_window — system settled
+                Err(_) => break,   // Quiet for settle_window - system settled
             }
         }
     }

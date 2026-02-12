@@ -43,7 +43,7 @@ impl<E: Event, T: Topic<E>> TopicSpy<E, T> {
     }
 
     /// Returns the number of distinct actors that received events on this topic.
-    pub fn receivers_count(&self) -> usize {
+    pub fn receiver_count(&self) -> usize {
         self.receivers().len()
     }
 
@@ -168,10 +168,10 @@ mod tests {
     }
 
     #[test]
-    fn receivers_count_returns_unique_receiver_count() {
+    fn receiver_count_returns_unique_receiver_count() {
         let actors = TestActors::new();
         let spy = TopicSpy::new(sample_records_with_actors(&actors), TestTopic::Data);
-        assert_eq!(spy.receivers_count(), 2); // bob and charlie
+        assert_eq!(spy.receiver_count(), 2); // bob and charlie
     }
 
     #[test]
@@ -189,7 +189,7 @@ mod tests {
 
         assert!(!spy.was_published());
         assert_eq!(spy.event_count(), 0);
-        assert_eq!(spy.receivers_count(), 0);
+        assert_eq!(spy.receiver_count(), 0);
         assert!(spy.receivers().is_empty());
     }
 }

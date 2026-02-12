@@ -367,8 +367,8 @@ where
     ///
     /// The output is a flat list where each entry contains:
     ///
-    /// - `actor_id` — the actor name
-    /// - `subscriptions` — topic labels the actor receives events from
+    /// - `actor_id` - the actor name
+    /// - `subscriptions` - topic labels the actor receives events from
     ///
     /// # Semantics
     ///
