@@ -47,7 +47,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(())
     }
 
-    fn send_event(&mut self, e: &Arc<Envelope<E>>) {
+    fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result {
         let topic = T::from_event(e.event());
 
         #[cfg(feature = "monitoring")]
@@ -85,6 +85,11 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 Err(TrySendError::Full(_)) => {
                     // Channel is full, skip this subscriber for now
                     tracing::warn!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "subscriber channel full, dropping event");
+                    eprintln!(
+                        "Channel for actor '{}' is full. Exiting...",
+                        subscriber.actor_id.name(),
+                    );
+                    return Err(Error::ChannelIsFull);
                 }
                 Err(TrySendError::Closed(_)) => {
                     // Channel is closed, will be cleaned up in the next maintenance cycle
@@ -92,6 +97,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 }
             }
         }
+        Ok(())
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -100,7 +106,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
-                    self.send_event(&e);
+                    self.send_event(&e)?;
                 },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
@@ -121,7 +127,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         // Send messages that were in the queue at the time of shutdown
         for _ in 0..self.receiver.len() {
             if let Ok(e) = self.receiver.try_recv() {
-                self.send_event(&e); // Best effort
+                let _ = self.send_event(&e); // Best effort
             } else {
                 break; // Queue drained faster than expected
             }
