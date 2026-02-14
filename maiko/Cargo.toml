@@ -27,6 +27,7 @@ monitoring = []
 test-harness = ["monitoring"]
 
 [dependencies]
+futures = "0.3.31"
 maiko-macros = { path="../maiko-macros", version="0.2.0", optional = true }
 serde = { version = "1.0.228", features = ["derive", "rc"], optional = true }
 serde_json = { version = "1.0", optional = true }
