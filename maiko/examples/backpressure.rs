@@ -1,11 +1,12 @@
 use std::time::Duration;
 
-use maiko::{Actor, Context, StepAction, Supervisor, monitors::Tracer};
+use maiko::{Actor, Context, OverflowPolicy, StepAction, Supervisor, monitors::Tracer};
 
 #[derive(maiko::Event, maiko::Label, Debug, Clone)]
 enum Event {
     Start(usize),
     Data(Box<[u8; 1024]>),
+    BytesSent(usize),
     Done,
 }
 
@@ -13,6 +14,7 @@ enum Event {
 enum Topic {
     Data,
     Command,
+    Telemetry,
 }
 
 impl maiko::Topic<Event> for Topic {
@@ -23,7 +25,16 @@ impl maiko::Topic<Event> for Topic {
         match event {
             Event::Start(_) => Topic::Command,
             Event::Data(_) => Topic::Data,
-            Event::Done => Topic::Command,
+            Event::Done => Topic::Data,
+            Event::BytesSent(_) => Topic::Telemetry,
+        }
+    }
+
+    fn overflow_policy(&self) -> OverflowPolicy {
+        match self {
+            Topic::Data => OverflowPolicy::Block,
+            Topic::Command => OverflowPolicy::Fail,
+            Topic::Telemetry => OverflowPolicy::Drop,
         }
     }
 }
@@ -32,6 +43,7 @@ struct Producer {
     ctx: Context<Event>,
     cnt: usize,
     checksum: u64,
+    bytes: usize,
 }
 
 impl Actor for Producer {
@@ -41,6 +53,7 @@ impl Actor for Producer {
         if let Event::Start(cnt) = envelope.event() {
             self.cnt = *cnt;
             self.checksum = 0;
+            self.bytes = 0;
         }
         Ok(())
     }
@@ -49,17 +62,24 @@ impl Actor for Producer {
         if self.cnt == 0 {
             return Ok(StepAction::AwaitEvent);
         }
+
         let mut buf: [u8; 1024] = [0; 1024];
         getrandom::fill(&mut buf).map_err(|e| maiko::Error::External(e.to_string().into()))?;
         let data = Box::new(buf);
+
         self.checksum = self
             .checksum
             .wrapping_add(data.iter().map(|b| *b as u64).sum::<u64>());
+
         self.ctx.send(Event::Data(data)).await?;
+
         self.cnt -= 1;
+        self.bytes += 1024;
         if self.cnt == 0 {
             println!("Producer checksum: {}", self.checksum);
             self.ctx.send(Event::Done).await?;
+        } else if self.cnt.is_multiple_of(10) {
+            self.ctx.send(Event::BytesSent(self.bytes)).await?;
         }
         Ok(StepAction::Continue)
     }
@@ -101,6 +121,17 @@ impl Actor for Consumer {
     }
 }
 
+struct Telemetry;
+impl Actor for Telemetry {
+    type Event = Event;
+    async fn handle_event(&mut self, envelope: &maiko::Envelope<Self::Event>) -> maiko::Result<()> {
+        if let Event::BytesSent(bytes) = envelope.event() {
+            println!("Transferred {bytes} bytes");
+        }
+        Ok(())
+    }
+}
+
 #[tokio::main]
 async fn main() -> maiko::Result {
     tracing_subscriber::fmt()
@@ -114,6 +145,7 @@ async fn main() -> maiko::Result {
             ctx,
             cnt: 0,
             checksum: 0,
+            bytes: 0,
         },
         &[Topic::Command],
     )?;
@@ -122,10 +154,12 @@ async fn main() -> maiko::Result {
         |ctx| Consumer { ctx, checksum: 0 },
         &[Topic::Data, Topic::Command],
     )?;
+    sup.add_actor("telemetry", |_| Telemetry, [Topic::Telemetry])?;
+
     sup.monitors().add(Tracer).await;
 
     sup.start().await?;
-    sup.send(Event::Start(129)).await?;
+    sup.send(Event::Start(1000)).await?;
     sup.join().await?;
     sup.stop().await?;
     Ok(())

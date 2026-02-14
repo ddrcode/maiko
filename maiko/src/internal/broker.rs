@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
+use futures::future::join_all;
 use tokio::{
-    select,
+    join, select,
     sync::mpsc::{Receiver, error::TrySendError},
 };
 use tokio_util::sync::CancellationToken;
 
 use super::Subscriber;
-use crate::{Config, Envelope, Error, Event, Result, Topic};
+use crate::{Config, Envelope, Error, Event, OverflowPolicy, Result, Topic, overflow_policy};
 
 #[cfg(feature = "monitoring")]
 use crate::monitoring::{MonitoringEvent, MonitoringSink};
@@ -47,8 +48,9 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(())
     }
 
-    fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result {
+    async fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result {
         let topic = T::from_event(e.event());
+        let mut blocked = None;
 
         #[cfg(feature = "monitoring")]
         let (is_recording, topic_for_monitor) = {
@@ -82,14 +84,21 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                         }
                     }
                 }
-                Err(TrySendError::Full(_)) => {
-                    // Channel is full, skip this subscriber for now
-                    tracing::warn!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "subscriber channel full, dropping event");
-                    eprintln!(
-                        "Channel for actor '{}' is full. Exiting...",
-                        subscriber.actor_id.name(),
-                    );
-                    return Err(Error::ChannelIsFull);
+                Err(TrySendError::Full(event)) => {
+                    match topic.overflow_policy() {
+                        OverflowPolicy::Fail => {
+                            tracing::error!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "subscriber channel full");
+                            return Err(Error::ChannelIsFull);
+                        }
+                        OverflowPolicy::Drop => {
+                            tracing::error!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "Dropping event");
+                            continue;
+                        }
+                        OverflowPolicy::Block => {
+                            let fut = subscriber.sender.send(event);
+                            blocked.get_or_insert(Vec::new()).push(fut);
+                        }
+                    };
                 }
                 Err(TrySendError::Closed(_)) => {
                     // Channel is closed, will be cleaned up in the next maintenance cycle
@@ -97,6 +106,11 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 }
             }
         }
+
+        if let Some(b) = blocked.take() {
+            join_all(b).await;
+        }
+
         Ok(())
     }
 
@@ -106,7 +120,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
-                    self.send_event(&e)?;
+                    self.send_event(&e).await?;
                 },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();

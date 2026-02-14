@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::event::Event;
+use crate::{OverflowPolicy, event::Event};
 
 /// Maps events to routing topics.
 ///
@@ -21,6 +21,10 @@ pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone + Send + Sync + 'static
     fn from_event(event: &E) -> Self
     where
         Self: Sized;
+
+    fn overflow_policy(&self) -> OverflowPolicy {
+        OverflowPolicy::Fail
+    }
 }
 
 /// Unit topic for systems that don't need topic-based routing.
