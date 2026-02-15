@@ -1,3 +1,9 @@
+# [0.2.4](Unreleased)
+
+No changes. Version bumped to be aligned with the main library.
+
+---
+
 # [0.2.3](https://github.com/ddrcode/maiko/compare/v0.2.2...v0.2.3) (February 12th, 2026)
 
 ### Added

@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-macros"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "quote",
  "syn",
