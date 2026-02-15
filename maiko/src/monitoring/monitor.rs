@@ -1,4 +1,4 @@
-use crate::{ActorId, DefaultTopic, Envelope, Event, StepAction, Topic};
+use crate::{ActorId, DefaultTopic, Envelope, Event, OverflowPolicy, StepAction, Topic};
 
 /// Trait for observing event flow through the system.
 ///
@@ -75,6 +75,20 @@ pub trait Monitor<E: Event, T: Topic<E> = DefaultTopic>: Send {
     fn on_step_exit(&self, step_action: &StepAction, actor_id: &ActorId) {
         let _s = step_action;
         let _a = actor_id;
+    }
+
+    /// Called on on overflow
+    fn on_overflow(
+        &self,
+        envelope: &Envelope<E>,
+        topic: &T,
+        receiver: &ActorId,
+        policy: OverflowPolicy,
+    ) {
+        let _e = envelope;
+        let _t = topic;
+        let _r = receiver;
+        let _p = policy;
     }
 
     /// Called when an actor stops.

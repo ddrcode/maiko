@@ -167,6 +167,9 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             EventHandled(envelope, topic, actor_id) => {
                 self.notify(|m| m.on_event_handled(&envelope, &topic, &actor_id));
             }
+            Overflow(envelope, topic, actor_id, policy) => {
+                self.notify(|m| m.on_overflow(&envelope, &topic, &actor_id, policy));
+            }
             Error(error, actor_id) => {
                 self.notify(|m| m.on_error(&error, &actor_id));
             }

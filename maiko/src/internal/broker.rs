@@ -72,21 +72,26 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .filter(|s| s.actor_id != *e.meta().actor_id())
         {
             match subscriber.sender.try_send(e.clone()) {
-                Ok(_) =>
-                {
+                Ok(_) => {
                     #[cfg(feature = "monitoring")]
-                    if is_recording {
-                        if let Some(topic_for_monitor) = &topic_for_monitor {
-                            self.monitoring.send(MonitoringEvent::EventDispatched(
-                                e.clone(),
-                                topic_for_monitor.clone(),
-                                subscriber.actor_id.clone(),
-                            ));
-                        }
-                    }
+                    self.record_event_dispatched(
+                        is_recording,
+                        e,
+                        &topic_for_monitor,
+                        &subscriber.actor_id,
+                    );
                 }
                 Err(TrySendError::Full(event)) => {
-                    match topic.overflow_policy() {
+                    let policy = topic.overflow_policy();
+                    #[cfg(feature = "monitoring")]
+                    self.record_overflow(
+                        is_recording,
+                        e,
+                        &topic_for_monitor,
+                        &subscriber.actor_id,
+                        policy,
+                    );
+                    match policy {
                         OverflowPolicy::Fail => {
                             tracing::error!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "closing channel due to OverflowPolicy Fail");
                             to_be_closed
@@ -124,6 +129,8 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
                     let tbc = self.send_event(&e).await?;
+
+                    // Close channels for subscribers that overflown with Fail policy
                     if let Some(to_be_closed) = tbc {
                         self.subscribers.retain(|s|
                             !to_be_closed.contains(&s.actor_id)
@@ -169,6 +176,49 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         self.subscribers
             .iter()
             .all(|s| s.is_closed() || s.sender.capacity() == s.sender.max_capacity())
+    }
+}
+
+#[cfg(feature = "monitoring")]
+impl<E: Event, T: Topic<E>> Broker<E, T> {
+    #[inline]
+    fn record_event_dispatched(
+        &self,
+        is_recording: bool,
+        e: &Arc<Envelope<E>>,
+        topic: &Option<Arc<T>>,
+        actor_id: &ActorId,
+    ) {
+        if is_recording {
+            if let Some(topic_for_monitor) = topic {
+                self.monitoring.send(MonitoringEvent::EventDispatched(
+                    e.clone(),
+                    topic_for_monitor.clone(),
+                    actor_id.clone(),
+                ));
+            }
+        }
+    }
+
+    #[inline]
+    fn record_overflow(
+        &self,
+        is_recording: bool,
+        e: &Arc<Envelope<E>>,
+        topic: &Option<Arc<T>>,
+        actor_id: &ActorId,
+        policy: OverflowPolicy,
+    ) {
+        if is_recording {
+            if let Some(topic_for_monitor) = topic {
+                self.monitoring.send(MonitoringEvent::Overflow(
+                    e.clone(),
+                    topic_for_monitor.clone(),
+                    actor_id.clone(),
+                    policy,
+                ));
+            }
+        }
     }
 }
 

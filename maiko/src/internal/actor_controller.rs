@@ -38,7 +38,11 @@ impl<A: Actor, T: Topic<A::Event>> ActorController<A, T> {
                     break;
                 },
 
-                Some(event) = self.receiver.recv() => {
+                maybe_event = self.receiver.recv() => {
+                    let Some(event) = maybe_event else {
+                        break;
+                    };
+
                     #[cfg(feature = "monitoring")]
                     let topic = {
                         let topic = Arc::new(T::from_event(event.event()));
