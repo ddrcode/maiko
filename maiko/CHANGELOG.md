@@ -1,3 +1,17 @@
+# [0.2.5](Unreleased)
+
+### Added
+
+- `OverflowPolicy` enum
+- `overflow_policy` method in `Topic` (defaulting to `OverflowPolicy::Fail`)
+- `on_overflow` metod in `Monitor` (and implementation in `Tracer`)
+
+### Changed
+
+- Event broker to respect `OverflowPolicy`
+
+---
+
 # [0.2.4](https://github.com/ddrcode/maiko/compare/v0.2.3...v0.2.4) (February 15th, 2026)
 
 ### Bug fixes
