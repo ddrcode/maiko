@@ -238,9 +238,6 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let timeout = Duration::from_millis(10);
         let max = self.sender.max_capacity();
 
-        #[cfg(feature = "monitoring")]
-        self.monitoring.stop().await;
-
         // 1. Wait for the main channle to drain
         while start.elapsed() < timeout {
             if self.sender.capacity() == max {
@@ -252,6 +249,9 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         // 2. Wait the the broker to shutdown gracefully
         self.broker_cancel_token.cancel();
         let _ = self.broker.lock().await;
+
+        #[cfg(feature = "monitoring")]
+        self.monitoring.stop().await;
 
         // 3. Stop the actors
         self.cancel_token.cancel();

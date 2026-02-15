@@ -115,4 +115,9 @@ impl<E: Event> Context<E> {
         std::future::pending::<()>().await;
         Ok(())
     }
+
+    #[inline]
+    pub fn is_sender_full(&self) -> bool {
+        self.sender.capacity() == 0
+    }
 }

@@ -23,7 +23,7 @@ pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone + Send + Sync + 'static
         Self: Sized;
 
     fn overflow_policy(&self) -> OverflowPolicy {
-        OverflowPolicy::Fail
+        OverflowPolicy::Drop
     }
 }
 

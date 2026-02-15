@@ -25,7 +25,7 @@ impl maiko::Topic<Event> for Topic {
         match event {
             Event::Start(_) => Topic::Command,
             Event::Data(_) => Topic::Data,
-            Event::Done => Topic::Data,
+            Event::Done => Topic::Command,
             Event::BytesSent(_) => Topic::Telemetry,
         }
     }
@@ -33,7 +33,7 @@ impl maiko::Topic<Event> for Topic {
     fn overflow_policy(&self) -> OverflowPolicy {
         match self {
             Topic::Data => OverflowPolicy::Block,
-            Topic::Command => OverflowPolicy::Fail,
+            Topic::Command => OverflowPolicy::Block,
             Topic::Telemetry => OverflowPolicy::Drop,
         }
     }
@@ -74,11 +74,11 @@ impl Actor for Producer {
         self.ctx.send(Event::Data(data)).await?;
 
         self.cnt -= 1;
-        self.bytes += 1024;
+        self.bytes += buf.len();
         if self.cnt == 0 {
             println!("Producer checksum: {}", self.checksum);
             self.ctx.send(Event::Done).await?;
-        } else if self.cnt % 10 == 0 {
+        } else if self.cnt % 20 == 0 && !self.ctx.is_sender_full() {
             self.ctx.send(Event::BytesSent(self.bytes)).await?;
         }
         Ok(StepAction::Continue)
@@ -126,7 +126,7 @@ impl Actor for Telemetry {
     type Event = Event;
     async fn handle_event(&mut self, envelope: &maiko::Envelope<Self::Event>) -> maiko::Result<()> {
         if let Event::BytesSent(bytes) = envelope.event() {
-            println!("Transferred {bytes} bytes");
+            println!("Transferred {bytes} bytes so far");
         }
         Ok(())
     }
