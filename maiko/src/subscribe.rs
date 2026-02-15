@@ -68,3 +68,9 @@ impl<E: Event, T: Topic<E>, const N: usize> From<&[T; N]> for Subscribe<E, T> {
         Subscribe::to(topics.iter().cloned())
     }
 }
+
+impl<E: Event, T: Topic<E>> From<T> for Subscribe<E, T> {
+    fn from(topic: T) -> Self {
+        Subscribe::to([topic])
+    }
+}
