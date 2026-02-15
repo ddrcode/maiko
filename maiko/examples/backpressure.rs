@@ -78,7 +78,7 @@ impl Actor for Producer {
         if self.cnt == 0 {
             println!("Producer checksum: {}", self.checksum);
             self.ctx.send(Event::Done).await?;
-        } else if self.cnt.is_multiple_of(10) {
+        } else if self.cnt % 10 == 0 {
             self.ctx.send(Event::BytesSent(self.bytes)).await?;
         }
         Ok(StepAction::Continue)

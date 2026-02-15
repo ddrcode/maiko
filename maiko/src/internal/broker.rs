@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use futures::future::join_all;
+use futures_util::future::join_all;
 use tokio::{
-    join, select,
+    select,
     sync::mpsc::{Receiver, error::TrySendError},
 };
 use tokio_util::sync::CancellationToken;
 
 use super::Subscriber;
-use crate::{Config, Envelope, Error, Event, OverflowPolicy, Result, Topic, overflow_policy};
+use crate::{ActorId, Config, Envelope, Error, Event, OverflowPolicy, Result, Topic};
 
 #[cfg(feature = "monitoring")]
 use crate::monitoring::{MonitoringEvent, MonitoringSink};
@@ -48,9 +48,10 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(())
     }
 
-    async fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result {
+    async fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<Option<Vec<ActorId>>> {
         let topic = T::from_event(e.event());
         let mut blocked = None;
+        let mut to_be_closed = None;
 
         #[cfg(feature = "monitoring")]
         let (is_recording, topic_for_monitor) = {
@@ -67,7 +68,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .subscribers
             .iter()
             .filter(|s| s.topics.contains(&topic))
-            .filter(|s| !s.sender.is_closed())
+            .filter(|s| !s.is_closed())
             .filter(|s| s.actor_id != *e.meta().actor_id())
         {
             match subscriber.sender.try_send(e.clone()) {
@@ -87,11 +88,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 Err(TrySendError::Full(event)) => {
                     match topic.overflow_policy() {
                         OverflowPolicy::Fail => {
-                            tracing::error!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "subscriber channel full");
-                            return Err(Error::ChannelIsFull);
+                            tracing::error!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "closing channel due to OverflowPolicy Fail");
+                            to_be_closed
+                                .get_or_insert(Vec::new())
+                                .push(subscriber.actor_id.clone());
+                            continue;
                         }
                         OverflowPolicy::Drop => {
-                            tracing::error!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "Dropping event");
                             continue;
                         }
                         OverflowPolicy::Block => {
@@ -111,7 +114,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             join_all(b).await;
         }
 
-        Ok(())
+        Ok(to_be_closed)
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -120,7 +123,12 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
-                    self.send_event(&e).await?;
+                    let tbc = self.send_event(&e).await?;
+                    if let Some(to_be_closed) = tbc {
+                        self.subscribers.retain(|s|
+                            !to_be_closed.contains(&s.actor_id)
+                        );
+                    }
                 },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
@@ -132,7 +140,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     fn cleanup(&mut self) {
-        self.subscribers.retain(|s| !s.sender.is_closed());
+        self.subscribers.retain(|s| !s.is_closed());
     }
 
     async fn shutdown(&mut self) {
@@ -141,7 +149,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         // Send messages that were in the queue at the time of shutdown
         for _ in 0..self.receiver.len() {
             if let Ok(e) = self.receiver.try_recv() {
-                let _ = self.send_event(&e); // Best effort
+                let _ = self.send_event(&e).await; // Best effort
             } else {
                 break; // Queue drained faster than expected
             }
@@ -160,7 +168,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     pub fn is_empty(&self) -> bool {
         self.subscribers
             .iter()
-            .all(|s| s.sender.is_closed() || s.sender.capacity() == s.sender.max_capacity())
+            .all(|s| s.is_closed() || s.sender.capacity() == s.sender.max_capacity())
     }
 }
 
