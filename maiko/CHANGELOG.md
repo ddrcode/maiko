@@ -1,3 +1,13 @@
+# [0.2.4](https://github.com/ddrcode/maiko/compare/v0.2.3...v0.2.4) (February 15th, 2026)
+
+### Bug fixes
+
+- Fixes dependency on old version of maiko-macros (#71)
+
+[#71]: https://github.com/ddrcode/maiko/issues/71
+
+---
+
 # [0.2.3](https://github.com/ddrcode/maiko/compare/v0.2.2...v0.2.3) (February 12th, 2026)
 
 **Contains Breaking changes** (in test harness only)
