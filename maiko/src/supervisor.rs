@@ -3,15 +3,15 @@ use std::sync::{Arc, atomic::AtomicBool};
 use tokio::{
     sync::{
         Mutex, Notify,
-        mpsc::{Sender, channel},
+        mpsc::{self, Sender, channel},
     },
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Actor, ActorId, Config, Context, DefaultTopic, Envelope, Error, Event, Label, Result,
-    Subscribe, Topic,
+    Actor, ActorBuilder, ActorConfig, ActorId, Config, Context, DefaultTopic, Envelope, Error,
+    Event, Label, Result, Subscribe, Topic,
     internal::{ActorController, Broker, Subscriber, Subscription},
 };
 
@@ -124,7 +124,21 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let ctx = self.create_context(name);
         let actor = factory(ctx.clone());
         let topics = topics.into().0;
-        self.register_actor(ctx, actor, topics)
+        self.register_actor(ctx, actor, topics, ActorConfig::default())
+    }
+
+    pub fn build_actor<'a, A, F, S>(
+        &'a mut self,
+        name: &str,
+        factory: F,
+    ) -> ActorBuilder<'a, E, T, A>
+    where
+        A: Actor<Event = E>,
+        F: FnOnce(Context<E>) -> A,
+    {
+        let ctx = self.create_context(name);
+        let actor = factory(ctx.clone());
+        ActorBuilder::new(self, actor, ctx)
     }
 
     /// Internal method to register an actor with the supervisor.
@@ -138,6 +152,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         ctx: Context<E>,
         actor: A,
         topics: Subscription<T>,
+        config: ActorConfig,
     ) -> Result<ActorId>
     where
         A: Actor<Event = E>,
@@ -149,7 +164,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             .try_lock()
             .map_err(|_| Error::BrokerAlreadyStarted)?;
 
-        let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
+        let (tx, rx) = mpsc::channel::<Arc<Envelope<E>>>(config.channel_capacity());
 
         let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics.clone(), tx);
         broker.add_subscriber(subscriber)?;

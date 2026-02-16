@@ -121,6 +121,8 @@
 //! - `arbitrage.rs`  - Test harness demonstration
 
 mod actor;
+mod actor_builder;
+mod actor_config;
 mod actor_id;
 mod config;
 mod context;
@@ -150,6 +152,8 @@ pub mod monitoring;
 pub mod monitors;
 
 pub use actor::Actor;
+pub use actor_builder::ActorBuilder;
+pub use actor_config::ActorConfig;
 pub use actor_id::ActorId;
 pub use config::Config;
 pub use context::Context;
