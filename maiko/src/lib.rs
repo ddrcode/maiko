@@ -52,6 +52,7 @@
 //! | [`Context`] | Allows actors to send events and interact with runtime |
 //! | [`Envelope`] | Wraps events with metadata (sender, correlation ID) |
 //! | [`ActorId`] | Unique identifier for a registered actor |
+//! | [`OverflowPolicy`] | Controls behavior when a subscriber's channel is full |
 //!
 //! ## Topic-Based Routing
 //!
@@ -73,6 +74,35 @@
 //!
 //! sup.add_actor("processor", |ctx| Processor::new(ctx), &[MyTopic::Data])?;
 //! ```
+//!
+//! ## Flow Control
+//!
+//! Events pass through two channel stages:
+//!
+//! 1. **Stage 1** (producer to broker) — shared channel, always blocks when full
+//! 2. **Stage 2** (broker to subscriber) — per-actor channel, governed by [`OverflowPolicy`]
+//!
+//! Override [`Topic::overflow_policy()`] to control stage 2 behavior per topic:
+//!
+//! ```rust,ignore
+//! fn overflow_policy(&self) -> OverflowPolicy {
+//!     match self {
+//!         MyTopic::Data    => OverflowPolicy::Block,  // wait for space
+//!         MyTopic::Metrics => OverflowPolicy::Drop,   // discard if slow
+//!     }
+//! }
+//! ```
+//!
+//! Producers can check [`Context::is_sender_full()`] to skip non-essential
+//! sends when stage 1 is congested:
+//!
+//! ```rust,ignore
+//! if !ctx.is_sender_full() {
+//!     ctx.send(Event::Telemetry(stats)).await?;
+//! }
+//! ```
+//!
+//! See [`OverflowPolicy`] for details on each variant and trade-offs.
 //!
 //! ## Features
 //!
@@ -99,6 +129,7 @@ mod error;
 mod event;
 mod label;
 mod meta;
+mod overflow_policy;
 mod step_action;
 mod subscribe;
 mod supervisor;
@@ -127,6 +158,7 @@ pub use error::Error;
 pub use event::Event;
 pub use label::Label;
 pub use meta::Meta;
+pub use overflow_policy::OverflowPolicy;
 pub use step_action::StepAction;
 pub use subscribe::Subscribe;
 pub use supervisor::Supervisor;

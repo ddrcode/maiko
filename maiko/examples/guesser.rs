@@ -102,7 +102,7 @@ impl Actor for Guesser {
 
     /// Generate a random guess at regular intervals.
     async fn step(&mut self) -> maiko::Result<StepAction> {
-        let number = rand::random::<u8>() % 10;
+        let number = (getrandom::u32().unwrap() % 10) as u8;
 
         // Emit a guess event with our player ID
         self.ctx

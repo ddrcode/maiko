@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::event::Event;
+use crate::{OverflowPolicy, event::Event};
 
 /// Maps events to routing topics.
 ///
@@ -21,6 +21,28 @@ pub trait Topic<E: Event>: Hash + PartialEq + Eq + Clone + Send + Sync + 'static
     fn from_event(event: &E) -> Self
     where
         Self: Sized;
+
+    /// Returns the overflow policy for this topic.
+    ///
+    /// Controls what the broker does when a subscriber's channel is full.
+    /// See [`OverflowPolicy`] for details on each variant.
+    ///
+    /// The default is [`OverflowPolicy::Fail`], which closes the
+    /// subscriber's channel on overflow. This ensures problems are
+    /// surfaced immediately rather than hidden by silent drops.
+    /// Override this method to set per-topic policies:
+    ///
+    /// ```rust,ignore
+    /// fn overflow_policy(&self) -> OverflowPolicy {
+    ///     match self {
+    ///         MyTopic::Control => OverflowPolicy::Block,
+    ///         MyTopic::Metrics => OverflowPolicy::Drop,
+    ///     }
+    /// }
+    /// ```
+    fn overflow_policy(&self) -> OverflowPolicy {
+        OverflowPolicy::Fail
+    }
 }
 
 /// Unit topic for systems that don't need topic-based routing.

@@ -1,9 +1,9 @@
-use crate::{ActorId, Envelope, Event, Topic, monitoring::Monitor};
+use crate::{ActorId, Envelope, Event, OverflowPolicy, Topic, monitoring::Monitor};
 
 /// A monitor that logs event lifecycle to the `tracing` crate.
 ///
 /// Provides visibility into event flow without custom code. Log levels:
-/// - `trace` - event dispatched/delivered (high volume)
+/// - `trace` - event dispatched/delivered/overflow (high volume)
 /// - `debug` - event handled
 /// - `warn` - errors
 /// - `info` - actor stopped
@@ -64,6 +64,22 @@ where
         tracing::info!(
             actor = %actor_id.name(),
             "actor stopped"
+        );
+    }
+
+    fn on_overflow(
+        &self,
+        envelope: &Envelope<E>,
+        topic: &T,
+        receiver: &ActorId,
+        policy: OverflowPolicy,
+    ) {
+        tracing::trace!(
+            event_id = %envelope.id(),
+            receiver = %receiver.name(),
+            topic = ?topic,
+            policy = %policy,
+            "overflow"
         );
     }
 }

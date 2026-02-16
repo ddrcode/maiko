@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use futures_util::future::join_all;
 use tokio::{
     select,
     sync::mpsc::{Receiver, error::TrySendError},
@@ -7,7 +8,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use super::Subscriber;
-use crate::{Config, Envelope, Error, Event, Result, Topic};
+use crate::{ActorId, Config, Envelope, Error, Event, OverflowPolicy, Result, Topic};
 
 #[cfg(feature = "monitoring")]
 use crate::monitoring::{MonitoringEvent, MonitoringSink};
@@ -47,8 +48,10 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(())
     }
 
-    fn send_event(&mut self, e: &Arc<Envelope<E>>) {
+    async fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<Option<Vec<ActorId>>> {
         let topic = T::from_event(e.event());
+        let mut blocked = None;
+        let mut to_be_closed = None;
 
         #[cfg(feature = "monitoring")]
         let (is_recording, topic_for_monitor) = {
@@ -65,26 +68,45 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             .subscribers
             .iter()
             .filter(|s| s.topics.contains(&topic))
-            .filter(|s| !s.sender.is_closed())
+            .filter(|s| !s.is_closed())
             .filter(|s| s.actor_id != *e.meta().actor_id())
         {
             match subscriber.sender.try_send(e.clone()) {
-                Ok(_) =>
-                {
+                Ok(_) => {
                     #[cfg(feature = "monitoring")]
-                    if is_recording {
-                        if let Some(topic_for_monitor) = &topic_for_monitor {
-                            self.monitoring.send(MonitoringEvent::EventDispatched(
-                                e.clone(),
-                                topic_for_monitor.clone(),
-                                subscriber.actor_id.clone(),
-                            ));
-                        }
-                    }
+                    self.record_event_dispatched(
+                        is_recording,
+                        e,
+                        &topic_for_monitor,
+                        &subscriber.actor_id,
+                    );
                 }
-                Err(TrySendError::Full(_)) => {
-                    // Channel is full, skip this subscriber for now
-                    tracing::warn!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "subscriber channel full, dropping event");
+                Err(TrySendError::Full(event)) => {
+                    let policy = topic.overflow_policy();
+                    #[cfg(feature = "monitoring")]
+                    self.record_overflow(
+                        is_recording,
+                        e,
+                        &topic_for_monitor,
+                        &subscriber.actor_id,
+                        policy,
+                    );
+                    match policy {
+                        OverflowPolicy::Fail => {
+                            tracing::error!(actor=%subscriber.actor_id.name(), event_id=%e.id(), "closing channel due to OverflowPolicy Fail");
+                            to_be_closed
+                                .get_or_insert(Vec::new())
+                                .push(subscriber.actor_id.clone());
+                            continue;
+                        }
+                        OverflowPolicy::Drop => {
+                            continue;
+                        }
+                        OverflowPolicy::Block => {
+                            let fut = subscriber.sender.send(event);
+                            blocked.get_or_insert(Vec::new()).push(fut);
+                        }
+                    };
                 }
                 Err(TrySendError::Closed(_)) => {
                     // Channel is closed, will be cleaned up in the next maintenance cycle
@@ -92,6 +114,12 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 }
             }
         }
+
+        if let Some(b) = blocked.take() {
+            join_all(b).await;
+        }
+
+        Ok(to_be_closed)
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -100,7 +128,14 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
             select! {
                 _ = self.cancel_token.cancelled() => break,
                 Some(e) = self.receiver.recv() => {
-                    self.send_event(&e);
+                    let tbc = self.send_event(&e).await?;
+
+                    // Close channels for subscribers that overflown with Fail policy
+                    if let Some(to_be_closed) = tbc {
+                        self.subscribers.retain(|s|
+                            !to_be_closed.contains(&s.actor_id)
+                        );
+                    }
                 },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
@@ -112,7 +147,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     fn cleanup(&mut self) {
-        self.subscribers.retain(|s| !s.sender.is_closed());
+        self.subscribers.retain(|s| !s.is_closed());
     }
 
     async fn shutdown(&mut self) {
@@ -121,7 +156,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         // Send messages that were in the queue at the time of shutdown
         for _ in 0..self.receiver.len() {
             if let Ok(e) = self.receiver.try_recv() {
-                self.send_event(&e); // Best effort
+                let _ = self.send_event(&e).await; // Best effort
             } else {
                 break; // Queue drained faster than expected
             }
@@ -140,7 +175,50 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     pub fn is_empty(&self) -> bool {
         self.subscribers
             .iter()
-            .all(|s| s.sender.is_closed() || s.sender.capacity() == s.sender.max_capacity())
+            .all(|s| s.is_closed() || s.sender.capacity() == s.sender.max_capacity())
+    }
+}
+
+#[cfg(feature = "monitoring")]
+impl<E: Event, T: Topic<E>> Broker<E, T> {
+    #[inline]
+    fn record_event_dispatched(
+        &self,
+        is_recording: bool,
+        e: &Arc<Envelope<E>>,
+        topic: &Option<Arc<T>>,
+        actor_id: &ActorId,
+    ) {
+        if is_recording {
+            if let Some(topic_for_monitor) = topic {
+                self.monitoring.send(MonitoringEvent::EventDispatched(
+                    e.clone(),
+                    topic_for_monitor.clone(),
+                    actor_id.clone(),
+                ));
+            }
+        }
+    }
+
+    #[inline]
+    fn record_overflow(
+        &self,
+        is_recording: bool,
+        e: &Arc<Envelope<E>>,
+        topic: &Option<Arc<T>>,
+        actor_id: &ActorId,
+        policy: OverflowPolicy,
+    ) {
+        if is_recording {
+            if let Some(topic_for_monitor) = topic {
+                self.monitoring.send(MonitoringEvent::Overflow(
+                    e.clone(),
+                    topic_for_monitor.clone(),
+                    actor_id.clone(),
+                    policy,
+                ));
+            }
+        }
     }
 }
 

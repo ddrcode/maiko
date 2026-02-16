@@ -49,9 +49,9 @@ let mut sup = Supervisor::new(config);
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `channel_size` | 32 | Buffer size for actor event queues |
+| `channel_size` | 128 | Buffer size for actor event queues and broker input |
 | `max_events_per_tick` | 10 | Max events an actor processes before yielding |
-| `maintenance_interval` | 1s | How often broker cleans up closed channels |
+| `maintenance_interval` | 10s | How often broker cleans up closed channels |
 | `monitoring_channel_size` | 1024 | Buffer size used by "monitoring" feature |
 
 ## Design Philosophy
@@ -118,11 +118,56 @@ async fn handle_event(&mut self, envelope: &Envelope<Self::Event>) -> Result<()>
 
 Child events carry their parent's ID as `correlation_id`, enabling tracing of event chains through the system.
 
+## Flow Control
+
+Events pass through two channel stages:
+
+1. **Stage 1** (producer → broker): shared bounded channel. Always blocks when full.
+2. **Stage 2** (broker → subscriber): per-actor bounded channel. Behavior depends on the topic's `OverflowPolicy`.
+
+### Overflow Policies
+
+Override `Topic::overflow_policy()` to control stage 2 behavior:
+
+| Policy | Behavior | Use case |
+|--------|----------|----------|
+| `Fail` (default) | Close subscriber's channel, actor terminates | Surfaces problems immediately |
+| `Drop` | Discard event, continue | Telemetry, metrics, expendable data |
+| `Block` | Wait for space (broker pauses) | Commands, data that must arrive |
+
+```rust
+fn overflow_policy(&self) -> OverflowPolicy {
+    match self {
+        MyTopic::Control   => OverflowPolicy::Block,
+        MyTopic::Data      => OverflowPolicy::Block,
+        MyTopic::Telemetry => OverflowPolicy::Drop,
+    }
+}
+```
+
+### Producer-Side Control
+
+Producers can check stage 1 congestion with `Context::is_sender_full()` to skip non-essential events:
+
+```rust
+async fn step(&mut self) -> Result<StepAction> {
+    // Only send telemetry when the system isn't busy
+    if !self.ctx.is_sender_full() {
+        self.ctx.send(Event::Metrics(self.stats())).await?;
+    }
+    Ok(StepAction::Backoff(Duration::from_secs(1)))
+}
+```
+
+### Single-Broker Limitation
+
+With a single broker (current architecture), `Block` on one topic delays dispatch to all other topics while the broker waits. For most systems this delay is acceptable. Multi-broker support (planned) will eliminate cross-topic interference.
+
 ## Performance Considerations
 
 ### Channel Sizing
 
-- **Too small**: Backpressure, potential deadlocks in hot paths
+- **Too small**: Frequent backpressure, `Block` policies stall the broker often
 - **Too large**: Memory overhead, delayed backpressure signals
 
 Start with defaults and tune based on profiling.

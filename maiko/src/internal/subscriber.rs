@@ -23,6 +23,10 @@ impl<E: Event, T: Topic<E>> Subscriber<E, T> {
             sender,
         }
     }
+
+    pub fn is_closed(&self) -> bool {
+        self.sender.is_closed()
+    }
 }
 
 impl<E: Event, T: Topic<E>> PartialEq for Subscriber<E, T> {
@@ -30,3 +34,5 @@ impl<E: Event, T: Topic<E>> PartialEq for Subscriber<E, T> {
         self.actor_id == other.actor_id
     }
 }
+
+impl<E: Event, T: Topic<E>> Eq for Subscriber<E, T> {}
