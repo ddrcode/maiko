@@ -13,6 +13,7 @@ The monitoring system provides hooks into the event lifecycle:
 - **Event dispatched** — when the broker routes an event to a subscriber
 - **Event delivered** — when an actor receives an event from its mailbox
 - **Event handled** — when an actor finishes processing an event
+- **Overflow** — when a subscriber's channel is full and an overflow policy is triggered
 - **Errors** — when an actor's event handler returns an error
 - **Actor lifecycle** — when actors stop
 
@@ -75,7 +76,7 @@ sup.monitors().add(Tracer).await;
 ```
 
 Output at different log levels:
-- `trace` - event dispatched/delivered (high volume)
+- `trace` - event dispatched/delivered/overflow (high volume)
 - `debug` - event handled
 - `warn` - errors
 - `info` - actor stopped
@@ -117,6 +118,9 @@ pub trait Monitor<E: Event, T: Topic<E>>: Send {
     /// Called when an actor's handler returns an error.
     fn on_error(&self, err: &str, actor_id: &ActorId) {}
 
+    /// Called when a subscriber's channel is full (see OverflowPolicy).
+    fn on_overflow(&self, envelope: &Envelope<E>, topic: &T, receiver: &ActorId, policy: OverflowPolicy) {}
+
     /// Called when an actor stops.
     fn on_actor_stop(&self, actor_id: &ActorId) {}
 }
@@ -130,8 +134,10 @@ Events flow through these stages:
 2. **Delivered** — Actor receives the event from its channel
 3. **Handled** — Actor's `handle_event()` completes
 
+If a subscriber's channel is full at step 1, `on_overflow` fires instead of `on_event_dispatched`. The overflow policy then determines what happens next (drop, block, or close the channel).
+
 For a single event delivered to multiple actors, you'll see:
-- One `on_event_dispatched` call per receiver
+- One `on_event_dispatched` call per receiver (or `on_overflow` if the channel is full)
 - One `on_event_delivered` call per receiver
 - One `on_event_handled` call per receiver
 

@@ -123,6 +123,7 @@ cargo run --example guesser
 | **Topic** | Routes events to interested actors |
 | **Actor** | Processes events via `handle_event()` and produces events via `step()` |
 | **Context** | Provides actors with `send()`, `stop()`, and metadata access |
+| **OverflowPolicy** | Controls behavior when a subscriber's channel is full (`Fail`, `Drop`, `Block`) |
 | **Supervisor** | Manages actor lifecycles and the runtime |
 | **Envelope** | Wraps events with metadata (sender, correlation ID) |
 
@@ -212,7 +213,7 @@ Maiko powers the daemon in [**Charon**](https://github.com/ddrcode/charon) - a U
 
 ## Current State
 
-Maiko is battle-tested in the [Charon](https://github.com/ddrcode/charon) project, where it runs continuously, but it's not yet production-grade. I'd describe it as solid for happy-path scenarios and insufficient for rainy days. Supervision is minimal, backpressure isn't handled, and improved error handling and recovery strategies are planned for 0.3.0.
+Maiko is battle-tested in the [Charon](https://github.com/ddrcode/charon) project, where it runs continuously, but it's not yet production-grade. I'd describe it as solid for happy-path scenarios and still maturing for rainy days. Flow control with per-topic overflow policies is in place, supervision is minimal, and improved error handling and recovery strategies are planned.
 
 For now, Maiko demonstrates what it wants to be. That's the state I wanted to reach before sharing it with a wider audience. Want to help shape what comes next? See below.
 

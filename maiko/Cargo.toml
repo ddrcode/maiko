@@ -67,4 +67,3 @@ required-features = ["recorder"]
 
 [[example]]
 name = "backpressure"
-required-features = ["monitoring"]

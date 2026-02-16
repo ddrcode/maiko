@@ -58,6 +58,26 @@ impl Topic<NetworkEvent> for NetworkTopic {
 }
 ```
 
+### Overflow Policy
+
+Each topic defines what happens when a subscriber's channel is full, via `overflow_policy()`:
+
+```rust
+impl Topic<NetworkEvent> for NetworkTopic {
+    fn from_event(event: &NetworkEvent) -> Self { /* ... */ }
+
+    fn overflow_policy(&self) -> OverflowPolicy {
+        match self {
+            NetworkTopic::Ingress => OverflowPolicy::Block,   // wait for space
+            NetworkTopic::Control => OverflowPolicy::Block,   // commands must arrive
+            NetworkTopic::Egress  => OverflowPolicy::Drop,    // discard if slow
+        }
+    }
+}
+```
+
+The default is `Fail` — the subscriber's channel is closed and the actor terminates. This surfaces problems immediately. See [`OverflowPolicy`](https://docs.rs/maiko/latest/maiko/enum.OverflowPolicy.html) for details.
+
 ### DefaultTopic
 
 Use `DefaultTopic` when you don't need routing — all events go to all subscribed actors:

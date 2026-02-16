@@ -77,7 +77,10 @@ pub trait Monitor<E: Event, T: Topic<E> = DefaultTopic>: Send {
         let _a = actor_id;
     }
 
-    /// Called on on overflow
+    /// Called when a subscriber's channel is full and an overflow policy is triggered.
+    ///
+    /// Fires once per affected subscriber, before the policy action (drop, block,
+    /// or channel close) takes effect. See [`OverflowPolicy`] for details.
     fn on_overflow(
         &self,
         envelope: &Envelope<E>,

@@ -3,7 +3,7 @@ use crate::{ActorId, Envelope, Event, OverflowPolicy, Topic, monitoring::Monitor
 /// A monitor that logs event lifecycle to the `tracing` crate.
 ///
 /// Provides visibility into event flow without custom code. Log levels:
-/// - `trace` - event dispatched/delivered (high volume)
+/// - `trace` - event dispatched/delivered/overflow (high volume)
 /// - `debug` - event handled
 /// - `warn` - errors
 /// - `info` - actor stopped
