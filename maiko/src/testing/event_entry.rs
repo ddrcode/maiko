@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{hash, sync::Arc};
 
 use crate::{ActorId, Envelope, Event, EventId, Meta, Topic};
 
@@ -12,7 +12,7 @@ use crate::{ActorId, Envelope, Event, EventId, Meta, Topic};
 /// - `event`: The envelope containing the event payload and metadata
 /// - `topic`: The topic under which this event was routed
 /// - `actor_id`: The receiving actor
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, hash::Hash)]
 pub struct EventEntry<E: Event, T: Topic<E>> {
     pub(crate) event: Arc<Envelope<E>>,
     pub(crate) topic: Arc<T>,

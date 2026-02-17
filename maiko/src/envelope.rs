@@ -1,3 +1,5 @@
+use std::{fmt, hash, ops};
+
 use crate::{ActorId, Event, EventId, Meta};
 
 /// Event plus metadata used by the broker for routing and observability.
@@ -14,12 +16,12 @@ use crate::{ActorId, Event, EventId, Meta};
         deserialize = "E: serde::de::DeserializeOwned"
     ))
 )]
-pub struct Envelope<E: Event> {
+pub struct Envelope<E> {
     meta: Meta,
     event: E,
 }
 
-impl<E: Event> Envelope<E> {
+impl<E> Envelope<E> {
     /// Create a new envelope tagging the event with the given actor name.
     pub fn new(event: E, actor_id: ActorId) -> Self {
         Self {
@@ -76,23 +78,50 @@ impl<E: Event> From<(&E, &Meta)> for Envelope<E> {
     }
 }
 
-impl<E: Event> std::ops::Deref for Envelope<E> {
+impl<E: PartialEq> PartialEq for Envelope<E> {
+    fn eq(&self, other: &Self) -> bool {
+        self.meta.id() == other.meta.id() && self.event == other.event
+    }
+}
+
+impl<E: Eq> Eq for Envelope<E> {}
+
+impl<E: hash::Hash> hash::Hash for Envelope<E> {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.meta.id().hash(state);
+        self.event.hash(state);
+    }
+}
+
+// TODO remove in 0.3.0
+// NOTE: This Deref impl is scheduled for removal in 0.3.0.
+// Prefer `envelope.event()` over `*envelope` or direct field access.
+impl<E: Event> ops::Deref for Envelope<E> {
     type Target = E;
     fn deref(&self) -> &E {
         &self.event
     }
 }
 
-// Debug is implemented only when E: Debug.
-// This allows Envelope to be used with non-Debug events while still providing
-// full debug output when the event type supports it.
-impl<E: Event + std::fmt::Debug> std::fmt::Debug for Envelope<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<E: fmt::Debug> fmt::Debug for Envelope<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Envelope")
             .field("id", &self.meta.id())
             .field("sender", &self.meta.actor_name())
             .field("event", &self.event)
             .finish()
+    }
+}
+
+impl<E: fmt::Display> fmt::Display for Envelope<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Envelope {{ id: {}, sender: {}, event: {} }}",
+            self.meta.id(),
+            self.meta.actor_name(),
+            self.event
+        )
     }
 }
 

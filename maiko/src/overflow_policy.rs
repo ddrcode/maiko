@@ -4,7 +4,7 @@ use std::fmt;
 ///
 /// Events flow through two stages: producers send to the broker (stage 1),
 /// and the broker dispatches to subscriber channels (stage 2). Overflow
-/// policy governs stage 2 — what the broker does when a specific subscriber
+/// policy governs stage 2 - what the broker does when a specific subscriber
 /// can't keep up.
 ///
 /// The policy is defined on [`Topic`](crate::Topic), not on actors, because

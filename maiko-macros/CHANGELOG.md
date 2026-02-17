@@ -1,8 +1,10 @@
-# [0.2.5](Unreleased)
+# [0.2.5](https://github.com/ddrcode/maiko/compare/v0.2.4...v0.2.5) (February 17th, 2026)
 
 ### Changed
 
-- Moved from MIT to dual license (MIT + Apache 2.0)
+- Moved from MIT to dual license (MIT + Apache 2.0) ([#77])
+
+[#77]: https://github.com/ddrcode/maiko/pull/77
 
 ---
 

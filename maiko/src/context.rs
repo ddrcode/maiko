@@ -1,11 +1,14 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
+use std::{
+    fmt,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{ActorId, Envelope, Event, EventId, Meta, Result};
+use crate::{ActorId, Envelope, EventId, Meta, Result};
 
 /// Runtime-provided context for an actor to interact with the system.
 ///
@@ -21,13 +24,13 @@ use crate::{ActorId, Envelope, Event, EventId, Meta, Result};
 ///
 /// See also: [`Envelope`], [`Meta`], [`crate::Supervisor`].
 #[derive(Clone)]
-pub struct Context<E: Event> {
+pub struct Context<E> {
     pub(crate) actor_id: ActorId,
     pub(crate) sender: Sender<Arc<Envelope<E>>>,
     pub(crate) alive: Arc<AtomicBool>,
 }
 
-impl<E: Event> Context<E> {
+impl<E> Context<E> {
     pub fn new(
         actor_id: ActorId,
         sender: Sender<Arc<Envelope<E>>>,
@@ -120,7 +123,7 @@ impl<E: Event> Context<E> {
     ///
     /// Producers can use this to skip sending non-essential events when
     /// the system is under load, avoiding contention on the shared broker
-    /// channel (stage 1). This is a cooperative mechanism — the producer
+    /// channel (stage 1). This is a cooperative mechanism - the producer
     /// decides what to skip.
     ///
     /// ```rust,ignore
@@ -136,5 +139,15 @@ impl<E: Event> Context<E> {
     #[inline]
     pub fn is_sender_full(&self) -> bool {
         self.sender.capacity() == 0
+    }
+}
+
+impl<E> fmt::Debug for Context<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Context")
+            .field("actor_id", &self.actor_id)
+            .field("is_alive", &self.is_alive())
+            .field("sender", &self.sender)
+            .finish()
     }
 }

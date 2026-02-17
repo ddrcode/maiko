@@ -242,7 +242,7 @@ mod tests {
     }
     impl Topic<TestEvent> for TestTopic {
         fn from_event(event: &TestEvent) -> Self {
-            if event.id.is_multiple_of(2) {
+            if event.id % 2 == 0 {
                 TestTopic::A
             } else {
                 TestTopic::B

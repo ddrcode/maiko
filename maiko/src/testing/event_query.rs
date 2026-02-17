@@ -110,7 +110,7 @@ impl<E: Event, T: Topic<E>> EventQuery<E, T> {
         self.apply_filters()
             .into_iter()
             .filter_map(|e| {
-                let id = e.meta().actor_id.clone();
+                let id = e.meta().actor_id().clone();
                 if seen.insert(id.clone()) {
                     Some(id)
                 } else {

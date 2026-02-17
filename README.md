@@ -145,9 +145,9 @@ async fn test_event_delivery() -> Result<()> {
     let mut test = Harness::new(&mut sup).await;
     sup.start().await?;
 
-    test.start_recording().await;
+    test.record().await;
     let id = test.send_as(&producer, MyEvent::Data(42)).await?;
-    test.stop_recording().await;
+    test.settle().await;
 
     assert!(test.event(id).was_delivered_to(&consumer));
     assert_eq!(1, test.actor(&consumer).events_received());

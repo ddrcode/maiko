@@ -1,21 +1,26 @@
-# [0.2.5](Unreleased)
+# [0.2.5](https://github.com/ddrcode/maiko/compare/v0.2.4...v0.2.5) (February 17th, 2026)
+
+**Backpressure handling**
 
 ### Added
 
 - `OverflowPolicy` enum ([#75])
 - `overflow_policy` method in `Topic` (defaulting to `OverflowPolicy::Fail`) ([#75])
-- `on_overflow` metod in `Monitor` (and implementation in `Tracer`) ([#75])
+- `on_overflow` method in `Monitor` (and implementation in `Tracer`) ([#75])
 - `ActorConfig` - configs allowing to fine-tune actors behavior ([#76])
 - `ActorBuilder` - for more fine-grained actor building (including config) ([#76])
 
 ### Changed
 
-- Moved from MIT to dual license (MIT + Apache 2.0)
+- Moved from MIT to dual license (MIT + Apache 2.0) ([#77])
 - Event broker to respect `OverflowPolicy` ([#75])
 - The main `Config` to act as a default for `ActorConfig` ([#76])
+- Non-breaking changes to align Maiko with the API guidelines ([#70])
 
-[#75]: https://github.com/ddrcode/maiko/issues/75
-[#76]: https://github.com/ddrcode/maiko/issues/76
+[#70]: https://github.com/ddrcode/maiko/issues/70
+[#75]: https://github.com/ddrcode/maiko/pull/75
+[#76]: https://github.com/ddrcode/maiko/pull/76
+[#77]: https://github.com/ddrcode/maiko/pull/77
 
 ---
 

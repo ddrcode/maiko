@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::error::{SendError, TrySendError};
 
-use crate::{ActorId, Envelope, Event};
+use crate::{ActorId, Envelope};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -35,13 +35,13 @@ pub enum Error {
     SettleTimeout(std::time::Duration, usize),
 }
 
-impl<E: Event> From<SendError<Arc<Envelope<E>>>> for Error {
+impl<E> From<SendError<Arc<Envelope<E>>>> for Error {
     fn from(e: SendError<Arc<Envelope<E>>>) -> Self {
         Error::SendError(e.to_string())
     }
 }
 
-impl<E: Event> From<TrySendError<Arc<Envelope<E>>>> for Error {
+impl<E> From<TrySendError<Arc<Envelope<E>>>> for Error {
     fn from(e: TrySendError<Arc<Envelope<E>>>) -> Self {
         match e {
             TrySendError::Full(_) => Error::ChannelIsFull,

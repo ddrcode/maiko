@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::{hash, time::Duration};
 
 /// Action returned by an actor `step` to influence scheduling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, hash::Hash)]
 pub enum StepAction {
     /// Keep running and allow other branches to progress.
     Continue,

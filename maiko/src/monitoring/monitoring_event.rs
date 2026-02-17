@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{ActorId, Envelope, OverflowPolicy};
 
-pub(crate) enum MonitoringEvent<E: crate::Event, T: crate::Topic<E>> {
+pub(crate) enum MonitoringEvent<E, T> {
     EventDispatched(Arc<Envelope<E>>, Arc<T>, ActorId),
     EventDelivered(Arc<Envelope<E>>, Arc<T>, ActorId),
     EventHandled(Arc<Envelope<E>>, Arc<T>, ActorId),
