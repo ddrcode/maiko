@@ -1,5 +1,7 @@
 # [0.2.5](Unreleased)
 
+**Backpressure handling**
+
 ### Added
 
 - `OverflowPolicy` enum ([#75])
@@ -13,9 +15,11 @@
 - Moved from MIT to dual license (MIT + Apache 2.0)
 - Event broker to respect `OverflowPolicy` ([#75])
 - The main `Config` to act as a default for `ActorConfig` ([#76])
+- Non-breaking changes to align Maiko with the API guidelines ([#70])
 
-[#75]: https://github.com/ddrcode/maiko/issues/75
-[#76]: https://github.com/ddrcode/maiko/issues/76
+[#70]: https://github.com/ddrcode/maiko/issues/70
+[#75]: https://github.com/ddrcode/maiko/pull/75
+[#76]: https://github.com/ddrcode/maiko/pull/76
 
 ---
 
