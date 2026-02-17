@@ -1,4 +1,4 @@
-# [0.2.5](Unreleased)
+# [0.2.5](https://github.com/ddrcode/maiko/compare/v0.2.4...v0.2.5) (February 17th, 2026)
 
 **Backpressure handling**
 
@@ -12,7 +12,7 @@
 
 ### Changed
 
-- Moved from MIT to dual license (MIT + Apache 2.0)
+- Moved from MIT to dual license (MIT + Apache 2.0) ([#77])
 - Event broker to respect `OverflowPolicy` ([#75])
 - The main `Config` to act as a default for `ActorConfig` ([#76])
 - Non-breaking changes to align Maiko with the API guidelines ([#70])
@@ -20,6 +20,7 @@
 [#70]: https://github.com/ddrcode/maiko/issues/70
 [#75]: https://github.com/ddrcode/maiko/pull/75
 [#76]: https://github.com/ddrcode/maiko/pull/76
+[#77]: https://github.com/ddrcode/maiko/pull/77
 
 ---
 
