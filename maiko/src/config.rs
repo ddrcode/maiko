@@ -23,7 +23,7 @@ pub struct Config {
     pub channel_size: usize,
 
     /// Default mailbox channel capacity for newly registered actors.
-    /// Individual actors can override this via [`ActorBuilder::channel_capacity`].
+    /// Individual actors can override this via [`ActorBuilder::channel_capacity`](crate::ActorBuilder::channel_capacity).
     /// Default: 128
     pub default_actor_channel_capacity: usize,
 

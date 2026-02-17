@@ -6,7 +6,7 @@
 
 - `OverflowPolicy` enum ([#75])
 - `overflow_policy` method in `Topic` (defaulting to `OverflowPolicy::Fail`) ([#75])
-- `on_overflow` metod in `Monitor` (and implementation in `Tracer`) ([#75])
+- `on_overflow` method in `Monitor` (and implementation in `Tracer`) ([#75])
 - `ActorConfig` - configs allowing to fine-tune actors behavior ([#76])
 - `ActorBuilder` - for more fine-grained actor building (including config) ([#76])
 

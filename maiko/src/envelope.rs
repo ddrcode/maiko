@@ -94,6 +94,8 @@ impl<E: hash::Hash> hash::Hash for Envelope<E> {
 }
 
 // TODO remove in 0.3.0
+// NOTE: This Deref impl is scheduled for removal in 0.3.0.
+// Prefer `envelope.event()` over `*envelope` or direct field access.
 impl<E: Event> ops::Deref for Envelope<E> {
     type Target = E;
     fn deref(&self) -> &E {
