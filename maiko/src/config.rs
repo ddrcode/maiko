@@ -31,6 +31,7 @@ pub struct Config {
     /// before yielding control back to the scheduler.
     /// Lower values improve fairness, higher values improve throughput.
     /// Default: 10
+    // TODO rename to default_max_events_per_tick i 0.3.0 and make private
     pub max_events_per_tick: usize,
 
     /// How often the broker cleans up closed subscriber channels.
@@ -88,12 +89,20 @@ impl Config {
     /// - Higher values (50-100): Better throughput, potential starvation of `step()`
     ///
     /// [`Actor::step`]: crate::Actor::step
-    pub fn with_max_events_per_tick(mut self, limit: usize) -> Self {
+    #[deprecated(
+        since = "0.2.5",
+        note = "please use `with_default_max_events_per_tick` instead"
+    )]
+    pub fn with_max_events_per_tick(self, limit: usize) -> Self {
+        self.with_default_max_events_per_tick(limit)
+    }
+
+    pub fn with_default_max_events_per_tick(mut self, limit: usize) -> Self {
         self.max_events_per_tick = limit;
         self
     }
 
-    pub fn max_events_per_tick(&self) -> usize {
+    pub fn default_max_events_per_tick(&self) -> usize {
         self.max_events_per_tick
     }
 

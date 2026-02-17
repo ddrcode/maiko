@@ -203,6 +203,7 @@ async fn run() -> maiko::Result {
     sup.build_actor("consumer", |ctx| Consumer { ctx, checksum: 0 })
         .topics(&[Topic::Data, Topic::Command])
         .channel_capacity(256)
+        .with_config(|c| c.with_max_events_per_tick(64))
         .build()?;
     sup.add_actor("telemetry", |_| Telemetry, [Topic::Telemetry])?;
 

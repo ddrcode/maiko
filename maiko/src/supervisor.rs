@@ -186,7 +186,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             actor,
             receiver: rx,
             ctx,
-            max_events_per_tick: self.config.max_events_per_tick(),
+            max_events_per_tick: config.max_events_per_tick(),
             cancel_token: self.cancel_token.clone(),
 
             #[cfg(feature = "monitoring")]

@@ -26,6 +26,7 @@ use crate::Config;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ActorConfig {
     channel_capacity: usize,
+    max_events_per_tick: usize,
 }
 
 impl ActorConfig {
@@ -33,6 +34,7 @@ impl ActorConfig {
     pub fn new(global_config: &Config) -> Self {
         Self {
             channel_capacity: global_config.default_actor_channel_capacity(),
+            max_events_per_tick: global_config.default_max_events_per_tick(),
         }
     }
 
@@ -48,5 +50,14 @@ impl ActorConfig {
     /// Returns the actor's mailbox channel capacity.
     pub fn channel_capacity(&self) -> usize {
         self.channel_capacity
+    }
+
+    pub fn with_max_events_per_tick(mut self, max_events: usize) -> Self {
+        self.max_events_per_tick = max_events;
+        self
+    }
+
+    pub fn max_events_per_tick(&self) -> usize {
+        self.max_events_per_tick
     }
 }

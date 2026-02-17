@@ -74,6 +74,14 @@ impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
         self
     }
 
+    pub fn with_config<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce(ActorConfig) -> ActorConfig,
+    {
+        self.config = f(self.config);
+        self
+    }
+
     /// Set the actor's mailbox channel capacity.
     ///
     /// Shorthand for modifying the channel capacity without replacing the
