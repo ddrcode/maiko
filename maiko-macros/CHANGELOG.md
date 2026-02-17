@@ -1,6 +1,8 @@
 # [0.2.5](Unreleased)
 
-No changes. Version bumped to be aligned with the main library.
+### Changed
+
+- Moved from MIT to dual license (MIT + Apache 2.0)
 
 ---
 

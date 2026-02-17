@@ -80,6 +80,10 @@ impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
     /// Register a new monitor and return a handle for controlling it.
     ///
     /// The monitor starts in the active (non-paused) state.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the dispatcher channel is closed (supervisor already stopped).
     pub async fn add<M: Monitor<E, T> + 'static>(&self, monitor: M) -> MonitorHandle<E, T> {
         let (tx, rx) = oneshot::channel();
         let _ = self
