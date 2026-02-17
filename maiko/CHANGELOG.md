@@ -5,15 +5,17 @@
 - `OverflowPolicy` enum ([#75])
 - `overflow_policy` method in `Topic` (defaulting to `OverflowPolicy::Fail`) ([#75])
 - `on_overflow` metod in `Monitor` (and implementation in `Tracer`) ([#75])
-- `ActorConfig` - configs allowing to fine-tune actors behavior
-- `ActorBuilder` - for more fine-grained actor building (including config)
+- `ActorConfig` - configs allowing to fine-tune actors behavior ([#76])
+- `ActorBuilder` - for more fine-grained actor building (including config) ([#76])
 
 ### Changed
 
+- Moved from MIT to dual license (MIT + Apache 2.0)
 - Event broker to respect `OverflowPolicy` ([#75])
-- The main `Config` to as a default for `ActorConfig`
+- The main `Config` to act as a default for `ActorConfig` ([#76])
 
 [#75]: https://github.com/ddrcode/maiko/issues/75
+[#76]: https://github.com/ddrcode/maiko/issues/76
 
 ---
 

@@ -27,6 +27,10 @@ pub struct Meta {
 
 impl Meta {
     /// Construct metadata for a given actor name and optional correlation id.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the system clock is set before the Unix epoch.
     pub fn new(actor_id: ActorId, correlation_id: Option<EventId>) -> Self {
         Self {
             id: Uuid::new_v4().as_u128(),
