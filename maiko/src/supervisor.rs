@@ -3,15 +3,15 @@ use std::sync::{Arc, atomic::AtomicBool};
 use tokio::{
     sync::{
         Mutex, Notify,
-        mpsc::{Sender, channel},
+        mpsc::{self, Sender, channel},
     },
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Actor, ActorId, Config, Context, DefaultTopic, Envelope, Error, Event, Label, Result,
-    Subscribe, Topic,
+    Actor, ActorBuilder, ActorConfig, ActorId, Config, Context, DefaultTopic, Envelope, Error,
+    Event, Label, Result, Subscribe, Topic,
     internal::{ActorController, Broker, Subscriber, Subscription},
 };
 
@@ -61,7 +61,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
         let config = Arc::new(config);
-        let (tx, rx) = channel::<Arc<Envelope<E>>>(config.channel_size);
+        let (tx, rx) = channel::<Arc<Envelope<E>>>(config.broker_channel_capacity());
         let cancel_token = Arc::new(CancellationToken::new());
 
         #[cfg(feature = "monitoring")]
@@ -124,7 +124,33 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let ctx = self.create_context(name);
         let actor = factory(ctx.clone());
         let topics = topics.into().0;
-        self.register_actor(ctx, actor, topics)
+        self.register_actor(ctx, actor, topics, ActorConfig::new(&self.config))
+    }
+
+    /// Start building an actor registration with custom configuration.
+    ///
+    /// Returns an [`ActorBuilder`] that lets you set topics, channel capacity,
+    /// or a full [`ActorConfig`] before calling [`build()`](ActorBuilder::build).
+    ///
+    /// Use this instead of [`add_actor`](Self::add_actor) when you need
+    /// per-actor settings that differ from the global defaults.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// sup.build_actor("consumer", |ctx| Consumer::new(ctx))
+    ///     .topics(&[Topic::Data, Topic::Command])
+    ///     .channel_capacity(512)
+    ///     .build()?;
+    /// ```
+    pub fn build_actor<'a, A, F>(&'a mut self, name: &str, factory: F) -> ActorBuilder<'a, E, T, A>
+    where
+        A: Actor<Event = E>,
+        F: FnOnce(Context<E>) -> A,
+    {
+        let ctx = self.create_context(name);
+        let actor = factory(ctx.clone());
+        ActorBuilder::new(self, actor, ctx)
     }
 
     /// Internal method to register an actor with the supervisor.
@@ -138,6 +164,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         ctx: Context<E>,
         actor: A,
         topics: Subscription<T>,
+        config: ActorConfig,
     ) -> Result<ActorId>
     where
         A: Actor<Event = E>,
@@ -149,7 +176,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             .try_lock()
             .map_err(|_| Error::BrokerAlreadyStarted)?;
 
-        let (tx, rx) = tokio::sync::mpsc::channel::<Arc<Envelope<E>>>(self.config.channel_size);
+        let (tx, rx) = mpsc::channel::<Arc<Envelope<E>>>(config.channel_capacity());
 
         let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics.clone(), tx);
         broker.add_subscriber(subscriber)?;
@@ -159,7 +186,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             actor,
             receiver: rx,
             ctx,
-            max_events_per_tick: self.config.max_events_per_tick,
+            max_events_per_tick: config.max_events_per_tick(),
             cancel_token: self.cancel_token.clone(),
 
             #[cfg(feature = "monitoring")]

@@ -60,8 +60,6 @@ async fn main() -> Result<()> {
     sup.start().await?;
     sup.send(MyEvent::Hello("World".into())).await?;
 
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
     // Graceful shutdown (it attempts to process all events already in the queue)
     sup.stop().await?;
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;

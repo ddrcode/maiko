@@ -44,7 +44,6 @@ examples:
     cargo run --example guesser
     cargo run --example monitoring --features monitoring
     cargo run --example arbitrage --features test-harness
-    cargo run --example recorder --features recorder
     cargo run --example backpressure --features monitoring
 
 # Clean build artifacts

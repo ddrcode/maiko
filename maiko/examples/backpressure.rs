@@ -197,11 +197,14 @@ async fn run() -> maiko::Result {
         },
         &[Topic::Command],
     )?;
-    sup.add_actor(
-        "consumer",
-        |ctx| Consumer { ctx, checksum: 0 },
-        &[Topic::Data, Topic::Command],
-    )?;
+    // Consumer uses build_actor for a larger mailbox — it processes events
+    // slowly (1ms each), so a bigger buffer absorbs short bursts before
+    // the Block policy kicks in and throttles the producer.
+    sup.build_actor("consumer", |ctx| Consumer { ctx, checksum: 0 })
+        .topics(&[Topic::Data, Topic::Command])
+        .channel_capacity(256)
+        .with_config(|c| c.with_max_events_per_tick(64))
+        .build()?;
     sup.add_actor("telemetry", |_| Telemetry, [Topic::Telemetry])?;
 
     #[cfg(feature = "monitoring")]
