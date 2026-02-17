@@ -123,7 +123,7 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        let mut cleanup_interval = tokio::time::interval(self.config.maintenance_interval);
+        let mut cleanup_interval = tokio::time::interval(self.config.maintenance_interval());
         loop {
             select! {
                 _ = self.cancel_token.cancelled() => break,

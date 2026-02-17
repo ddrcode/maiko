@@ -61,7 +61,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     /// Create a new supervisor with the given runtime configuration.
     pub fn new(config: Config) -> Self {
         let config = Arc::new(config);
-        let (tx, rx) = channel::<Arc<Envelope<E>>>(config.channel_size);
+        let (tx, rx) = channel::<Arc<Envelope<E>>>(config.broker_channel_capacity());
         let cancel_token = Arc::new(CancellationToken::new());
 
         #[cfg(feature = "monitoring")]
@@ -124,14 +124,26 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         let ctx = self.create_context(name);
         let actor = factory(ctx.clone());
         let topics = topics.into().0;
-        self.register_actor(ctx, actor, topics, ActorConfig::default())
+        self.register_actor(ctx, actor, topics, ActorConfig::new(&self.config))
     }
 
-    pub fn build_actor<'a, A, F, S>(
-        &'a mut self,
-        name: &str,
-        factory: F,
-    ) -> ActorBuilder<'a, E, T, A>
+    /// Start building an actor registration with custom configuration.
+    ///
+    /// Returns an [`ActorBuilder`] that lets you set topics, channel capacity,
+    /// or a full [`ActorConfig`] before calling [`build()`](ActorBuilder::build).
+    ///
+    /// Use this instead of [`add_actor`](Self::add_actor) when you need
+    /// per-actor settings that differ from the global defaults.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// sup.build_actor("consumer", |ctx| Consumer::new(ctx))
+    ///     .topics(&[Topic::Data, Topic::Command])
+    ///     .channel_capacity(512)
+    ///     .build()?;
+    /// ```
+    pub fn build_actor<'a, A, F>(&'a mut self, name: &str, factory: F) -> ActorBuilder<'a, E, T, A>
     where
         A: Actor<Event = E>,
         F: FnOnce(Context<E>) -> A,
@@ -174,7 +186,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             actor,
             receiver: rx,
             ctx,
-            max_events_per_tick: self.config.max_events_per_tick,
+            max_events_per_tick: self.config.max_events_per_tick(),
             cancel_token: self.cancel_token.clone(),
 
             #[cfg(feature = "monitoring")]

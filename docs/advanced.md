@@ -35,24 +35,45 @@ Returning `Ok(())` from `on_error` swallows the error and continues. Returning `
 
 ## Configuration
 
+### Global Config
+
 Fine-tune runtime behavior with `Config`:
 
 ```rust
 let config = Config::default()
-    .with_channel_size(100)           // Event queue size per actor (default: 32)
-    .with_max_events_per_tick(50);    // Events processed per tick (default: 10)
+    .with_broker_channel_capacity(512)          // Broker input buffer (default: 256)
+    .with_default_actor_channel_capacity(256)   // Actor mailbox default (default: 128)
+    .with_max_events_per_tick(50);              // Events processed per tick (default: 10)
 
 let mut sup = Supervisor::new(config);
 ```
 
-### Configuration Options
-
 | Option | Default | Description |
 |--------|---------|-------------|
-| `channel_size` | 128 | Buffer size for actor event queues and broker input |
+| `broker_channel_capacity` | 256 | Broker input buffer (stage 1). Producers block when full. |
+| `default_actor_channel_capacity` | 128 | Default mailbox size for new actors (stage 2). |
 | `max_events_per_tick` | 10 | Max events an actor processes before yielding |
 | `maintenance_interval` | 10s | How often broker cleans up closed channels |
-| `monitoring_channel_size` | 1024 | Buffer size used by "monitoring" feature |
+| `monitoring_channel_capacity` | 1024 | Buffer size used by "monitoring" feature |
+
+### Per-Actor Config
+
+Use `build_actor` to override settings for individual actors:
+
+```rust
+// Slow consumer with a larger mailbox to absorb bursts
+sup.build_actor("writer", |ctx| Writer::new(ctx))
+    .topics(&[Topic::Data])
+    .channel_capacity(512)
+    .build()?;
+
+// Fast actor using global defaults
+sup.add_actor("processor", |ctx| Processor::new(ctx), &[Topic::Data])?;
+```
+
+`add_actor` always uses the global `default_actor_channel_capacity`. When an
+actor needs a different mailbox size — typically slow consumers or actors
+handling bursty traffic — use `build_actor` with `channel_capacity()`.
 
 ## Design Philosophy
 

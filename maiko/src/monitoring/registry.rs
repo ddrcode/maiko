@@ -39,7 +39,7 @@ pub struct MonitorRegistry<E: Event, T: Topic<E>> {
 impl<E: Event, T: Topic<E>> MonitorRegistry<E, T> {
     pub(crate) fn new(config: &Config) -> Self {
         let cancel_token = Arc::new(CancellationToken::new());
-        let (tx, rx) = tokio::sync::mpsc::channel(config.monitoring_channel_size);
+        let (tx, rx) = tokio::sync::mpsc::channel(config.monitoring_channel_capacity());
         let is_active = Arc::new(AtomicBool::new(false));
         let dispatcher = MonitorDispatcher::new(rx, cancel_token.clone(), is_active.clone());
         Self {

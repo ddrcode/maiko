@@ -194,6 +194,19 @@ sup.add_actor("egress", |ctx| EgressActor::new(ctx), &[NetworkTopic::Egress])?;
 sup.add_actor("monitor", |ctx| MonitorActor::new(ctx), Subscribe::All())?;
 ```
 
+### Actor Builder
+
+Use `build_actor` when an actor needs non-default configuration (e.g. a larger channel):
+
+```rust
+sup.build_actor("writer", |ctx| Writer::new(ctx))
+    .topics(&[NetworkTopic::Ingress])
+    .channel_capacity(512)
+    .build()?;
+```
+
+See [Advanced Topics — Per-Actor Config](advanced.md#per-actor-config) for details.
+
 ### Runtime Control
 
 ```rust

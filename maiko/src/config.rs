@@ -9,14 +9,23 @@
 /// use maiko::Config;
 ///
 /// let config = Config::default()
-///     .with_channel_size(256)            // Larger buffers for high throughput
-///     .with_max_events_per_tick(20);     // Process more events per cycle
+///     .with_broker_channel_capacity(512)          // Larger broker buffer
+///     .with_default_actor_channel_capacity(256)   // Larger actor mailboxes
+///     .with_max_events_per_tick(20);              // Process more events per cycle
 /// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Config {
-    /// Size of the channel buffer for each actor (and the broker).
-    /// Determines how many events can be queued before backpressure applies.
-    /// Default: 128
+    /// Size of the broker's input channel buffer.
+    /// Determines how many events can be queued before producers block (stage 1).
+    /// Default: 256
+    // TODO rename to broker_channel_capacity in 0.3.0 and make private
     pub channel_size: usize,
+
+    /// Default mailbox channel capacity for newly registered actors.
+    /// Individual actors can override this via [`ActorBuilder::channel_capacity`].
+    /// Default: 128
+    default_actor_channel_capacity: usize,
 
     /// Maximum number of events an actor will process in a single tick cycle
     /// before yielding control back to the scheduler.
@@ -24,15 +33,21 @@ pub struct Config {
     /// Default: 10
     pub max_events_per_tick: usize,
 
+    /// How often the broker cleans up closed subscriber channels.
+    /// Default: 10s
     pub maintenance_interval: tokio::time::Duration,
 
+    /// Buffer size for the monitoring event channel.
+    /// Default: 1024
+    // TODO rename to monitoring_channel_capacity in 0.3.0 and make private
     pub monitoring_channel_size: usize,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            channel_size: 128,
+            channel_size: 256,
+            default_actor_channel_capacity: 128,
             max_events_per_tick: 10,
             maintenance_interval: tokio::time::Duration::from_secs(10),
             monitoring_channel_size: 1024,
@@ -45,9 +60,21 @@ impl Config {
     ///
     /// Larger buffers allow more queued events but use more memory.
     /// When the buffer is full, senders will block (backpressure).
-    pub fn with_channel_size(mut self, size: usize) -> Self {
-        self.channel_size = size;
+    #[deprecated(
+        since = "0.2.5",
+        note = "please use `with_broker_channel_capacity` instead"
+    )]
+    pub fn with_channel_size(self, size: usize) -> Self {
+        self.with_broker_channel_capacity(size)
+    }
+
+    pub fn with_broker_channel_capacity(mut self, capacity: usize) -> Self {
+        self.channel_size = capacity;
         self
+    }
+
+    pub fn broker_channel_capacity(&self) -> usize {
+        self.channel_size
     }
 
     /// Set the maximum number of events processed per tick cycle.
@@ -66,6 +93,10 @@ impl Config {
         self
     }
 
+    pub fn max_events_per_tick(&self) -> usize {
+        self.max_events_per_tick
+    }
+
     /// Set the maintenance interval for the broker.
     ///
     /// This controls how often the broker cleans up expired subscribers.
@@ -74,8 +105,33 @@ impl Config {
         self
     }
 
-    pub fn with_monitoring_channel_size(mut self, size: usize) -> Self {
-        self.monitoring_channel_size = size;
+    pub fn maintenance_interval(&self) -> tokio::time::Duration {
+        self.maintenance_interval
+    }
+
+    #[deprecated(
+        since = "0.2.5",
+        note = "please use `with_monitoring_channel_capacity` instead"
+    )]
+    pub fn with_monitoring_channel_size(self, size: usize) -> Self {
+        self.with_monitoring_channel_capacity(size)
+    }
+
+    pub fn with_monitoring_channel_capacity(mut self, capacity: usize) -> Self {
+        self.monitoring_channel_size = capacity;
         self
+    }
+
+    pub fn monitoring_channel_capacity(&self) -> usize {
+        self.monitoring_channel_size
+    }
+
+    pub fn with_default_actor_channel_capacity(mut self, capacity: usize) -> Self {
+        self.default_actor_channel_capacity = capacity;
+        self
+    }
+
+    pub fn default_actor_channel_capacity(&self) -> usize {
+        self.default_actor_channel_capacity
     }
 }

@@ -3,6 +3,32 @@ use crate::{
     internal::Subscription,
 };
 
+/// Builder for registering an actor with custom configuration.
+///
+/// Returned by [`Supervisor::build_actor`]. Use this when you need to override
+/// per-actor settings such as channel capacity or when you want to separate
+/// actor construction from topic subscription.
+///
+/// Defaults to no topic subscriptions and channel capacity inherited from the
+/// global [`Config`].
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // Custom channel capacity for a slow consumer
+/// sup.build_actor("writer", |ctx| Writer::new(ctx))
+///     .topics(&[Topic::Data])
+///     .channel_capacity(512)
+///     .build()?;
+///
+/// // Replace the entire actor config
+/// sup.build_actor("fast", |ctx| Fast::new(ctx))
+///     .topics(Subscribe::all())
+///     .config(my_config)
+///     .build()?;
+/// ```
+///
+/// [`Supervisor::build_actor`]: crate::Supervisor::build_actor
 pub struct ActorBuilder<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> {
     supervisor: &'a mut Supervisor<E, T>,
     actor: A,
@@ -17,28 +43,47 @@ impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
         actor: A,
         ctx: Context<A::Event>,
     ) -> Self {
+        let config = ActorConfig::new(supervisor.config());
         Self {
             supervisor,
             ctx,
             actor,
-            config: ActorConfig::default(),
+            config,
             topics: Subscription::None,
         }
     }
 
-    pub fn with_topics<S>(mut self, topics: T) -> Self
+    /// Set the topics this actor subscribes to.
+    ///
+    /// Accepts anything that converts to [`Subscribe`]: a topic slice,
+    /// [`Subscribe::all()`], or [`Subscribe::none()`].
+    pub fn topics<S>(mut self, topics: S) -> Self
     where
         S: Into<Subscribe<E, T>>,
     {
-        self.topics = Into::<Subscribe<E, T>>::into(topics).0;
+        self.topics = topics.into().0;
         self
     }
 
-    pub fn with_config(mut self, config: ActorConfig) -> Self {
-        self.config = config;
+    /// Replace the entire [`ActorConfig`] for this actor.
+    pub fn config<C>(mut self, config: C) -> Self
+    where
+        C: Into<ActorConfig>,
+    {
+        self.config = config.into();
         self
     }
 
+    /// Set the actor's mailbox channel capacity.
+    ///
+    /// Shorthand for modifying the channel capacity without replacing the
+    /// full config. See [`ActorConfig::with_channel_capacity`].
+    pub fn channel_capacity(mut self, capacity: usize) -> Self {
+        self.config = self.config.with_channel_capacity(capacity);
+        self
+    }
+
+    /// Register the actor with the supervisor and return its [`ActorId`].
     pub fn build(self) -> Result<ActorId> {
         self.supervisor
             .register_actor(self.ctx, self.actor, self.topics, self.config)
