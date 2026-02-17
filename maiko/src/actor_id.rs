@@ -31,7 +31,7 @@ use std::{hash::Hash, ops::Deref, sync::Arc};
 ///
 /// For bridge actors that receive events from external sources (IPC, WebSocket),
 /// use `ActorId::new()` to create identifiers for those sources.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ActorId(Arc<str>);
 

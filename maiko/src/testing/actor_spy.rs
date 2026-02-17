@@ -49,7 +49,7 @@ impl<E: Event, T: Topic<E>> ActorSpy<E, T> {
 
     /// Returns the names of actors that sent events to this actor.
     pub fn received_from(&self) -> Vec<ActorId> {
-        distinct_by(&self.inbound, |e| e.meta().actor_id.clone())
+        distinct_by(&self.inbound, |e| e.meta().actor_id().clone())
     }
 
     /// Returns the count of distinct actors that sent events to this actor.

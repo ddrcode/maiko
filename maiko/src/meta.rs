@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{fmt, hash, time::SystemTime};
 
 use uuid::Uuid;
 
@@ -16,12 +16,12 @@ use crate::{ActorId, EventId};
 /// have any special meaning to the runtime.  It's up to the user to set and interpret it.
 /// For example, an actor may choose to set the `correlation_id` of child events, but
 /// it may also have another meaning in a different context.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, hash::Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Meta {
     id: EventId,
     timestamp: u64,
-    pub(crate) actor_id: ActorId,
+    actor_id: ActorId,
     correlation_id: Option<EventId>,
 }
 
@@ -66,5 +66,21 @@ impl Meta {
     /// It might by a parent event id, but it's up to the user to define its meaning.
     pub fn correlation_id(&self) -> Option<EventId> {
         self.correlation_id
+    }
+}
+
+impl fmt::Display for Meta {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Event Meta {{ id: {}, timestamp: {}, actor_name: {}}}",
+            self.id(),
+            self.timestamp(),
+            self.actor_name(),
+        )?;
+        if let Some(correlation_id) = self.correlation_id() {
+            write!(f, ", correlation_id: {}", correlation_id)?;
+        }
+        Ok(())
     }
 }

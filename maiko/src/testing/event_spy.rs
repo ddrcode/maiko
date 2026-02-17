@@ -35,7 +35,7 @@ impl<E: Event, T: Topic<E>> EventSpy<E, T> {
     pub fn sender(&self) -> ActorId {
         self.query
             .first()
-            .map(|e| e.meta().actor_id.clone())
+            .map(|e| e.meta().actor_id().clone())
             .expect("EventSpy must have at least one delivery record")
     }
 
