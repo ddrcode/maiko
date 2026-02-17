@@ -123,7 +123,7 @@ impl<E> Context<E> {
     ///
     /// Producers can use this to skip sending non-essential events when
     /// the system is under load, avoiding contention on the shared broker
-    /// channel (stage 1). This is a cooperative mechanism — the producer
+    /// channel (stage 1). This is a cooperative mechanism - the producer
     /// decides what to skip.
     ///
     /// ```rust,ignore
