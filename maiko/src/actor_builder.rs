@@ -74,6 +74,18 @@ impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
         self
     }
 
+    /// Transform the current [`ActorConfig`] with a closure.
+    ///
+    /// Unlike [`config()`](Self::config) which replaces the entire config,
+    /// this preserves inherited defaults and lets you tweak individual fields.
+    ///
+    /// ```rust,ignore
+    /// sup.build_actor("consumer", |ctx| Consumer::new(ctx))
+    ///     .topics(&[Topic::Data])
+    ///     .channel_capacity(256)
+    ///     .with_config(|c| c.with_max_events_per_tick(64))
+    ///     .build()?;
+    /// ```
     pub fn with_config<F>(mut self, f: F) -> Self
     where
         F: FnOnce(ActorConfig) -> ActorConfig,

@@ -43,7 +43,7 @@ Fine-tune runtime behavior with `Config`:
 let config = Config::default()
     .with_broker_channel_capacity(512)          // Broker input buffer (default: 256)
     .with_default_actor_channel_capacity(256)   // Actor mailbox default (default: 128)
-    .with_max_events_per_tick(50);              // Events processed per tick (default: 10)
+    .with_default_max_events_per_tick(50);       // Events processed per tick (default: 10)
 
 let mut sup = Supervisor::new(config);
 ```
@@ -52,7 +52,7 @@ let mut sup = Supervisor::new(config);
 |--------|---------|-------------|
 | `broker_channel_capacity` | 256 | Broker input buffer (stage 1). Producers block when full. |
 | `default_actor_channel_capacity` | 128 | Default mailbox size for new actors (stage 2). |
-| `max_events_per_tick` | 10 | Max events an actor processes before yielding |
+| `default_max_events_per_tick` | 10 | Max events an actor processes before yielding. Per-actor override via `ActorBuilder`. |
 | `maintenance_interval` | 10s | How often broker cleans up closed channels |
 | `monitoring_channel_capacity` | 1024 | Buffer size used by "monitoring" feature |
 
@@ -71,9 +71,17 @@ sup.build_actor("writer", |ctx| Writer::new(ctx))
 sup.add_actor("processor", |ctx| Processor::new(ctx), &[Topic::Data])?;
 ```
 
-`add_actor` always uses the global `default_actor_channel_capacity`. When an
-actor needs a different mailbox size — typically slow consumers or actors
-handling bursty traffic — use `build_actor` with `channel_capacity()`.
+`add_actor` always uses global defaults. When an actor needs different settings
+— typically slow consumers or actors handling bursty traffic — use
+`build_actor`. For settings without a direct shorthand, use `with_config`:
+
+```rust
+sup.build_actor("consumer", |ctx| Consumer::new(ctx))
+    .topics(&[Topic::Data])
+    .channel_capacity(256)
+    .with_config(|c| c.with_max_events_per_tick(64))
+    .build()?;
+```
 
 ## Design Philosophy
 

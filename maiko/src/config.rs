@@ -11,7 +11,7 @@
 /// let config = Config::default()
 ///     .with_broker_channel_capacity(512)          // Larger broker buffer
 ///     .with_default_actor_channel_capacity(256)   // Larger actor mailboxes
-///     .with_max_events_per_tick(20);              // Process more events per cycle
+///     .with_default_max_events_per_tick(20);       // Process more events per cycle
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -31,7 +31,7 @@ pub struct Config {
     /// before yielding control back to the scheduler.
     /// Lower values improve fairness, higher values improve throughput.
     /// Default: 10
-    // TODO rename to default_max_events_per_tick i 0.3.0 and make private
+    // TODO rename to default_max_events_per_tick in 0.3.0 and make private
     pub max_events_per_tick: usize,
 
     /// How often the broker cleans up closed subscriber channels.

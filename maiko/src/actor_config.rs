@@ -52,11 +52,16 @@ impl ActorConfig {
         self.channel_capacity
     }
 
+    /// Set the maximum number of events processed per tick cycle.
+    ///
+    /// After processing this many events, the actor yields to allow other
+    /// tasks to run and to call [`Actor::step`](crate::Actor::step).
     pub fn with_max_events_per_tick(mut self, max_events: usize) -> Self {
         self.max_events_per_tick = max_events;
         self
     }
 
+    /// Returns the maximum number of events processed per tick cycle.
     pub fn max_events_per_tick(&self) -> usize {
         self.max_events_per_tick
     }
