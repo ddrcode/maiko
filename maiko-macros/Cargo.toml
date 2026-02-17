@@ -2,7 +2,6 @@
 name = "maiko-macros"
 version = "0.2.5"
 edition = "2024"
-rust-version = "1.85"
 description = "Procedural macros for the Maiko actor runtime"
 authors = ["David de Rosier <ddrcode@gmail.com>"]
 license = "MIT OR Apache-2.0"

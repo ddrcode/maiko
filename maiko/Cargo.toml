@@ -2,12 +2,11 @@
 name = "maiko"
 version = "0.2.5"
 edition = "2024"
-rust-version = "1.85"
 description = "Lightweight event-driven actor runtime with topic-based pub/sub for Tokio"
 authors = ["David de Rosier <ddrcode@gmail.com>"]
 license = "MIT OR Apache-2.0"
-keywords = ["actor", "pubsub", "tokio", "events", "streams"]
-categories = ["asynchronous", "concurrency", "network-programming"]
+keywords = ["actor", "pubsub", "tokio", "event-driven", "message-passing"]
+categories = ["asynchronous", "concurrency"]
 repository = "https://github.com/ddrcode/maiko"
 homepage = "https://github.com/ddrcode/maiko"
 documentation = "https://docs.rs/maiko"

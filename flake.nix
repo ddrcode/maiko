@@ -14,7 +14,7 @@
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
 
-        rustStable = pkgs.rust-bin.stable.latest.default.override {
+        rustStable = pkgs.rust-bin.stable."1.85.0".default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
         };
       in
