@@ -33,6 +33,7 @@ serde = { version = "1.0.228", features = ["derive", "rc"], optional = true }
 serde_json = { version = "1.0", optional = true }
 thiserror = "2.0.18"
 tokio = {version="1.49.0", features=["macros", "rt", "rt-multi-thread", "time"]}
+tokio-stream = "0.1.18"
 tokio-util = "0.7.18"
 tracing = "0.1.44"
 uuid = { version = "1.20.0", features = ["v4"] }

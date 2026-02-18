@@ -80,7 +80,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             #[cfg(feature = "monitoring")]
             monitoring.sink(),
         );
-        broker.add_sender(supervisor_id.clone(), rx);
+        broker.add_sender(rx);
 
         Self {
             broker: Arc::new(Mutex::new(broker)),
@@ -185,7 +185,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics.clone(), tx);
         broker.add_subscriber(subscriber)?;
-        broker.add_sender(actor_id.clone(), receiver);
+        broker.add_sender(receiver);
         self.registrations.push((actor_id.clone(), topics));
 
         let mut controller = ActorController::<A, T> {
