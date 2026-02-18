@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use futures_util::future::join_all;
 use tokio::{
@@ -13,8 +13,11 @@ use crate::{ActorId, Config, Envelope, Error, Event, OverflowPolicy, Result, Top
 #[cfg(feature = "monitoring")]
 use crate::monitoring::{MonitoringEvent, MonitoringSink};
 
+type Payload<E> = Arc<Envelope<E>>;
+type Recv<E> = Receiver<Payload<E>>;
+
 pub struct Broker<E: Event, T: Topic<E>> {
-    receiver: Receiver<Arc<Envelope<E>>>,
+    senders: HashMap<ActorId, Recv<E>>,
     subscribers: Vec<Subscriber<E, T>>,
     cancel_token: Arc<CancellationToken>,
     config: Arc<Config>,
@@ -25,13 +28,12 @@ pub struct Broker<E: Event, T: Topic<E>> {
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
     pub fn new(
-        receiver: Receiver<Arc<Envelope<E>>>,
         cancel_token: Arc<CancellationToken>,
         config: Arc<Config>,
         #[cfg(feature = "monitoring")] monitoring: MonitoringSink<E, T>,
     ) -> Broker<E, T> {
         Broker {
-            receiver,
+            senders: HashMap::new(),
             subscribers: Vec::new(),
             cancel_token,
             config,
@@ -46,6 +48,10 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         }
         self.subscribers.push(subscriber);
         Ok(())
+    }
+
+    pub(crate) fn add_sender(&mut self, actor: ActorId, receiver: Recv<E>) {
+        self.senders.insert(actor, receiver);
     }
 
     async fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<Option<Vec<ActorId>>> {
@@ -122,24 +128,42 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(to_be_closed)
     }
 
+    async fn recv(senders: &mut HashMap<ActorId, Recv<E>>) -> Option<Vec<Payload<E>>> {
+        let mut events = Vec::with_capacity(senders.len() >> 1);
+        for receiver in senders.values_mut() {
+            while let Ok(event) = receiver.try_recv() {
+                events.push(event);
+            }
+        }
+        if !events.is_empty() {
+            Some(events)
+        } else {
+            None
+        }
+    }
+
     pub async fn run(&mut self) -> Result<()> {
         let mut cleanup_interval = tokio::time::interval(self.config.maintenance_interval());
+        let mut senders = std::mem::take(&mut self.senders);
         loop {
             select! {
+                biased;
                 _ = self.cancel_token.cancelled() => break,
-                Some(e) = self.receiver.recv() => {
-                    let tbc = self.send_event(&e).await?;
-
-                    // Close channels for subscribers that overflown with Fail policy
-                    if let Some(to_be_closed) = tbc {
-                        self.subscribers.retain(|s|
-                            !to_be_closed.contains(&s.actor_id)
-                        );
-                    }
-                },
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
                 }
+                Some(events) = Self::recv(&mut senders) => {
+                    for e in events{
+                        let tbc = self.send_event(&e).await?;
+
+                        // Close channels for subscribers that overflown with Fail policy
+                        if let Some(to_be_closed) = tbc {
+                            self.subscribers.retain(|s|
+                                !to_be_closed.contains(&s.actor_id)
+                            );
+                        }
+                    }
+                },
             }
         }
         self.shutdown().await;
@@ -154,13 +178,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         use tokio::time::*;
 
         // Send messages that were in the queue at the time of shutdown
-        for _ in 0..self.receiver.len() {
-            if let Ok(e) = self.receiver.try_recv() {
-                let _ = self.send_event(&e).await; // Best effort
-            } else {
-                break; // Queue drained faster than expected
-            }
-        }
+        // for _ in 0..self.receiver.len() {
+        //     if let Ok(e) = self.receiver.try_recv() {
+        //         let _ = self.send_event(&e).await; // Best effort
+        //     } else {
+        //         break; // Queue drained faster than expected
+        //     }
+        // }
 
         tokio::task::yield_now().await;
 

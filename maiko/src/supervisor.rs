@@ -3,7 +3,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 use tokio::{
     sync::{
         Mutex, Notify,
-        mpsc::{self, Sender, channel},
+        mpsc::{self, Receiver, Sender, channel},
     },
     task::JoinSet,
 };
@@ -71,14 +71,16 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             monitoring
         };
 
+        let supervisor_id = ActorId::new(Arc::from("supervisor"));
+
         let broker_cancel_token = Arc::new(CancellationToken::new());
-        let broker = Broker::new(
-            rx,
+        let mut broker = Broker::new(
             broker_cancel_token.clone(),
             config.clone(),
             #[cfg(feature = "monitoring")]
             monitoring.sink(),
         );
+        broker.add_sender(supervisor_id.clone(), rx);
 
         Self {
             broker: Arc::new(Mutex::new(broker)),
@@ -88,7 +90,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             cancel_token,
             broker_cancel_token,
             start_notifier: Arc::new(Notify::new()),
-            supervisor_id: ActorId::new(Arc::from("supervisor")),
+            supervisor_id,
             registrations: Vec::new(),
 
             #[cfg(feature = "monitoring")]
@@ -121,10 +123,11 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         F: FnOnce(Context<E>) -> A,
         S: Into<Subscribe<E, T>>,
     {
-        let ctx = self.create_context(name);
+        let (tx, rx) = mpsc::channel::<Arc<Envelope<E>>>(self.config.broker_channel_capacity());
+        let ctx = self.create_context(name, tx);
         let actor = factory(ctx.clone());
         let topics = topics.into().0;
-        self.register_actor(ctx, actor, topics, ActorConfig::new(&self.config))
+        self.register_actor(ctx, actor, topics, ActorConfig::new(&self.config), rx)
     }
 
     /// Start building an actor registration with custom configuration.
@@ -148,9 +151,10 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         A: Actor<Event = E>,
         F: FnOnce(Context<E>) -> A,
     {
-        let ctx = self.create_context(name);
+        let (tx, rx) = mpsc::channel::<Arc<Envelope<E>>>(self.config.broker_channel_capacity());
+        let ctx = self.create_context(name, tx);
         let actor = factory(ctx.clone());
-        ActorBuilder::new(self, actor, ctx)
+        ActorBuilder::new(self, actor, ctx, rx)
     }
 
     /// Internal method to register an actor with the supervisor.
@@ -165,6 +169,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
         actor: A,
         topics: Subscription<T>,
         config: ActorConfig,
+        receiver: Receiver<Arc<Envelope<E>>>,
     ) -> Result<ActorId>
     where
         A: Actor<Event = E>,
@@ -180,6 +185,7 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics.clone(), tx);
         broker.add_subscriber(subscriber)?;
+        broker.add_sender(actor_id.clone(), receiver);
         self.registrations.push((actor_id.clone(), topics));
 
         let mut controller = ActorController::<A, T> {
@@ -207,10 +213,14 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     /// Create a new Context for an actor.
     ///
     /// Internal helper used by `add_actor` to create actor contexts.
-    pub(crate) fn create_context(&self, name: &str) -> Context<E> {
+    pub(crate) fn create_context(
+        &self,
+        name: &str,
+        sender: Sender<Arc<Envelope<E>>>,
+    ) -> Context<E> {
         Context::<E> {
             actor_id: ActorId::new(Arc::<str>::from(name)),
-            sender: self.sender.clone(),
+            sender,
             alive: Arc::new(AtomicBool::new(true)),
         }
     }
