@@ -25,6 +25,7 @@ use crate::{
 /// // Remove it entirely
 /// handle.remove().await;
 /// ```
+#[derive(Debug)]
 pub struct MonitorHandle<E: Event, T: Topic<E>> {
     id: MonitorId,
     sender: Sender<MonitorCommand<E, T>>,
