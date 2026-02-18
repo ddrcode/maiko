@@ -1,6 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
-use futures_util::future::join_all;
+use futures_util::{
+    FutureExt,
+    future::{join_all, select_all},
+};
 use tokio::{
     select,
     sync::mpsc::{Receiver, error::TrySendError},
@@ -128,18 +131,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         Ok(to_be_closed)
     }
 
-    async fn recv(senders: &mut HashMap<ActorId, Recv<E>>) -> Option<Vec<Payload<E>>> {
-        let mut events = Vec::with_capacity(senders.len() >> 1);
+    async fn recv(senders: &mut HashMap<ActorId, Recv<E>>) -> Result<Option<Payload<E>>> {
+        let mut events = Vec::with_capacity(senders.len());
         for receiver in senders.values_mut() {
-            while let Ok(event) = receiver.try_recv() {
-                events.push(event);
-            }
+            events.push(receiver.recv().boxed());
         }
-        if !events.is_empty() {
-            Some(events)
-        } else {
-            None
-        }
+        let (result, _, _) = select_all(events).await;
+        Ok(result)
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -152,16 +150,14 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                 _ = cleanup_interval.tick() => {
                     self.cleanup();
                 }
-                Some(events) = Self::recv(&mut senders) => {
-                    for e in events{
-                        let tbc = self.send_event(&e).await?;
+                Ok(Some(event)) = Self::recv(&mut senders) => {
+                    let tbc = self.send_event(&event).await?;
 
-                        // Close channels for subscribers that overflown with Fail policy
-                        if let Some(to_be_closed) = tbc {
-                            self.subscribers.retain(|s|
-                                !to_be_closed.contains(&s.actor_id)
-                            );
-                        }
+                    // Close channels for subscribers that overflown with Fail policy
+                    if let Some(to_be_closed) = tbc {
+                        self.subscribers.retain(|s|
+                            !to_be_closed.contains(&s.actor_id)
+                        );
                     }
                 },
             }
