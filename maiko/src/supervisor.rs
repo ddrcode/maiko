@@ -18,6 +18,11 @@ use crate::{
 #[cfg(feature = "monitoring")]
 use crate::monitoring::MonitorRegistry;
 
+#[cfg(feature = "introspection")]
+use crate::introspection::{Introspector, shared_state::SharedState, state_tracker::StateTracker};
+
+
+
 /// Coordinates actors and the broker, and owns the top-level runtime.
 ///
 /// # Actor Registration
@@ -55,6 +60,12 @@ pub struct Supervisor<E: Event, T: Topic<E> = DefaultTopic> {
 
     #[cfg(feature = "monitoring")]
     monitoring: MonitorRegistry<E, T>,
+
+    #[cfg(feature = "introspection")]
+    introspection: Introspector<E>,
+
+    #[cfg(feature = "introspection")]
+    pending_state_tracker: Option<StateTracker<E>>,
 }
 
 impl<E: Event, T: Topic<E>> Supervisor<E, T> {
@@ -80,6 +91,15 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
             monitoring.sink(),
         );
 
+        #[cfg(feature = "introspection")]
+        let introspection_state = Arc::new(SharedState::new());
+
+        #[cfg(feature = "introspection")]
+        let introspection = Introspector::new(introspection_state.clone());
+
+        #[cfg(feature = "introspection")]
+        let pending_state_tracker = Some(StateTracker::new(introspection_state));
+
         Self {
             broker: Arc::new(Mutex::new(broker)),
             config,
@@ -93,6 +113,12 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
             #[cfg(feature = "monitoring")]
             monitoring,
+
+            #[cfg(feature = "introspection")]
+            introspection,
+
+            #[cfg(feature = "introspection")]
+            pending_state_tracker,
         }
     }
 
@@ -178,6 +204,9 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
         let (tx, rx) = mpsc::channel::<Arc<Envelope<E>>>(config.channel_capacity());
 
+        #[cfg(feature = "introspection")]
+        self.introspection.state.register_actor(actor_id.clone(), tx.clone());
+
         let subscriber = Subscriber::<E, T>::new(actor_id.clone(), topics.clone(), tx);
         broker.add_subscriber(subscriber)?;
         self.registrations.push((actor_id.clone(), topics));
@@ -217,6 +246,11 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
 
     /// Start the broker loop in a background task. This returns immediately.
     pub async fn start(&mut self) -> Result<()> {
+        #[cfg(feature = "introspection")]
+        if let Some(tracker) = self.pending_state_tracker.take() {
+            self.monitoring.add(tracker).await;
+        }
+
         let broker = self.broker.clone();
         self.tasks
             .spawn(async move { broker.lock().await.run().await });
@@ -297,6 +331,18 @@ impl<E: Event, T: Topic<E>> Supervisor<E, T> {
     #[cfg_attr(docsrs, doc(cfg(feature = "monitoring")))]
     pub fn monitors(&mut self) -> &mut MonitorRegistry<E, T> {
         &mut self.monitoring
+    }
+
+    /// # Example
+    ///
+    /// ```ignore
+    /// let actors = supervisor.introspection().list_actors();
+    /// let snapshot = supervisor.introspection().snapshot();
+    /// ```
+    #[cfg(feature = "introspection")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "introspection")))]
+    pub fn introspection(&self) -> &Introspector<E> {
+        &self.introspection
     }
 }
 

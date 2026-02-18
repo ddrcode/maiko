@@ -24,6 +24,7 @@ macros = ["dep:maiko-macros"]
 serde = ["dep:serde", "dep:serde_json"]
 recorder = ["monitoring", "serde"]
 monitoring = []
+introspection = ["monitoring"]
 test-harness = ["monitoring"]
 
 [dependencies]

@@ -111,6 +111,7 @@
 //! - **`test-harness`** - Test utilities for recording, spying, and asserting on event flow (enables `monitoring`)
 //! - **`serde`** - JSON serialization support (e.g. `Supervisor::to_json()`)
 //! - **`recorder`** - Built-in `Recorder` monitor for writing events to JSON Lines files (enables `monitoring` and `serde`)
+//! - **`introspection`** - Runtime actor introspection: list actors, query status, mailbox depths, snapshots (enables `monitoring`)
 //!
 //! ## Examples
 //!
@@ -150,6 +151,10 @@ pub mod monitoring;
 #[cfg(feature = "monitoring")]
 #[cfg_attr(docsrs, doc(cfg(feature = "monitoring")))]
 pub mod monitors;
+
+#[cfg(feature = "introspection")]
+#[cfg_attr(docsrs, doc(cfg(feature = "introspection")))]
+pub mod introspection;
 
 pub use actor::Actor;
 pub use actor_builder::ActorBuilder;
