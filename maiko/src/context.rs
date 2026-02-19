@@ -119,23 +119,22 @@ impl<E> Context<E> {
         Ok(())
     }
 
-    /// Whether the broker input channel has no remaining capacity.
+    /// Whether this actor's channel to the broker has no remaining capacity.
     ///
     /// Producers can use this to skip sending non-essential events when
-    /// the system is under load, avoiding contention on the shared broker
-    /// channel (stage 1). This is a cooperative mechanism - the producer
-    /// decides what to skip.
+    /// the channel is congested (stage 1). This is a cooperative
+    /// mechanism - the producer decides what to skip.
     ///
     /// ```rust,ignore
-    /// // Skip telemetry when the system is busy
+    /// // Skip telemetry when the channel is busy
     /// if !ctx.is_sender_full() {
     ///     ctx.send(Event::Telemetry(stats)).await?;
     /// }
     /// ```
     ///
-    /// Note: this checks the broker input channel (stage 1), not
-    /// individual subscriber channels (stage 2). It reflects global
-    /// system pressure, not per-consumer backlog.
+    /// Note: each actor has its own channel to the broker (stage 1).
+    /// This reflects the sending actor's individual backlog, not
+    /// global system pressure or subscriber-side congestion (stage 2).
     #[inline]
     pub fn is_sender_full(&self) -> bool {
         self.sender.capacity() == 0
