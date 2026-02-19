@@ -60,6 +60,13 @@ pub trait Monitor<E: Event, T: Topic<E> = DefaultTopic>: Send {
         let _r = receiver;
     }
 
+    /// Called when a new actor is registered in the system.
+    ///
+    /// Fires once when the actor is spawned and added to the broker registry.
+    fn on_actor_registered(&self, actor_id: &ActorId) {
+        let _a = actor_id;
+    }
+
     /// Called when an actor's handler returns an error.
     fn on_error(&self, err: &str, actor_id: &ActorId) {
         let _a = actor_id;
