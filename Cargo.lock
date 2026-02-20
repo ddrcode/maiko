@@ -184,11 +184,12 @@ version = "0.2.5"
 dependencies = [
  "futures-util",
  "getrandom 0.4.1",
- "maiko-macros",
+ "maiko-macros 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
@@ -198,6 +199,16 @@ dependencies = [
 [[package]]
 name = "maiko-macros"
 version = "0.2.5"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "maiko-macros"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54cd80d6d77dd16638bdd3704b424038931d00f2dea38125f47d99fa217508bd"
 dependencies = [
  "quote",
  "syn",
@@ -384,6 +395,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]

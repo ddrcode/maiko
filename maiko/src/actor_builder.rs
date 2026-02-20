@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
+use tokio::sync::mpsc::Receiver;
+
 use crate::{
-    Actor, ActorConfig, ActorId, Context, Event, Result, Subscribe, Supervisor, Topic,
+    Actor, ActorConfig, ActorId, Context, Envelope, Event, Result, Subscribe, Supervisor, Topic,
     internal::Subscription,
 };
 
@@ -35,6 +39,7 @@ pub struct ActorBuilder<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> {
     ctx: Context<A::Event>,
     config: ActorConfig,
     topics: Subscription<T>,
+    receiver: Receiver<Arc<Envelope<E>>>,
 }
 
 impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
@@ -42,6 +47,7 @@ impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
         supervisor: &'a mut Supervisor<E, T>,
         actor: A,
         ctx: Context<A::Event>,
+        receiver: Receiver<Arc<Envelope<E>>>,
     ) -> Self {
         let config = ActorConfig::new(supervisor.config());
         Self {
@@ -50,6 +56,7 @@ impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
             actor,
             config,
             topics: Subscription::None,
+            receiver,
         }
     }
 
@@ -105,7 +112,12 @@ impl<'a, E: Event, T: Topic<E>, A: Actor<Event = E>> ActorBuilder<'a, E, T, A> {
 
     /// Register the actor with the supervisor and return its [`ActorId`].
     pub fn build(self) -> Result<ActorId> {
-        self.supervisor
-            .register_actor(self.ctx, self.actor, self.topics, self.config)
+        self.supervisor.register_actor(
+            self.ctx,
+            self.actor,
+            self.topics,
+            self.config,
+            self.receiver,
+        )
     }
 }

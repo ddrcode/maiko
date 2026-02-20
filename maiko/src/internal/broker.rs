@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use futures_util::future::join_all;
+use futures_util::{FutureExt, StreamExt, future::join_all, stream::SelectAll};
 use tokio::{
     select,
     sync::mpsc::{Receiver, error::TrySendError},
 };
+use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 
 use super::Subscriber;
@@ -13,8 +14,10 @@ use crate::{ActorId, Config, Envelope, Error, Event, OverflowPolicy, Result, Top
 #[cfg(feature = "monitoring")]
 use crate::monitoring::{MonitoringEvent, MonitoringSink};
 
+type Payload<E> = Arc<Envelope<E>>;
+
 pub struct Broker<E: Event, T: Topic<E>> {
-    receiver: Receiver<Arc<Envelope<E>>>,
+    senders: SelectAll<ReceiverStream<Payload<E>>>,
     subscribers: Vec<Subscriber<E, T>>,
     cancel_token: Arc<CancellationToken>,
     config: Arc<Config>,
@@ -25,13 +28,12 @@ pub struct Broker<E: Event, T: Topic<E>> {
 
 impl<E: Event, T: Topic<E>> Broker<E, T> {
     pub fn new(
-        receiver: Receiver<Arc<Envelope<E>>>,
         cancel_token: Arc<CancellationToken>,
         config: Arc<Config>,
         #[cfg(feature = "monitoring")] monitoring: MonitoringSink<E, T>,
     ) -> Broker<E, T> {
         Broker {
-            receiver,
+            senders: SelectAll::new(),
             subscribers: Vec::new(),
             cancel_token,
             config,
@@ -46,6 +48,10 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         }
         self.subscribers.push(subscriber);
         Ok(())
+    }
+
+    pub(crate) fn add_sender(&mut self, receiver: Receiver<Payload<E>>) {
+        self.senders.push(ReceiverStream::new(receiver));
     }
 
     async fn send_event(&mut self, e: &Arc<Envelope<E>>) -> Result<Option<Vec<ActorId>>> {
@@ -126,9 +132,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         let mut cleanup_interval = tokio::time::interval(self.config.maintenance_interval());
         loop {
             select! {
+                biased;
                 _ = self.cancel_token.cancelled() => break,
-                Some(e) = self.receiver.recv() => {
-                    let tbc = self.send_event(&e).await?;
+                _ = cleanup_interval.tick() => {
+                    self.cleanup();
+                }
+                Some(event) = self.senders.next() => {
+                    let tbc = self.send_event(&event).await?;
 
                     // Close channels for subscribers that overflown with Fail policy
                     if let Some(to_be_closed) = tbc {
@@ -137,9 +147,6 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                         );
                     }
                 },
-                _ = cleanup_interval.tick() => {
-                    self.cleanup();
-                }
             }
         }
         self.shutdown().await;
@@ -153,13 +160,9 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
     async fn shutdown(&mut self) {
         use tokio::time::*;
 
-        // Send messages that were in the queue at the time of shutdown
-        for _ in 0..self.receiver.len() {
-            if let Ok(e) = self.receiver.try_recv() {
-                let _ = self.send_event(&e).await; // Best effort
-            } else {
-                break; // Queue drained faster than expected
-            }
+        // Drain any events still buffered in sender streams (best effort)
+        while let Some(event) = self.senders.next().now_or_never().flatten() {
+            let _ = self.send_event(&event).await;
         }
 
         tokio::task::yield_now().await;
@@ -265,12 +268,12 @@ mod tests {
         };
 
         let mut broker = Broker::<TestEvent, TestTopic>::new(
-            rx,
             cancel_token,
             config,
             #[cfg(feature = "monitoring")]
             monitoring,
         );
+        broker.add_sender(rx);
         let actor_id = ActorId::new(Arc::from("subscriber1"));
         let subscriber = super::Subscriber::new(
             actor_id.clone(),

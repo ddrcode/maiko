@@ -73,7 +73,7 @@ impl fmt::Display for Meta {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Event Meta {{ id: {}, timestamp: {}, actor_name: {}}}",
+            "Event Meta {{ id: {}, timestamp: {}, actor_name: {}",
             self.id(),
             self.timestamp(),
             self.actor_name(),
@@ -81,6 +81,7 @@ impl fmt::Display for Meta {
         if let Some(correlation_id) = self.correlation_id() {
             write!(f, ", correlation_id: {}", correlation_id)?;
         }
+        write!(f, "}}")?;
         Ok(())
     }
 }
