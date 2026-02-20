@@ -7,6 +7,7 @@ use crate::{ActorId, Event, EventId, Topic};
 use super::EventChain;
 
 /// Actor trace view for querying which actors were visited by the chain.
+#[derive(Debug)]
 pub struct ActorTrace<'a, E: Event, T: Topic<E>> {
     pub(super) chain: &'a EventChain<E, T>,
 }

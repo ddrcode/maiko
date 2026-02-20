@@ -7,6 +7,7 @@ use crate::{Event, Label, Topic};
 use super::{EventChain, EventEntry, EventMatcher};
 
 /// Event trace view for querying the sequence of events in the chain.
+#[derive(Debug)]
 pub struct EventTrace<'a, E: Event, T: Topic<E>> {
     pub(super) chain: &'a EventChain<E, T>,
 }

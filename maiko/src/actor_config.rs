@@ -22,7 +22,7 @@ use crate::Config;
 ///
 /// [`Supervisor::add_actor`]: crate::Supervisor::add_actor
 /// [`ActorBuilder`]: crate::ActorBuilder
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ActorConfig {
     channel_capacity: usize,

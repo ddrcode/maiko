@@ -28,6 +28,7 @@
             pkgs.rustup
             pkgs.bacon
             pkgs.cargo-machete
+            pkgs.cargo-msrv
             pkgs.cargo-readme
             pkgs.cargo-semver-checks
             pkgs.cargo-spellcheck

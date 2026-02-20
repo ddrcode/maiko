@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::rc::Rc;
 
 use crate::{
@@ -27,6 +28,15 @@ type Filter<E, T> = Rc<dyn Fn(&EventEntry<E, T>) -> bool>;
 pub struct EventQuery<E: Event, T: Topic<E>> {
     events: EventRecords<E, T>,
     filters: Vec<Filter<E, T>>,
+}
+
+impl<E: Event, T: Topic<E>> fmt::Debug for EventQuery<E, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventQuery")
+            .field("records", &self.events.len())
+            .field("filters", &self.filters.len())
+            .finish()
+    }
 }
 
 impl<E: Event, T: Topic<E>> EventQuery<E, T> {

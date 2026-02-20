@@ -336,15 +336,7 @@ impl<E: Event, T: Topic<E> + Label> Supervisor<E, T> {
     ///
     /// Topic names are obtained via `Topic::name()`.
     pub fn to_mermaid(&self) -> String {
-        use std::collections::HashSet;
-
-        // Collect all known topics from specific subscriptions
-        let mut all_topics: HashSet<T> = HashSet::new();
-        for (_, subscription) in &self.registrations {
-            if let Subscription::Topics(topics) = subscription {
-                all_topics.extend(topics.iter().cloned());
-            }
-        }
+        let all_topics = self.all_topic_labels();
 
         let mut lines = vec!["flowchart LR".to_string()];
 
@@ -353,9 +345,7 @@ impl<E: Event, T: Topic<E> + Label> Supervisor<E, T> {
             let actor_name = actor_id.name();
             match subscription {
                 Subscription::All => {
-                    // Connect to all known topics
-                    for topic in &all_topics {
-                        let topic_name = topic.label();
+                    for topic_name in &all_topics {
                         lines.push(format!("    {}(({0})) --> {}", topic_name, actor_name));
                     }
                 }
@@ -374,6 +364,21 @@ impl<E: Event, T: Topic<E> + Label> Supervisor<E, T> {
 
         lines.join("\n")
     }
+
+    /// Collect all known topic labels from explicit subscriptions, sorted alphabetically.
+    fn all_topic_labels(&self) -> Vec<String> {
+        use std::collections::BTreeSet;
+
+        let mut labels = BTreeSet::new();
+        for (_, subscription) in &self.registrations {
+            if let Subscription::Topics(topics) = subscription {
+                for topic in topics {
+                    labels.insert(topic.label().into_owned());
+                }
+            }
+        }
+        labels.into_iter().collect()
+    }
 }
 
 impl<E: Event, T: Topic<E>> Drop for Supervisor<E, T> {
@@ -390,11 +395,7 @@ impl<E: Event, T: Topic<E>> Drop for Supervisor<E, T> {
 }
 
 #[cfg(feature = "serde")]
-impl<E, T> Supervisor<E, T>
-where
-    E: Event,
-    T: Topic<E> + Label + Clone + Eq + std::hash::Hash,
-{
+impl<E: Event, T: Topic<E> + Label> Supervisor<E, T> {
     /// Export actor subscription topology as JSON.
     ///
     /// This method provides a machine-readable representation of which actors
@@ -428,11 +429,9 @@ where
     /// let json = supervisor.to_json()?;
     /// println!("{json}");
     /// ```
-    #[cfg(feature = "serde")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
     pub fn to_json(&self) -> serde_json::Result<String> {
         use serde::Serialize;
-        use std::collections::HashSet;
 
         #[derive(Serialize)]
         struct ActorSubscriptionExport {
@@ -440,23 +439,17 @@ where
             subscriptions: Vec<String>,
         }
 
-        let mut all_topics: HashSet<T> = HashSet::new();
-        for (_, subscription) in &self.registrations {
-            if let Subscription::Topics(topics) = subscription {
-                all_topics.extend(topics.iter().cloned());
-            }
-        }
+        let all_topics = self.all_topic_labels();
 
         let mut exports = Vec::with_capacity(self.registrations.len());
 
         for (actor_id, subscription) in &self.registrations {
-            let subs: Vec<String> = match subscription {
-                Subscription::All => all_topics.iter().map(|t| t.label().into()).collect(),
-
+            let mut subs: Vec<String> = match subscription {
+                Subscription::All => all_topics.clone(),
                 Subscription::Topics(topics) => topics.iter().map(|t| t.label().into()).collect(),
-
                 Subscription::None => Vec::new(),
             };
+            subs.sort();
 
             exports.push(ActorSubscriptionExport {
                 actor_id: actor_id.name().to_string(),

@@ -1,6 +1,7 @@
 //! Event matching for chain queries.
 
 use std::borrow::Cow;
+use std::fmt;
 use std::rc::Rc;
 
 use crate::{Event, EventId, Label, Topic};
@@ -35,6 +36,12 @@ type MatchFn<E, T> = Rc<dyn Fn(&EventEntry<E, T>) -> bool>;
 /// ```
 pub struct EventMatcher<E: Event, T: Topic<E>> {
     matcher: MatchFn<E, T>,
+}
+
+impl<E: Event, T: Topic<E>> fmt::Debug for EventMatcher<E, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventMatcher").finish_non_exhaustive()
+    }
 }
 
 impl<E: Event, T: Topic<E>> EventMatcher<E, T> {

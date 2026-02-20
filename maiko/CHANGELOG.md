@@ -1,3 +1,11 @@
+# [0.2.6](https://github.com/ddrcode/maiko/compare/v0.2.4...v0.2.5) (February 21th, 2026)
+
+### Changed
+
+- actor-broker communication moved from single global channel to channel per actor-broker pair
+
+---
+
 # [0.2.5](https://github.com/ddrcode/maiko/compare/v0.2.4...v0.2.5) (February 17th, 2026)
 
 **Backpressure handling**

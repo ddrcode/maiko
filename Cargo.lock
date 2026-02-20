@@ -180,11 +180,11 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "maiko"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "futures-util",
  "getrandom 0.4.1",
- "maiko-macros 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "maiko-macros",
  "serde",
  "serde_json",
  "thiserror",
@@ -198,17 +198,7 @@ dependencies = [
 
 [[package]]
 name = "maiko-macros"
-version = "0.2.5"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
-name = "maiko-macros"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54cd80d6d77dd16638bdd3704b424038931d00f2dea38125f47d99fa217508bd"
+version = "0.2.6"
 dependencies = [
  "quote",
  "syn",
