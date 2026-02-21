@@ -1,12 +1,21 @@
-# [0.2.6](https://github.com/ddrcode/maiko/compare/v0.2.4...v0.2.5) (February 21th, 2026)
+# [0.2.6](https://github.com/maiko-rs/maiko/compare/v0.2.4...v0.2.5) (February 22nd, 2026)
+
+### Added
+
+- `ActorMonitor` to track monitor lifecycle ([#83], [#86])
 
 ### Changed
 
-- actor-broker communication moved from single global channel to channel per actor-broker pair
+- actor-broker communication moved from single global channel to channel per actor-broker pair ([#84])
+- moved repo from [personal account](https://github.com/ddrcode) to [maiko-rs](https://github.com/maiko-rs) organization
+
+[#83]: https://github.com/maiko-rs/maiko/pull/83
+[#84]: https://github.com/maiko-rs/maiko/pull/84
+[#86]: https://github.com/maiko-rs/maiko/pull/86
 
 ---
 
-# [0.2.5](https://github.com/ddrcode/maiko/compare/v0.2.4...v0.2.5) (February 17th, 2026)
+# [0.2.5](https://github.com/maiko-rs/maiko/compare/v0.2.4...v0.2.5) (February 17th, 2026)
 
 **Backpressure handling**
 
@@ -25,24 +34,24 @@
 - The main `Config` to act as a default for `ActorConfig` ([#76])
 - Non-breaking changes to align Maiko with the API guidelines ([#70])
 
-[#70]: https://github.com/ddrcode/maiko/issues/70
-[#75]: https://github.com/ddrcode/maiko/pull/75
-[#76]: https://github.com/ddrcode/maiko/pull/76
-[#77]: https://github.com/ddrcode/maiko/pull/77
+[#70]: https://github.com/maiko-rs/maiko/issues/70
+[#75]: https://github.com/maiko-rs/maiko/pull/75
+[#76]: https://github.com/maiko-rs/maiko/pull/76
+[#77]: https://github.com/maiko-rs/maiko/pull/77
 
 ---
 
-# [0.2.4](https://github.com/ddrcode/maiko/compare/v0.2.3...v0.2.4) (February 15th, 2026)
+# [0.2.4](https://github.com/maiko-rs/maiko/compare/v0.2.3...v0.2.4) (February 15th, 2026)
 
 ### Bug fixes
 
 - Fixes dependency on old version of maiko-macros (#71)
 
-[#71]: https://github.com/ddrcode/maiko/issues/71
+[#71]: https://github.com/maiko-rs/maiko/issues/71
 
 ---
 
-# [0.2.3](https://github.com/ddrcode/maiko/compare/v0.2.2...v0.2.3) (February 12th, 2026)
+# [0.2.3](https://github.com/maiko-rs/maiko/compare/v0.2.2...v0.2.3) (February 12th, 2026)
 
 **Contains Breaking changes** (in test harness only)
 
@@ -69,15 +78,15 @@
 
 - **Breaking:** `Harness.start_recording()`, `stop_recording()`, `settle_with_timeout()` removed (use `record()`, `settle()`, `settle_on()` instead) ([#66])
 
-[#56]: https://github.com/ddrcode/maiko/pull/56
-[#59]: https://github.com/ddrcode/maiko/pull/59
-[#62]: https://github.com/ddrcode/maiko/pull/62
-[#66]: https://github.com/ddrcode/maiko/pull/66
-[#67]: https://github.com/ddrcode/maiko/pull/67
+[#56]: https://github.com/maiko-rs/maiko/pull/56
+[#59]: https://github.com/maiko-rs/maiko/pull/59
+[#62]: https://github.com/maiko-rs/maiko/pull/62
+[#66]: https://github.com/maiko-rs/maiko/pull/66
+[#67]: https://github.com/maiko-rs/maiko/pull/67
 
 ---
 
-# [0.2.2](https://github.com/ddrcode/maiko/compare/v0.2.1...v0.2.2) (February 4th, 2026)
+# [0.2.2](https://github.com/maiko-rs/maiko/compare/v0.2.1...v0.2.2) (February 4th, 2026)
 
 ### Added
 
@@ -91,16 +100,16 @@
 - Reorganized monitoring: `monitoring` module for engine, `monitors` for implementations ([#52])
 - Improved documentation
 
-[#49]: https://github.com/ddrcode/maiko/pull/49
-[#52]: https://github.com/ddrcode/maiko/pull/52
+[#49]: https://github.com/maiko-rs/maiko/pull/49
+[#52]: https://github.com/maiko-rs/maiko/pull/52
 
 ---
 
-# [0.2.1](https://github.com/ddrcode/maiko/compare/v0.2.0...v0.2.1) (January 29th, 2026)
+# [0.2.1](https://github.com/maiko-rs/maiko/compare/v0.2.0...v0.2.1) (January 29th, 2026)
 
 ### Added
 
-- [Frequently Asked Questions](https://github.com/ddrcode/maiko/blob/main/docs/faq.md)
+- [Frequently Asked Questions](https://github.com/maiko-rs/maiko/blob/main/docs/faq.md)
 
 ### Changed
 
@@ -110,7 +119,7 @@
 
 ---
 
-# [0.2.0](https://github.com/ddrcode/maiko/compare/v0.1.1...v0.2.0) (January 27th, 2026)
+# [0.2.0](https://github.com/maiko-rs/maiko/compare/v0.1.1...v0.2.0) (January 27th, 2026)
 
 **Contains Breaking changes**
 
@@ -135,16 +144,16 @@ as a first library use case. [#23]
 - Renamed `handle` to `handle_event` in `Actor`
 - Fields of `Envelope` made private (use methods instead)
 
-[#23]: https://github.com/ddrcode/maiko/pull/23
-[#31]: https://github.com/ddrcode/maiko/pull/31
-[#33]: https://github.com/ddrcode/maiko/pull/33
-[#36]: https://github.com/ddrcode/maiko/pull/36
-[#37]: https://github.com/ddrcode/maiko/pull/37
+[#23]: https://github.com/maiko-rs/maiko/pull/23
+[#31]: https://github.com/maiko-rs/maiko/pull/31
+[#33]: https://github.com/maiko-rs/maiko/pull/33
+[#36]: https://github.com/maiko-rs/maiko/pull/36
+[#37]: https://github.com/maiko-rs/maiko/pull/37
 
 
 ---
 
-# [0.1.1](https://github.com/ddrcode/maiko/compare/v0.1.0...v0.1.1) (December 18th, 2025)
+# [0.1.1](https://github.com/maiko-rs/maiko/compare/v0.1.0...v0.1.1) (December 18th, 2025)
 
 ### Added
 
@@ -166,7 +175,7 @@ as a first library use case. [#23]
 
 ---
 
-# [0.1.0](https://github.com/ddrcode/maiko/compare/v0.0.2...v0.1.0) (December 14th, 2025)
+# [0.1.0](https://github.com/maiko-rs/maiko/compare/v0.0.2...v0.1.0) (December 14th, 2025)
 
 **MVP**. Fully-functional, tested, yet quite minimal version.
 
@@ -186,12 +195,12 @@ as a first library use case. [#23]
 - changed channel data type from `Envelope<E>` to `Arc<Envelope<E>>` ([#11])
 - made broker working with non-blocking send
 
-[#3]: https://github.com/ddrcode/maiko/issues/3
-[#4]: https://github.com/ddrcode/maiko/issues/4
-[#5]: https://github.com/ddrcode/maiko/issues/5
-[#7]: https://github.com/ddrcode/maiko/issues/7
-[#9]: https://github.com/ddrcode/maiko/pull/9
-[#11]: https://github.com/ddrcode/maiko/pull/11
+[#3]: https://github.com/maiko-rs/maiko/issues/3
+[#4]: https://github.com/maiko-rs/maiko/issues/4
+[#5]: https://github.com/maiko-rs/maiko/issues/5
+[#7]: https://github.com/maiko-rs/maiko/issues/7
+[#9]: https://github.com/maiko-rs/maiko/pull/9
+[#11]: https://github.com/maiko-rs/maiko/pull/11
 
 ---
 
