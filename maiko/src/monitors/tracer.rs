@@ -67,6 +67,13 @@ where
         );
     }
 
+    fn on_actor_registered(&self, actor_id: &ActorId) {
+        tracing::trace!(
+            actor = %actor_id.name(),
+            "actor registered"
+        )
+    }
+
     fn on_overflow(
         &self,
         envelope: &Envelope<E>,

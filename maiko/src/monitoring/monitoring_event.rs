@@ -7,6 +7,7 @@ pub(crate) enum MonitoringEvent<E, T> {
     EventDelivered(Arc<Envelope<E>>, Arc<T>, ActorId),
     EventHandled(Arc<Envelope<E>>, Arc<T>, ActorId),
     Overflow(Arc<Envelope<E>>, Arc<T>, ActorId, OverflowPolicy),
+    ActorRegistered(ActorId),
     ActorStopped(ActorId),
     Error(Arc<str>, ActorId),
 }
