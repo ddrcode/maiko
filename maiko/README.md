@@ -225,11 +225,13 @@ For now, Maiko demonstrates what it wants to be. That's the state I wanted to re
 
 ## Contributing
 
-Contributions welcome! Whether it's a bug report, feature idea, or pull request - all input is appreciated.
+Contributions welcome! Whether it's a bug report, feature idea, or pull request — all input is appreciated.
 
 - **Try it out** and let us know what you think
 - **Report issues** via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
 - **Looking to contribute code?** Check out [good first issues](https://github.com/ddrcode/maiko/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22)
+
+See **[CONTRIBUTING.md](https://github.com/ddrcode/maiko/CONTRIBUTING.md)** for branching guidelines, issue labels, and how to submit a PR.
 
 ---
 

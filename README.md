@@ -56,13 +56,15 @@ Maiko sits between raw Tokio and full actor frameworks. Think of it as moving fr
 ### Where it fits
 
 Event-centric systems: processing stock ticks, device signals, telemetry pipelines, handling system
-events, data transformation.
+events, data transformation. Not ideal for request-response APIs or RPC patterns.
 
-Not ideal for request-response APIs or RPC patterns.
+For detailed comparisons, use cases, and guidance on when Maiko fits, see **[Why Maiko?](docs/why-maiko.md)**.
 
 ---
 
 ## Quick Start
+
+For a step-by-step walkthrough, see **[Getting Started](docs/getting-started.md)**.
 
 ```sh
 cargo add maiko
@@ -145,9 +147,9 @@ async fn test_event_delivery() -> Result<()> {
     let mut test = Harness::new(&mut sup).await;
     sup.start().await?;
 
-    test.record().await;
+    test.start_recording().await;
     let id = test.send_as(&producer, MyEvent::Data(42)).await?;
-    test.settle().await;
+    test.stop_recording().await;
 
     assert!(test.event(id).was_delivered_to(&consumer));
     assert_eq!(1, test.actor(&consumer).events_received());
@@ -184,10 +186,12 @@ Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](docs/m
 
 ## Documentation
 
+- **[Getting Started](docs/getting-started.md)** - Step-by-step tutorial
+- **[Why Maiko?](docs/why-maiko.md)** - Motivation, comparisons, design philosophy
 - **[Core Concepts](docs/concepts.md)** - Events, Topics, Actors, Context, Supervisor
 - **[Monitoring](docs/monitoring.md)** - Event lifecycle hooks, metrics collection
 - **[Test Harness](docs/testing.md)** - Recording, spies, queries, assertions
-- **[Advanced Topics](docs/advanced.md)** - Error handling, configuration, design philosophy
+- **[Advanced Topics](docs/advanced.md)** - Error handling, configuration, flow control
 - **[FAQ](docs/faq.md)** - Common questions answered
 - **[API Reference](https://docs.rs/maiko)** - Complete API documentation
 
@@ -207,7 +211,7 @@ Enable with `features = ["monitoring"]`. See **[Monitoring Documentation](docs/m
 
 ## Used In
 
-Maiko powers the daemon in [**Charon**](https://github.com/ddrcode/charon) - a USB keyboard pass-through device built on Raspberry Pi. The daemon uses Maiko actors to read input from multiple keyboards, map and translate key events, output USB HID to the host, and coordinate telemetry, IPC, and power management.
+Maiko powers the daemon in [**Charon**](https://github.com/ddrcode/charon) - a USB keyboard pass-through device built on Raspberry Pi. See [Why Maiko?](docs/why-maiko.md#real-world-charon) for details.
 
 ---
 
@@ -221,17 +225,21 @@ For now, Maiko demonstrates what it wants to be. That's the state I wanted to re
 
 ## Contributing
 
-Contributions welcome! Whether it's a bug report, feature idea, or pull request - all input is appreciated.
+Contributions welcome! Whether it's a bug report, feature idea, or pull request — all input is appreciated.
 
 - **Try it out** and let us know what you think
 - **Report issues** via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
 - **Looking to contribute code?** Check out [good first issues](https://github.com/ddrcode/maiko/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22)
+
+See **[CONTRIBUTING.md](https://github.com/ddrcode/maiko/CONTRIBUTING.md)** for branching guidelines, issue labels, and how to submit a PR.
 
 ---
 
 ## Acknowledgments
 
 Inspired by [Kafka](https://kafka.apache.org/) (topic-based routing) and built on [Tokio](https://tokio.rs/) (async runtime).
+
+---
 
 ---
 
