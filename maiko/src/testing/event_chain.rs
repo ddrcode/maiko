@@ -33,6 +33,7 @@ use super::{ActorTrace, EventEntry, EventMatcher, EventRecords, EventTrace};
 /// // Verify event sequence
 /// assert!(chain.events().segment(&["KeyPress", "HidReport"]));
 /// ```
+#[derive(Debug)]
 pub struct EventChain<E: Event, T: Topic<E>> {
     root_id: EventId,
     records: EventRecords<E, T>,

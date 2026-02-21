@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     ActorId, Event, Topic,
     testing::{EventQuery, EventRecords},
@@ -10,6 +12,12 @@ use crate::{
 /// - Which actors received events on this topic
 pub struct TopicSpy<E: Event, T: Topic<E>> {
     query: EventQuery<E, T>,
+}
+
+impl<E: Event, T: Topic<E>> fmt::Debug for TopicSpy<E, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TopicSpy").finish_non_exhaustive()
+    }
 }
 
 impl<E: Event, T: Topic<E>> TopicSpy<E, T> {

@@ -8,7 +8,8 @@ use crate::{ActorId, DefaultTopic, Envelope, Event, OverflowPolicy, StepAction, 
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```rust
+/// # use maiko::{ActorId, Envelope, Event, Topic};
 /// use maiko::monitoring::Monitor;
 ///
 /// struct EventLogger;

@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -48,6 +49,15 @@ pub struct Harness<E: Event, T: Topic<E>> {
     monitor_handle: MonitorHandle<E, T>,
     pub(super) receiver: UnboundedReceiver<EventEntry<E, T>>,
     actor_sender: Sender<Arc<Envelope<E>>>,
+}
+
+impl<E: Event, T: Topic<E>> fmt::Debug for Harness<E, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Harness")
+            .field("snapshot", &self.snapshot.len())
+            .field("records", &self.records.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl<E: Event, T: Topic<E>> Harness<E, T> {

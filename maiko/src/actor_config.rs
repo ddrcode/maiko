@@ -8,21 +8,29 @@ use crate::Config;
 ///
 /// # Examples
 ///
+/// ```rust
+/// use maiko::{Config, ActorConfig};
+///
+/// let config = ActorConfig::new(&Config::default())
+///     .with_channel_capacity(512)
+///     .with_max_events_per_tick(64);
+///
+/// assert_eq!(config.channel_capacity(), 512);
+/// assert_eq!(config.max_events_per_tick(), 64);
+/// ```
+///
+/// With the builder API (see [`ActorBuilder`](crate::ActorBuilder)):
+///
 /// ```rust,ignore
-/// // Via the builder (preferred)
 /// sup.build_actor("writer", |ctx| Writer::new(ctx))
 ///     .channel_capacity(512)
 ///     .topics(&[Topic::Data])
 ///     .build()?;
-///
-/// // Standalone
-/// let config = ActorConfig::new(sup.config())
-///     .with_channel_capacity(512);
 /// ```
 ///
 /// [`Supervisor::add_actor`]: crate::Supervisor::add_actor
 /// [`ActorBuilder`]: crate::ActorBuilder
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ActorConfig {
     channel_capacity: usize,

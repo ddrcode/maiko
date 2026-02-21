@@ -45,25 +45,29 @@ impl<E> Context<E> {
 
     /// Send an event to the broker. The envelope will carry this actor's name.
     /// This awaits channel capacity (backpressure) to avoid silent drops.
-    pub async fn send(&self, event: E) -> Result<()> {
-        let envelope = Envelope::new(event, self.actor_id.clone());
+    pub async fn send<T: Into<E>>(&self, event: T) -> Result<()> {
+        let envelope = Envelope::new(event.into(), self.actor_id.clone());
         self.send_envelope(envelope).await
     }
 
     /// Send an event with an explicit correlation id.
-    pub async fn send_with_correlation(&self, event: E, correlation_id: EventId) -> Result<()> {
+    pub async fn send_with_correlation<T, ID>(&self, event: T, correlation_id: ID) -> Result<()>
+    where
+        T: Into<E>,
+        ID: Into<EventId>,
+    {
         self.send_envelope(Envelope::with_correlation(
-            event,
+            event.into(),
             self.actor_id.clone(),
-            correlation_id,
+            correlation_id.into(),
         ))
         .await
     }
 
     /// Emit a child event correlated to the given parent `Meta`.
-    pub async fn send_child_event(&self, event: E, meta: &Meta) -> Result<()> {
+    pub async fn send_child_event<T: Into<E>>(&self, event: T, meta: &Meta) -> Result<()> {
         self.send_envelope(Envelope::with_correlation(
-            event,
+            event.into(),
             self.actor_id.clone(),
             meta.id(),
         ))
@@ -71,8 +75,8 @@ impl<E> Context<E> {
     }
 
     #[inline]
-    pub async fn send_envelope(&self, envelope: Envelope<E>) -> Result<()> {
-        self.sender.send(Arc::new(envelope)).await?;
+    pub async fn send_envelope<T: Into<Envelope<E>>>(&self, envelope: T) -> Result<()> {
+        self.sender.send(Arc::new(envelope.into())).await?;
         Ok(())
     }
 

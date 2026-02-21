@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     ActorId, Event, EventId, Topic,
     testing::{EventQuery, EventRecords},
@@ -12,6 +14,14 @@ pub struct EventSpy<E: Event, T: Topic<E>> {
     id: EventId,
     records: EventRecords<E, T>,
     query: EventQuery<E, T>,
+}
+
+impl<E: Event, T: Topic<E>> fmt::Debug for EventSpy<E, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventSpy")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<E: Event, T: Topic<E>> EventSpy<E, T> {

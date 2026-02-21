@@ -38,9 +38,19 @@ use std::fmt;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// # use maiko::*;
+/// # #[derive(Clone, Debug, Event)]
+/// # enum MyEvent { Control, Telemetry }
+/// # #[derive(Debug, Hash, Eq, PartialEq, Clone)]
+/// # enum MyTopic { Control, Telemetry }
 /// impl Topic<MyEvent> for MyTopic {
-///     fn from_event(event: &MyEvent) -> Self { /* ... */ }
+///     fn from_event(event: &MyEvent) -> Self {
+///         match event {
+///             MyEvent::Control => MyTopic::Control,
+///             MyEvent::Telemetry => MyTopic::Telemetry,
+///         }
+///     }
 ///
 ///     fn overflow_policy(&self) -> OverflowPolicy {
 ///         match self {

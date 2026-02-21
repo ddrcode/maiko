@@ -4,6 +4,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{ActorId, Envelope, Event, Topic, monitoring::Monitor, testing::EventEntry};
 
+#[derive(Debug)]
 pub struct EventCollector<E: Event, T: Topic<E>> {
     events: UnboundedSender<EventEntry<E, T>>,
 }
