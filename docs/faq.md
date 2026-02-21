@@ -181,8 +181,8 @@ Yes, absolutely! Contributions of all kinds are welcome - bug reports, feature i
 
 **Ways to get involved**:
 - **Try it out** and share your experience
-- **Report issues** or suggest improvements via [GitHub Issues](https://github.com/ddrcode/maiko/issues)
-- **Pick up a task** from [good first issues](https://github.com/ddrcode/maiko/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22)
+- **Report issues** or suggest improvements via [GitHub Issues](https://github.com/maiko-rs/maiko/issues)
+- **Pick up a task** from [good first issues](https://github.com/maiko-rs/maiko/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22)
 - **Ask questions** - if something's unclear, that's a documentation bug
 
 Maiko is a young project and your input genuinely shapes its direction. Whether you're fixing a typo or proposing a major feature, it's appreciated.

@@ -114,7 +114,7 @@
 //!
 //! ## Examples
 //!
-//! See the [`examples/`](https://github.com/ddrcode/maiko/tree/main/maiko/examples) directory:
+//! See the [`examples/`](https://github.com/maiko-rs/maiko/tree/main/maiko/examples) directory:
 //!
 //! - `pingpong.rs`  - Simple event exchange between actors
 //! - `guesser.rs`  - Multi-actor game with topics and timing
