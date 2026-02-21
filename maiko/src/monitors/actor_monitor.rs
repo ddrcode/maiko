@@ -1,9 +1,24 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
-use crate::{ActorId, DefaultTopic, Envelope, Event, OverflowPolicy, Topic, monitoring::Monitor};
+use crate::{ActorId, Envelope, Event, OverflowPolicy, Topic, monitoring::Monitor};
 
-/// Monitor that tracks actor lifecycle and overflow status.
+/// Monitor that tracks actor lifecycle and overflow counts.
+///
+/// Register with the supervisor to passively observe actor registration,
+/// shutdown, and overflow events. Query at any time from any thread.
+///
+/// ```ignore
+/// let monitor = ActorMonitor::new();
+/// let query = monitor.clone();
+/// sup.monitors().add(monitor).await;
+///
+/// // Later, from any thread:
+/// let alive = query.is_alive(&actor_id);
+/// let overflows = query.overflow_count(&actor_id);
+/// ```
+#[derive(Clone)]
 pub struct ActorMonitor {
     inner: Arc<Mutex<ActorMonitorInner>>,
 }
@@ -12,14 +27,6 @@ struct ActorMonitorInner {
     active: HashSet<ActorId>,
     stopped: HashSet<ActorId>,
     overflow_counts: HashMap<ActorId, usize>,
-}
-
-/// Status returned by `actor_status()`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ActorStatus {
-    Alive,
-    Stopped,
-    Overflowing(usize),
 }
 
 impl ActorMonitor {
@@ -34,29 +41,28 @@ impl ActorMonitor {
         }
     }
 
-    /// Returns a snapshot of currently registered (alive) actors.
+    /// Returns a snapshot of currently active actor IDs.
     pub fn actors(&self) -> Vec<ActorId> {
         let lock = self.inner.lock().unwrap();
         lock.active.iter().cloned().collect()
     }
 
-    /// Returns a snapshot of actors that have stopped.
+    /// Returns a snapshot of stopped actor IDs.
     pub fn stopped_actors(&self) -> Vec<ActorId> {
         let lock = self.inner.lock().unwrap();
         lock.stopped.iter().cloned().collect()
     }
 
-    /// Returns the status of a specific actor.
-    pub fn actor_status(&self, actor: &ActorId) -> ActorStatus {
+    /// Returns `true` if the actor is currently active.
+    pub fn is_alive(&self, actor: &ActorId) -> bool {
         let lock = self.inner.lock().unwrap();
-        if let Some(&count) = lock.overflow_counts.get(actor) {
-            return ActorStatus::Overflowing(count);
-        }
-        if lock.active.contains(actor) {
-            ActorStatus::Alive
-        } else {
-            ActorStatus::Stopped
-        }
+        lock.active.contains(actor)
+    }
+
+    /// Returns the number of overflow events observed for this actor.
+    pub fn overflow_count(&self, actor: &ActorId) -> usize {
+        let lock = self.inner.lock().unwrap();
+        lock.overflow_counts.get(actor).copied().unwrap_or(0)
     }
 }
 
@@ -68,7 +74,6 @@ where
     fn on_actor_registered(&self, actor_id: &ActorId) {
         let mut lock = self.inner.lock().unwrap();
         lock.active.insert(actor_id.clone());
-        // ensure stopped set doesn't keep a stale entry
         lock.stopped.remove(actor_id);
     }
 
@@ -96,13 +101,25 @@ impl Default for ActorMonitor {
     }
 }
 
+impl fmt::Debug for ActorMonitor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let lock = self.inner.lock().unwrap();
+        f.debug_struct("ActorMonitor")
+            .field("active", &lock.active.len())
+            .field("stopped", &lock.stopped.len())
+            .field("overflows", &lock.overflow_counts.len())
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::DefaultTopic;
+
     use super::*;
-    use std::sync::Arc;
 
     #[derive(Clone, Debug)]
-    struct TestEvent(i32);
+    struct TestEvent;
     impl Event for TestEvent {}
 
     fn make_id(name: &str) -> ActorId {
@@ -117,53 +134,78 @@ mod tests {
     }
 
     #[test]
-    fn actor_registration_and_status() {
+    fn registered_actor_is_alive() {
         let monitor = ActorMonitor::new();
         let a = make_id("actor-1");
         let m: &dyn Monitor<TestEvent, DefaultTopic> = &monitor;
         m.on_actor_registered(&a);
-        assert!(monitor.actors().iter().any(|id| id == &a));
-        assert_eq!(monitor.actor_status(&a), ActorStatus::Alive);
+
+        assert!(monitor.is_alive(&a));
+        assert!(monitor.actors().contains(&a));
     }
 
     #[test]
-    fn actor_stop_and_stopped_list() {
+    fn stopped_actor_is_not_alive() {
         let monitor = ActorMonitor::new();
         let a = make_id("actor-2");
         let m: &dyn Monitor<TestEvent, DefaultTopic> = &monitor;
         m.on_actor_registered(&a);
         m.on_actor_stop(&a);
-        assert!(monitor.stopped_actors().iter().any(|id| id == &a));
-        assert_eq!(monitor.actor_status(&a), ActorStatus::Stopped);
+
+        assert!(!monitor.is_alive(&a));
+        assert!(monitor.stopped_actors().contains(&a));
     }
 
     #[test]
-    fn overflow_counts_and_status() {
+    fn overflow_count_increments() {
         let monitor = ActorMonitor::new();
         let a = make_id("actor-3");
-        let env = Envelope::new(TestEvent(1), a.clone());
+        let env = Envelope::new(TestEvent, a.clone());
         let topic = DefaultTopic;
+
+        assert_eq!(monitor.overflow_count(&a), 0);
         monitor.on_overflow(&env, &topic, &a, OverflowPolicy::Fail);
-        assert_eq!(monitor.actor_status(&a), ActorStatus::Overflowing(1));
+        assert_eq!(monitor.overflow_count(&a), 1);
         monitor.on_overflow(&env, &topic, &a, OverflowPolicy::Fail);
-        assert_eq!(monitor.actor_status(&a), ActorStatus::Overflowing(2));
+        assert_eq!(monitor.overflow_count(&a), 2);
     }
 
     #[test]
-    fn overflow_precedes_alive_or_stopped() {
+    fn overflow_and_lifecycle_are_independent() {
         let monitor = ActorMonitor::new();
         let a = make_id("actor-4");
-        let env = Envelope::new(TestEvent(1), a.clone());
+        let env = Envelope::new(TestEvent, a.clone());
         let topic = DefaultTopic;
 
         let m: &dyn Monitor<TestEvent, DefaultTopic> = &monitor;
         m.on_actor_registered(&a);
-        m.on_overflow(&env, &topic, &a, OverflowPolicy::Fail);
-        // overflow takes precedence in `actor_status()`
-        assert_eq!(monitor.actor_status(&a), ActorStatus::Overflowing(1));
+        monitor.on_overflow(&env, &topic, &a, OverflowPolicy::Fail);
+
+        assert!(monitor.is_alive(&a));
+        assert_eq!(monitor.overflow_count(&a), 1);
 
         m.on_actor_stop(&a);
-        // still overflowing even after stop (overflow_counts checked first)
-        assert_eq!(monitor.actor_status(&a), ActorStatus::Overflowing(1));
+        assert!(!monitor.is_alive(&a));
+        assert_eq!(monitor.overflow_count(&a), 1);
+    }
+
+    #[test]
+    fn unknown_actor_is_not_alive() {
+        let monitor = ActorMonitor::new();
+        let a = make_id("unknown");
+        assert!(!monitor.is_alive(&a));
+        assert_eq!(monitor.overflow_count(&a), 0);
+    }
+
+    #[test]
+    fn clone_shares_state() {
+        let monitor = ActorMonitor::new();
+        let query = monitor.clone();
+        let a = make_id("actor-5");
+
+        let m: &dyn Monitor<TestEvent, DefaultTopic> = &monitor;
+        m.on_actor_registered(&a);
+
+        assert!(query.is_alive(&a));
     }
 }

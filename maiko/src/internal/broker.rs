@@ -46,7 +46,12 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
         if self.subscribers.contains(&subscriber) {
             return Err(Error::SubscriberAlreadyExists(subscriber.actor_id.clone()));
         }
+
+        #[cfg(feature = "monitoring")]
+        self.record_actor_registered(&subscriber.actor_id);
+
         self.subscribers.push(subscriber);
+
         Ok(())
     }
 
@@ -221,6 +226,13 @@ impl<E: Event, T: Topic<E>> Broker<E, T> {
                     policy,
                 ));
             }
+        }
+    }
+
+    fn record_actor_registered(&self, actor_id: &ActorId) {
+        if self.monitoring.is_active() {
+            self.monitoring
+                .send(MonitoringEvent::ActorRegistered(actor_id.clone()));
         }
     }
 }

@@ -20,7 +20,7 @@ mod tracer;
 pub use tracer::Tracer;
 
 mod actor_monitor;
-pub use actor_monitor::{ActorMonitor, ActorStatus};
+pub use actor_monitor::ActorMonitor;
 
 #[cfg(feature = "recorder")]
 mod recorder;

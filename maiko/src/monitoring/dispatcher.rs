@@ -173,6 +173,9 @@ impl<E: Event, T: Topic<E>> MonitorDispatcher<E, T> {
             Error(error, actor_id) => {
                 self.notify(|m| m.on_error(&error, &actor_id));
             }
+            ActorRegistered(actor_id) => {
+                self.notify(|m| m.on_actor_registered(&actor_id));
+            }
             ActorStopped(actor_id) => {
                 self.notify(|m| m.on_actor_stop(&actor_id));
             }
