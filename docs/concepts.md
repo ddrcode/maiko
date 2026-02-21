@@ -121,6 +121,20 @@ impl Actor for PacketProcessor {
 }
 ```
 
+### Actor Roles
+
+Concurrent tasks typically fall into one of three roles: **sources** that produce data, **sinks** that consume it, and **processors** that do both. Maiko doesn't have separate types for these — every actor implements the same `Actor` trait. The role emerges from which methods you use and what you subscribe to:
+
+| Role | `step()` | `handle_event()` | Subscriptions |
+|------|----------|-------------------|---------------|
+| **Source** | Produces events | No-op | `Subscribe::none()` |
+| **Sink** | `Never` (default) | Consumes events | Topics it cares about |
+| **Processor** | Optional | Receives events, sends new ones | Selective topics |
+
+A temperature sensor is a source — it uses `step()` to emit readings and subscribes to nothing. A logger is a sink — it handles events but never sends. An alerter is a processor — it receives readings and emits alerts.
+
+This is a deliberate design choice. A single trait keeps the API small and lets actors evolve. A sink that later needs to emit events just adds a `Context` field — no type change, no rewiring.
+
 ### Lifecycle Hooks
 
 Actors can implement optional lifecycle methods:

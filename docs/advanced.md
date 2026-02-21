@@ -85,44 +85,7 @@ sup.build_actor("consumer", |ctx| Consumer::new(ctx))
 
 ## Design Philosophy
 
-### Loose Coupling Through Topics
-
-Maiko actors **don't know about each other**. They only know:
-- Events they can send
-- Topics they subscribe to
-
-This is fundamentally different from traditional actor frameworks:
-
-```rust
-// Traditional actors (tight coupling)
-actor_ref.tell(message);  // Must know the actor's address
-
-// Maiko (loose coupling)
-ctx.send(event).await?;   // Only knows about event types
-```
-
-### Unidirectional Flow
-
-Events typically flow in one direction:
-
-```
-Input → Parser → Validator → Processor → Output
-```
-
-This makes Maiko ideal for **pipeline architectures** and **stream processing**.
-
-### When Maiko Fits
-
-- System event processing (device monitoring, signals, inotify)
-- Data pipelines (sensor data, stock ticks, telemetry)
-- Game engines (entity systems, input handling)
-- Reactive architectures (event sourcing, CQRS)
-
-### When to Consider Alternatives
-
-- **Request-response APIs**: Use Actix Web or similar
-- **RPC-style communication**: Use Ractor or Actix
-- **Complex supervision trees**: Use Ractor
+For Maiko's design philosophy — loose coupling through topics, unidirectional flow, actors as domain entities, and guidance on when Maiko fits vs. alternatives — see **[Why Maiko?](why-maiko.md#design-philosophy)**.
 
 ## Correlation Tracking
 
