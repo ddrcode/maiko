@@ -14,9 +14,9 @@
 
 ## What is Maiko?
 
-**Maiko** lets you build concurrent Tokio applications without a single `spawn` or manual channel. Declare actors, declare subscriptions, and Maiko handles the routing. It is a topology-aware event router with actor lifecycle management for [Tokio](https://tokio.rs/).
+**Maiko** helps you build multi-task Tokio applications without manually wiring channels or spawning tasks. It's a topic-based pub/sub actor runtime: declare actors and subscriptions, and Maiko handles event routing and lifecycle management.
 
-Actors are named components with their own state and lifecycle. They communicate through events routed by topic, without knowing who's listening. Think Kafka-style pub/sub, but embedded in your Tokio application.
+Actors are named components with their own state. They communicate through events routed by topic, without knowing who's listening. Think Kafka-style pub/sub, but embedded in your Tokio application.
 
 Maiko comes with a built-in [test harness](docs/testing.md) for asserting on event flow, correlation tracking for tracing event propagation, and monitoring hooks for observability — all without external infrastructure.
 
@@ -56,7 +56,7 @@ Maiko sits between raw Tokio and full actor frameworks. Think of it as moving fr
 ### Where it fits
 
 Event-centric systems: processing stock ticks, device signals, telemetry pipelines, handling system
-events, data transformation. Not ideal for request-response APIs or RPC patterns.
+events, data transformation. Maiko optimizes for developer ergonomics and testability, not raw throughput. Not ideal for request-response APIs or RPC patterns.
 
 For detailed comparisons, use cases, and guidance on when Maiko fits, see **[Why Maiko?](docs/why-maiko.md)**.
 
